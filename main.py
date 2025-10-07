@@ -56,7 +56,7 @@ async def startup_event():
 async def root():
     return {"message": "Solana Bot Service is running!"}
 
-
+@app.head("/health")
 @app.get("/health")
 async def health_check():
     """Endpoint for uptime monitoring tools like RobotPinger or UptimeRobot."""
