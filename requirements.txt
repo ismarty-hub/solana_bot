@@ -1,0 +1,7 @@
+python-telegram-bot==22.5
+supabase
+httpx
+requests
+joblib
+asyncio
+pytz
