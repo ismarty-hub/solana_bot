@@ -118,7 +118,7 @@ async def on_startup(app: Application):
 # ----------------------
 # Main function
 # ----------------------
-def main():
+async def main():
     """Main entry point for the bot."""
     defaults = Defaults(parse_mode="HTML")
     app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
@@ -145,8 +145,7 @@ def main():
     app.post_init = on_startup
 
     logging.info("Starting modular Telegram bot...")
-    app.run_polling(allowed_updates=None, poll_interval=1.0)
-
+    await app.run_polling(allowed_updates=None, poll_interval=1.0)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
