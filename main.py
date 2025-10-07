@@ -21,7 +21,8 @@ import bot
 # ----------------------
 # Logging Setup
 # ----------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Update logging level to DEBUG for detailed logs
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 # ----------------------
