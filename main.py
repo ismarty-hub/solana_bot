@@ -59,7 +59,7 @@ app = FastAPI(
 )
 
 
-@app.get("/")
+@app.get("/", methods=["GET", "HEAD"])
 async def root():
     return {"message": "Solana Bot Service is running!"}
 
