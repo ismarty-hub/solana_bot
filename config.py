@@ -83,6 +83,20 @@ except Exception:
 # ----------------------
 import logging
 
-# Disable all logging
-logging.disable(logging.CRITICAL)
-logging.getLogger().setLevel(logging.CRITICAL + 1)
+# Configure logging based on environment
+if IS_LOCAL:
+    # Enable logging for local development
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+else:
+    # Production: reduce logging noise but keep important messages
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+
+# Optionally silence specific noisy loggers
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)

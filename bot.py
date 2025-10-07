@@ -26,10 +26,9 @@ from alerts.monitoring import (
 )
 
 # ----------------------
-# Disable logging
+# Logger for this module
 # ----------------------
-logging.disable(logging.CRITICAL)
-logging.getLogger().setLevel(logging.CRITICAL + 1)
+logger = logging.getLogger(__name__)
 
 # ----------------------
 # Optional supabase helpers
@@ -85,34 +84,39 @@ async def button_wrapper(update, context):
 # ----------------------
 async def on_startup(app: Application):
     """Initialize bot on startup."""
+    logger.info("🔧 Initializing bot startup sequence...")
+    
     # Ensure data directory and baseline files exist
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     safe_save(USER_PREFS_FILE, safe_load(USER_PREFS_FILE, {}))
     safe_save(ALERTS_STATE_FILE, safe_load(ALERTS_STATE_FILE, {}))
     safe_save(USER_STATS_FILE, safe_load(USER_STATS_FILE, {}))
+    logger.info(f"✅ Data directory initialized: {DATA_DIR}")
 
     # Optional: download bot data & overlap once at startup
     if USE_SUPABASE:
-        logging.info("Supabase integration enabled. Attempting startup downloads...")
+        logger.info("☁️ Supabase integration enabled. Attempting startup downloads...")
         download_bot_data_from_supabase()
         
         if DOWNLOAD_OVERLAP_ON_STARTUP and download_overlap_results is not None:
             try:
                 download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME)
-                logging.info("✅ Downloaded overlap_results.pkl at startup")
+                logger.info("✅ Downloaded overlap_results.pkl at startup")
             except Exception as e:
-                logging.debug(f"Startup overlap download failed: {e}")
+                logger.warning(f"Startup overlap download failed: {e}")
 
     # Start background loops
+    logger.info("🔄 Starting background monitoring tasks...")
     asyncio.create_task(background_loop(app, user_manager))
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
 
     # Start daily supabase sync & overlap refresh if enabled
     if USE_SUPABASE and SUPABASE_DAILY_SYNC:
+        logger.info("🔄 Starting daily Supabase sync tasks...")
         asyncio.create_task(daily_supabase_sync())
         asyncio.create_task(periodic_overlap_download())
 
-    logging.info("🚀 Bot startup complete. Monitoring for token alerts...")
+    logger.info("🚀 Bot startup complete. Monitoring for token alerts...")
 
 
 # ----------------------
@@ -120,6 +124,8 @@ async def on_startup(app: Application):
 # ----------------------
 async def main():
     """Main entry point for the bot."""
+    logger.info("🤖 Initializing Telegram bot application...")
+    
     defaults = Defaults(parse_mode="HTML")
     app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
 
@@ -140,11 +146,13 @@ async def main():
     
     # Register callback handler
     app.add_handler(CallbackQueryHandler(button_wrapper))
+    
+    logger.info("✅ All command handlers registered")
 
     # Set startup hook
     app.post_init = on_startup
 
-    logging.info("Starting modular Telegram bot...")
+    logger.info("🔌 Starting bot polling...")
     await app.run_polling(allowed_updates=None, poll_interval=1.0)
 
 if __name__ == "__main__":
