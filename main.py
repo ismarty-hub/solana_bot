@@ -33,19 +33,21 @@ app = FastAPI(title="Solana Bot Service", version="1.0.0")
 @app.on_event("startup")
 async def startup_event():
     """Start Telegram bot (and optionally other scripts) when the FastAPI app starts."""
-    def run_bot():
-        """Runs the existing bot.py main() function (blocking call)."""
+    async def run_bot_async():
+        """Run the bot in an executor (non-blocking, async-safe)."""
         try:
-            logging.info("🚀 Starting Telegram bot thread...")
-            bot.main()
+            logging.info("🚀 Starting Telegram bot (async executor)...")
+            loop = asyncio.get_event_loop()
+            # run bot.main() (a blocking call) in a separate thread safely
+            await loop.run_in_executor(None, bot.main)
         except Exception as e:
             logging.error(f"Bot crashed: {e}")
 
-    # Start bot in background thread so FastAPI remains responsive
-    threading.Thread(target=run_bot, daemon=True).start()
+    # Schedule it inside FastAPI’s event loop
+    asyncio.create_task(run_bot_async())
 
-    # Example placeholder for your other script
-    # threading.Thread(target=my_other_script.run, daemon=True).start()
+    # You can add other scripts here too
+    # asyncio.create_task(loop.run_in_executor(None, my_other_script.run))
 
     logging.info("✅ Background services (bot + others) started successfully.")
 
