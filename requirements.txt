@@ -1,11 +1,12 @@
 python-telegram-bot==22.5
 fastapi
-uvicorn
+uvicorn[standard]
 supabase
 httpx
 requests
 joblib
 pytz
 python-dotenv
-fastapi
-uvicorn
+pandas
+numpy
+aiohttp
