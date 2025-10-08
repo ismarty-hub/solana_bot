@@ -3,6 +3,7 @@
 alerts/commands.py - User-facing bot commands
 """
 
+import logging
 import requests
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup

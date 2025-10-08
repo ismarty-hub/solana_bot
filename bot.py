@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 bot.py - Main entry point for the modular Telegram bot
+FIXED: Proper async integration for FastAPI deployment
 """
 
 import logging
@@ -120,10 +121,10 @@ async def on_startup(app: Application):
 
 
 # ----------------------
-# Main function
+# Main function - FIXED for FastAPI integration
 # ----------------------
 async def main():
-    """Main entry point for the bot."""
+    """Main entry point for the bot - can be called from FastAPI or standalone."""
     logger.info("🤖 Initializing Telegram bot application...")
     
     defaults = Defaults(parse_mode="HTML")
@@ -153,7 +154,28 @@ async def main():
     app.post_init = on_startup
 
     logger.info("🔌 Starting bot polling...")
-    await app.run_polling(allowed_updates=None, poll_interval=1.0)
+    
+    # ✅ FIXED: Use initialize + start + updater instead of run_polling
+    # This allows proper integration with FastAPI's event loop
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(allowed_updates=None, poll_interval=1.0)
+    
+    # Keep running until cancelled
+    try:
+        # Wait indefinitely (will be cancelled by FastAPI shutdown)
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logger.info("🛑 Bot received shutdown signal")
+    finally:
+        # Cleanup
+        logger.info("🧹 Cleaning up bot resources...")
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+        logger.info("✅ Bot shutdown complete")
+
 
 if __name__ == "__main__":
+    # For standalone execution (not via FastAPI)
     asyncio.run(main())
