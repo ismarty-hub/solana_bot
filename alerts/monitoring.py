@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-alerts/monitoring.py - Background monitoring and alert sending
+alerts/monitoring.py - Background monitoring with Supabase polling
+🔥 COMPLETE VERSION - Downloads from Supabase every 60 seconds!
 """
 
 import os
@@ -15,17 +16,20 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import (
     OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE,
-    BUCKET_NAME, USE_SUPABASE, DOWNLOAD_OVERLAP_ON_STARTUP,
-    SUPABASE_DAILY_SYNC, POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES
+    BUCKET_NAME, USE_SUPABASE, POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES
 )
 from shared.file_io import safe_load, safe_save
 from shared.utils import fetch_marketcap_and_fdv, truncate_address
 from alerts.formatters import format_alert_html
 
-# Optional supabase helpers
+logger = logging.getLogger(__name__)
+
+# Import Supabase helpers
 try:
     from supabase_utils import download_overlap_results, upload_file, download_file
-except Exception:
+    logger.info("✅ Supabase utils loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to load supabase_utils: {e}")
     download_overlap_results = None
     upload_file = None
     download_file = None
@@ -42,7 +46,7 @@ def upload_bot_data_to_supabase():
     now = time.time()
     
     if not USE_SUPABASE or upload_file is None:
-        logging.debug("Supabase upload skipped (disabled or helper missing).")
+        logger.debug("Supabase upload skipped (disabled or helper missing).")
         return
     
     for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE]:
@@ -53,56 +57,90 @@ def upload_bot_data_to_supabase():
                 upload_file(str(file), bucket=BUCKET_NAME)
                 _last_upload = now
             except Exception as e:
-                logging.exception(f"Failed to upload {file} to Supabase: {e}")
+                logger.exception(f"Failed to upload {file} to Supabase: {e}")
 
 
 def download_bot_data_from_supabase():
     """Download bot data files from Supabase (opt-in)."""
     if not USE_SUPABASE or download_file is None:
-        logging.debug("Supabase download skipped (disabled or helper missing).")
+        logger.debug("Supabase download skipped (disabled or helper missing).")
         return
     
     for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE]:
         try:
             download_file(str(file), os.path.basename(file), bucket=BUCKET_NAME)
         except Exception as e:
-            logging.debug(f"Could not download {file} from Supabase: {e}")
+            logger.debug(f"Could not download {file} from Supabase: {e}")
+
+
+def download_latest_overlap():
+    """Download overlap_results.pkl from Supabase RIGHT NOW."""
+    if not download_overlap_results:
+        logger.warning("⚠️ download_overlap_results function not available!")
+        return False
+    
+    try:
+        logger.info("⬇️ Downloading overlap_results.pkl from Supabase...")
+        result = download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME)
+        
+        if OVERLAP_FILE.exists():
+            size_kb = OVERLAP_FILE.stat().st_size / 1024
+            logger.info(f"✅ Downloaded: {size_kb:.2f} KB")
+            return True
+        else:
+            logger.error("❌ File not found after download!")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Download failed: {e}")
+        return False
+
+
+def upload_bot_data():
+    """Upload bot state to Supabase."""
+    if not upload_file:
+        return
+    
+    try:
+        for file in [ALERTS_STATE_FILE, USER_PREFS_FILE, USER_STATS_FILE]:
+            if file.exists():
+                upload_file(str(file), bucket=BUCKET_NAME)
+        logger.info("✅ Uploaded bot data to Supabase")
+    except Exception as e:
+        logger.warning(f"⚠️ Upload failed: {e}")
 
 
 async def daily_supabase_sync():
     """Daily background task to sync data with Supabase."""
-    if not (USE_SUPABASE and SUPABASE_DAILY_SYNC):
-        logging.debug("Daily Supabase sync disabled by configuration.")
+    if not (USE_SUPABASE):
+        logger.debug("Daily Supabase sync disabled by configuration.")
         return
     
-    logging.info("Daily Supabase sync task started.")
+    logger.info("📅 Daily Supabase sync task started.")
     while True:
         try:
             upload_bot_data_to_supabase()
-            logging.info("✅ Daily sync with Supabase complete")
+            logger.info("✅ Daily sync with Supabase complete")
         except Exception as e:
-            logging.exception(f"Supabase daily sync failed: {e}")
+            logger.exception(f"Supabase daily sync failed: {e}")
         await asyncio.sleep(24 * 3600)
 
 
 async def periodic_overlap_download():
-    """Periodically refresh overlap_results.pkl from Supabase."""
-    while True:
-        try:
-            logging.info("⬇ Refreshing overlap_results.pkl from Supabase...")
-            if download_overlap_results:
-                download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME)
-        except Exception as e:
-            logging.error(f"❌ Failed to refresh overlap_results.pkl: {e}")
-        await asyncio.sleep(180)  # 3 minutes
+    """
+    DEPRECATED: This function is replaced by download in main loop.
+    Keeping it here for compatibility but it does nothing.
+    """
+    logger.info("⚠️ periodic_overlap_download is deprecated - using main loop download instead")
+    await asyncio.sleep(999999)  # Sleep forever
 
 
 # ----------------------
 # Token loading
 # ----------------------
 def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
-    """Load overlap_results.pkl from local disk."""
+    """Load overlap_results.pkl from local disk (after download from Supabase)."""
     if not OVERLAP_FILE.exists() or OVERLAP_FILE.stat().st_size == 0:
+        logger.info("ℹ️ No local overlap file yet (will be downloaded from Supabase)")
         return {}
 
     try:
@@ -126,10 +164,11 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
                 "checked_at": result.get("checked_at")
             }
         
+        logger.info(f"📊 Loaded {len(latest_tokens)} tokens from overlap file")
         return latest_tokens
     
     except Exception as e:
-        logging.exception(f"Failed to load overlap file: {e}")
+        logger.exception(f"❌ Failed to load overlap file: {e}")
         return {}
 
 
@@ -140,17 +179,17 @@ async def send_alert_to_subscribers(
     app: Application,
     token_data: Dict[str, Any],
     grade: str,
-    user_manager,  # ✅ ADD user_manager parameter
+    user_manager,
     previous_grade: Optional[str] = None,
     initial_mc: Optional[float] = None,
     initial_fdv: Optional[float] = None,
     first_alert_at: Optional[str] = None
 ):
-    """Send an alert to every active, subscribed user who subscribes to this grade."""
+    """Send an alert to subscribed users."""
     active_users = user_manager.get_active_users()
     
     if not active_users:
-        logging.debug("No active users to send alerts to.")
+        logger.debug("No active users to send alerts to")
         return
 
     message = format_alert_html(
@@ -168,15 +207,16 @@ async def send_alert_to_subscribers(
     buttons = []
     
     if mint:
-        buttons.append(InlineKeyboardButton(f"📋 Copy {truncated}", callback_data=f"copy:{mint}"))
-        buttons.append(InlineKeyboardButton("🔗 DexScreener", url=f"https://dexscreener.com/solana/{mint}"))
+        buttons.append(InlineKeyboardButton("🔗 Bonkbot", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint}"))
+        buttons.append(InlineKeyboardButton("🔗 Trojan", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint}"))
 
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
+    sent_count = 0
     for chat_id, prefs in active_users.items():
-        # ✅ FIX: Use user_manager.is_subscribed() instead of is_subscribed()
+        # Check subscription
         if not user_manager.is_subscribed(chat_id):
-            logging.debug(f"Skipping alert for {chat_id}: not subscribed or expired")
+            logger.debug(f"Skipping alert for {chat_id}: not subscribed or expired")
             continue
 
         # Check if user wants this grade
@@ -188,7 +228,7 @@ async def send_alert_to_subscribers(
             if grade not in ALL_GRADES:
                 continue
 
-        # Send the alert
+        # Send alert
         try:
             await app.bot.send_message(
                 chat_id=int(chat_id),
@@ -198,10 +238,14 @@ async def send_alert_to_subscribers(
                 reply_markup=keyboard
             )
             user_manager.update_user_stats(chat_id, grade)
+            sent_count += 1
+            logger.info(f"✅ Sent {grade} alert to {chat_id}")
         except Exception as e:
-            logging.warning(f"Failed to send alert to {chat_id}: {e}")
+            logger.warning(f"⚠️ Failed to send alert to {chat_id}: {e}")
 
         await asyncio.sleep(0.1)
+    
+    logger.info(f"📤 Sent {sent_count} alerts for grade {grade}")
 
 
 # ----------------------
@@ -209,6 +253,8 @@ async def send_alert_to_subscribers(
 # ----------------------
 async def monthly_expiry_notifier(app: Application, user_manager):
     """Notify expired users once per month."""
+    logger.info("📅 Starting monthly expiry notifier...")
+    
     while True:
         try:
             prefs = safe_load(USER_PREFS_FILE, {})
@@ -233,42 +279,62 @@ async def monthly_expiry_notifier(app: Application, user_manager):
                                 text="⚠️ Your subscription has expired. Please contact the admin to renew."
                             )
                             user_manager.mark_notified(chat_id)
-                            logging.info(f"Notified expired user {chat_id}")
+                            logger.info(f"Notified expired user {chat_id}")
                         except Exception as e:
-                            logging.warning(f"Failed to notify expired user {chat_id}: {e}")
+                            logger.warning(f"Failed to notify {chat_id}: {e}")
         
         except Exception as e:
-            logging.exception(f"Error in monthly_expiry_notifier: {e}")
+            logger.exception(f"Error in expiry notifier: {e}")
 
         await asyncio.sleep(24 * 3600)
 
 
 # ----------------------
-# Background monitoring loop
+# 🔥 BACKGROUND LOOP - DOWNLOADS EVERY 60 SECONDS!
 # ----------------------
 async def background_loop(app: Application, user_manager):
-    """Main background loop for monitoring tokens and sending alerts."""
-    logging.info("Background alert loop started...")
+    """
+    Main monitoring loop:
+    1. Download overlap_results.pkl from Supabase
+    2. Check for new/changed tokens
+    3. Send alerts
+    4. Wait 60 seconds
+    5. Repeat
+    """
+    logger.info("🔄 Background alert loop started!")
+    logger.info(f"⏰ Polling every {POLL_INTERVAL_SECS} seconds")
 
-    # Load local state
+    # Load alert state
     alerts_state = safe_load(ALERTS_STATE_FILE, {})
+    logger.info(f"📝 Loaded alert state: {len(alerts_state)} tokens tracked")
 
-    # Try downloading latest state from Supabase
-    if USE_SUPABASE and download_file:
-        try:
-            download_file(str(ALERTS_STATE_FILE), os.path.basename(ALERTS_STATE_FILE), bucket=BUCKET_NAME)
-            alerts_state = safe_load(ALERTS_STATE_FILE, alerts_state)
-            logging.info("✅ Downloaded latest alerts_state from Supabase")
-        except Exception as e:
-            logging.warning(f"⚠️ Could not fetch alerts_state from Supabase: {e}")
-
-    first_run = True
+    loop_count = 0
 
     while True:
         try:
+            loop_count += 1
+            logger.info(f"\n{'='*60}")
+            logger.info(f"🔍 Loop #{loop_count} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            logger.info(f"{'='*60}")
+            
+            # 🔥 STEP 1: DOWNLOAD FROM SUPABASE
+            logger.info("📥 Step 1: Downloading latest data from Supabase...")
+            download_success = download_latest_overlap()
+            
+            if not download_success:
+                logger.warning("⚠️ Download failed, using cached data if available")
+            
+            # 🔥 STEP 2: LOAD TOKENS
+            logger.info("📂 Step 2: Loading tokens from file...")
             tokens = load_latest_tokens_from_overlap()
+            
+            if not tokens:
+                logger.warning("⚠️ No tokens loaded! Will retry next cycle.")
+                await asyncio.sleep(POLL_INTERVAL_SECS)
+                continue
 
-            # Filter only today's tokens
+            # 🔥 STEP 3: FILTER TODAY'S TOKENS
+            logger.info("📅 Step 3: Filtering today's tokens...")
             today = datetime.utcnow().date()
             fresh_tokens = {
                 tid: t for tid, t in tokens.items()
@@ -276,29 +342,37 @@ async def background_loop(app: Application, user_manager):
                     t["checked_at"].rstrip("Z")
                 ).date() >= today
             }
+            
+            logger.info(f"🆕 Found {len(fresh_tokens)} fresh tokens from today")
+            
+            if loop_count <= 3 and fresh_tokens:
+                # Show samples for first 3 loops
+                for i, (tid, info) in enumerate(list(fresh_tokens.items())[:3]):
+                    logger.info(f"  Sample {i+1}: {tid[:8]}... | {info.get('grade')} | {info.get('checked_at')[:16]}")
 
-            if first_run:
-                logging.info(f"DEBUG: Loaded {len(tokens)} tokens (today only: {len(fresh_tokens)})")
-                sample_items = list(fresh_tokens.items())[:3]
-                for tid, info in sample_items:
-                    logging.info(f"DEBUG sample token: {tid} grade={info.get('grade')} checked_at={info.get('checked_at')}")
-                first_run = False
+            # 🔥 STEP 4: PROCESS TOKENS AND SEND ALERTS
+            logger.info("🔍 Step 4: Checking for alerts...")
+            alerts_sent = 0
 
             for token_id, token in fresh_tokens.items():
                 grade = token.get("grade")
-                if not grade:
+                
+                # Skip if no grade or NONE
+                if not grade or grade == "NONE":
                     continue
 
+                # Check current state
                 current_state = alerts_state.get(token_id)
                 last_grade = current_state.get("last_grade") if isinstance(current_state, dict) else None
 
-                # Only proceed if grade changed
+                # Check if this is new or changed
                 if grade != last_grade:
-                    logging.info(f"New/changed grade for {token_id}: {last_grade} -> {grade}")
+                    logger.info(f"🔔 Alert trigger: {token_id[:8]}... | {last_grade} → {grade}")
 
                     if grade in VALID_GRADES:
-                        # First time alert for this token
+                        # First time seeing this token
                         if last_grade is None:
+                            logger.info(f"🆕 NEW TOKEN: {token_id[:8]}...")
                             mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
                             alerts_state[token_id] = {
                                 "last_grade": grade,
@@ -307,21 +381,22 @@ async def background_loop(app: Application, user_manager):
                                 "initial_liquidity": lqd,
                                 "first_alert_at": datetime.utcnow().isoformat() + "Z"
                             }
-
-                            safe_save(ALERTS_STATE_FILE, alerts_state)
+                            logger.info(f"💰 Market data: MC={mc}, FDV={fdv}, Liq={lqd}")
                             
+                            # Save state immediately after new token
+                            safe_save(ALERTS_STATE_FILE, alerts_state)
                             if USE_SUPABASE and upload_file:
                                 try:
                                     upload_file(str(ALERTS_STATE_FILE), bucket=BUCKET_NAME)
-                                    logging.info("✅ Uploaded alerts_state incrementally")
+                                    logger.info("✅ Uploaded alerts_state after new token")
                                 except Exception as e:
-                                    logging.warning(f"⚠️ Failed incremental upload: {e}")
-
-                            logging.info(f"Captured initial market data for {token_id}")
+                                    logger.warning(f"⚠️ Failed to upload alerts_state: {e}")
                         else:
+                            # Grade changed
+                            logger.info(f"🔄 GRADE CHANGE: {token_id[:8]}...")
                             alerts_state[token_id]["last_grade"] = grade
 
-                        # Send alert
+                        # 🔥 SEND THE ALERT!
                         state = alerts_state.get(token_id, {})
                         await send_alert_to_subscribers(
                             app,
@@ -333,20 +408,26 @@ async def background_loop(app: Application, user_manager):
                             initial_fdv=state.get("initial_fdv"),
                             first_alert_at=state.get("first_alert_at")
                         )
-                    else:
-                        logging.debug(f"Skipping alert save/upload for {token_id} with grade {grade}")
+                        alerts_sent += 1
 
-            # Persist full state after processing
-            if any(entry.get("last_grade") in VALID_GRADES for entry in alerts_state.values()):
+            logger.info(f"✅ Alerts sent this cycle: {alerts_sent}")
+
+            # 🔥 STEP 5: SAVE STATE
+            if alerts_sent > 0:
+                logger.info("💾 Saving alert state...")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
-                try:
-                    if USE_SUPABASE and upload_file:
+                if USE_SUPABASE and upload_file:
+                    try:
                         upload_file(str(ALERTS_STATE_FILE), bucket=BUCKET_NAME)
-                        logging.info("✅ Synced alerts_state to Supabase")
-                except Exception as e:
-                    logging.warning(f"⚠️ Failed to upload alerts_state: {e}")
+                        logger.info("✅ Synced alerts_state to Supabase")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to upload alerts_state: {e}")
+
+            # 🔥 STEP 6: WAIT FOR NEXT CYCLE
+            logger.info(f"⏰ Sleeping for {POLL_INTERVAL_SECS} seconds...")
+            await asyncio.sleep(POLL_INTERVAL_SECS)
 
         except Exception as e:
-            logging.exception(f"Error in background loop: {e}")
-
-        await asyncio.sleep(POLL_INTERVAL_SECS)
+            logger.exception(f"❌ Error in background loop: {e}")
+            logger.info(f"⏰ Sleeping {POLL_INTERVAL_SECS}s before retry...")
+            await asyncio.sleep(POLL_INTERVAL_SECS)

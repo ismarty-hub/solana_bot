@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-config.py
-
-Centralized configuration for the Solana Token Alert Bot.
+config.py - Configuration for Render deployment
 """
 
 import os
-import platform
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -16,18 +14,20 @@ load_dotenv()
 # ----------------------
 # Environment Detection
 # ----------------------
-IS_RAILWAY = os.getenv('RAILWAY_ENVIRONMENT') is not None
-IS_LOCAL = platform.system() in ['Windows', 'Darwin'] and not IS_RAILWAY
+IS_RENDER = os.getenv('RENDER') is not None
+IS_LOCAL = not IS_RENDER
 
 # ----------------------
-# Data Directory
+# Data Directory (Render persistent disk)
 # ----------------------
-if IS_RAILWAY:
-    DATA_DIR = Path("/data")
-    POLL_INTERVAL_SECS = int(os.getenv("POLL_INTERVAL_SECS", "300"))  # 5 min for Railway
+if IS_RENDER:
+    # Render persistent disk mount point
+    DATA_DIR = Path("/opt/render/project/data")
+    POLL_INTERVAL_SECS = 60  # 1 minute for Render
 else:
+    # Local development
     DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
-    POLL_INTERVAL_SECS = int(os.getenv("POLL_INTERVAL_SECS", "60"))
+    POLL_INTERVAL_SECS = 60  # 1 minute local too
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -59,48 +59,33 @@ VALID_GRADES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 # ----------------------
 BUCKET_NAME = os.getenv("SUPABASE_BUCKET", "monitor-data")
 
-# Supabase feature flags (opt-in)
+# 🔥 ALWAYS USE SUPABASE (no flags, just use it!)
 USE_SUPABASE = True
 DOWNLOAD_OVERLAP_ON_STARTUP = True
 SUPABASE_DAILY_SYNC = True
 
 # ----------------------
-# Optional Supabase Imports
-# ----------------------
-try:
-    from supabase_utils import (
-        download_overlap_results,
-        upload_file,
-        download_file,
-    )
-except Exception:
-    download_overlap_results = None
-    upload_file = None
-    download_file = None
-
-# ----------------------
 # Logging Configuration
 # ----------------------
-import logging
-
-# Configure logging based on environment
 if IS_LOCAL:
-    # Enable logging for local development
+    # Local - detailed logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 else:
-    # Production: reduce logging noise but keep important messages
+    # Render - important logs only
     logging.basicConfig(
-        level=logging.WARNING,
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
-# Optionally silence specific noisy loggers
-# logging.getLogger("httpx").setLevel(logging.WARNING)
-# logging.getLogger("telegram").setLevel(logging.WARNING)
-
-# Debug logging for monitoring
-logging.getLogger("alerts.monitoring").setLevel(logging.DEBUG)
+# Enable monitoring logs (critical!)
+logging.getLogger("alerts.monitoring").setLevel(logging.INFO)
 logging.getLogger("bot").setLevel(logging.INFO)
+
+# Silence noisy libraries
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+
+print(f"✅ Config loaded: IS_RENDER={IS_RENDER}, DATA_DIR={DATA_DIR}, POLL={POLL_INTERVAL_SECS}s")

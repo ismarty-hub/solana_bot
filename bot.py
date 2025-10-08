@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 bot.py - Main entry point for the modular Telegram bot
-FIXED: Proper async integration for FastAPI deployment
+FIXED: Proper logging, background tasks, and Supabase integration
 """
 
 import logging
@@ -18,7 +18,9 @@ from alerts.commands import (
     help_cmd, stats_cmd, testalert_cmd, button_handler
 )
 from alerts.admin_commands import (
-    admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, is_admin_update
+    admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
+    debug_system_cmd, force_download_cmd,
+    is_admin_update
 )
 from alerts.monitoring import (
     background_loop, monthly_expiry_notifier,
@@ -76,6 +78,12 @@ async def adduser_wrapper(update, context):
 async def debug_user_wrapper(update, context):
     await debug_user_cmd(update, context, user_manager)
 
+async def debug_system_wrapper(update, context):
+    await debug_system_cmd(update, context, user_manager)
+
+async def force_download_wrapper(update, context):
+    await force_download_cmd(update, context, user_manager)
+
 async def button_wrapper(update, context):
     await button_handler(update, context, user_manager)
 
@@ -84,7 +92,7 @@ async def button_wrapper(update, context):
 # Startup hook
 # ----------------------
 async def on_startup(app: Application):
-    """Initialize bot on startup."""
+    """Initialize bot on startup - ALWAYS downloads from Supabase first."""
     logger.info("🔧 Initializing bot startup sequence...")
     
     # Ensure data directory and baseline files exist
@@ -94,35 +102,41 @@ async def on_startup(app: Application):
     safe_save(USER_STATS_FILE, safe_load(USER_STATS_FILE, {}))
     logger.info(f"✅ Data directory initialized: {DATA_DIR}")
 
-    # Optional: download bot data & overlap once at startup
-    if USE_SUPABASE:
-        logger.info("☁️ Supabase integration enabled. Attempting startup downloads...")
-        download_bot_data_from_supabase()
+    # 🔥 ALWAYS download from Supabase on startup (both local and Render)
+    logger.info("☁️ Supabase integration enabled - downloading all data...")
+    
+    # Download bot data (user prefs, stats, alerts state)
+    from alerts.monitoring import download_bot_data_from_supabase
+    download_bot_data_from_supabase()
+    
+    # 🔥 FORCE download overlap_results.pkl
+    try:
+        from supabase_utils import download_overlap_results
+        logger.info("⬇️ Downloading overlap_results.pkl from Supabase...")
+        download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME)
         
-        if DOWNLOAD_OVERLAP_ON_STARTUP and download_overlap_results is not None:
-            try:
-                download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME)
-                logger.info("✅ Downloaded overlap_results.pkl at startup")
-            except Exception as e:
-                logger.warning(f"Startup overlap download failed: {e}")
+        if OVERLAP_FILE.exists():
+            size_kb = OVERLAP_FILE.stat().st_size / 1024
+            logger.info(f"✅ Downloaded overlap_results.pkl ({size_kb:.2f} KB)")
+        else:
+            logger.error("❌ overlap_results.pkl not found after download!")
+    except Exception as e:
+        logger.error(f"❌ Startup overlap download failed: {e}")
+        logger.info("⚠️ Bot will keep trying to download in background loop")
 
     # Start background loops
     logger.info("🔄 Starting background monitoring tasks...")
     asyncio.create_task(background_loop(app, user_manager))
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
 
-    # Start daily supabase sync & overlap refresh if enabled
+    # Start daily sync if enabled
     if USE_SUPABASE and SUPABASE_DAILY_SYNC:
-        logger.info("🔄 Starting daily Supabase sync tasks...")
+        logger.info("🔄 Starting daily Supabase sync task...")
         asyncio.create_task(daily_supabase_sync())
-        asyncio.create_task(periodic_overlap_download())
 
     logger.info("🚀 Bot startup complete. Monitoring for token alerts...")
 
 
-# ----------------------
-# Main function - FIXED for FastAPI integration
-# ----------------------
 async def main():
     """Main entry point for the bot - can be called from FastAPI or standalone."""
     logger.info("🤖 Initializing Telegram bot application...")
@@ -144,38 +158,40 @@ async def main():
     app.add_handler(CommandHandler("broadcast", broadcast_wrapper))
     app.add_handler(CommandHandler("adduser", adduser_wrapper))
     app.add_handler(CommandHandler("debuguser", debug_user_wrapper))
+    app.add_handler(CommandHandler("debugsystem", debug_system_wrapper))
+    app.add_handler(CommandHandler("forcedownload", force_download_wrapper))
     
     # Register callback handler
     app.add_handler(CallbackQueryHandler(button_wrapper))
     
     logger.info("✅ All command handlers registered")
 
-    # Set startup hook
-    app.post_init = on_startup
+    # ⛔️ REMOVE THE OLD STARTUP HOOK
+    # app.post_init = on_startup
 
-    logger.info("🔌 Starting bot polling...")
+    logger.info("📌 Starting bot...")
     
-    # ✅ FIXED: Use initialize + start + updater instead of run_polling
-    # This allows proper integration with FastAPI's event loop
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(allowed_updates=None, poll_interval=1.0)
-    
-    # Keep running until cancelled
-    try:
-        # Wait indefinitely (will be cancelled by FastAPI shutdown)
+    # This is the standard way to run an application with startup logic
+    async with app:
+        # ✅ MANUALLY CALL THE STARTUP FUNCTION HERE
+        await on_startup(app)
+        
+        # Start the polling after setup is complete
+        await app.start()
+        await app.updater.start_polling()
+        logger.info("🚀 Bot is now polling for updates.")
+        
+        # Keep the bot running
         await asyncio.Event().wait()
-    except asyncio.CancelledError:
-        logger.info("🛑 Bot received shutdown signal")
-    finally:
-        # Cleanup
-        logger.info("🧹 Cleaning up bot resources...")
+
+        # Stop the bot gracefully on shutdown
+        logger.info("🛑 Shutting down bot...")
         await app.updater.stop()
         await app.stop()
-        await app.shutdown()
-        logger.info("✅ Bot shutdown complete")
-
 
 if __name__ == "__main__":
     # For standalone execution (not via FastAPI)
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped manually.")

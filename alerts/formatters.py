@@ -16,7 +16,7 @@ def format_alert_html(
     first_alert_at: Optional[str] = None
 ) -> str:
     """
-    Format token alert as HTML message.
+    Format token alert as an HTML message with a tappable address.
     
     Args:
         token_data: Token information dictionary
@@ -76,7 +76,8 @@ def format_alert_html(
 
     lines.append("")
     if mint:
-        lines.append(f"<b>Token:</b> {mint}")
+        # ✅ IMPROVEMENT: Wrap the address in <code> tags to make it tappable/copyable
+        lines.append(f"<b>Token: (tap to copy)</b> <code>{mint}</code>")
         lines.append(
             f'<a href="https://solscan.io/token/{mint}">Solscan</a> | '
             f'<a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | '
