@@ -98,5 +98,9 @@ else:
     )
 
 # Optionally silence specific noisy loggers
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("telegram").setLevel(logging.WARNING)
+# logging.getLogger("httpx").setLevel(logging.WARNING)
+# logging.getLogger("telegram").setLevel(logging.WARNING)
+
+# Debug logging for monitoring
+logging.getLogger("alerts.monitoring").setLevel(logging.DEBUG)
+logging.getLogger("bot").setLevel(logging.INFO)

@@ -140,7 +140,7 @@ async def send_alert_to_subscribers(
     app: Application,
     token_data: Dict[str, Any],
     grade: str,
-    user_manager,
+    user_manager,  # ✅ ADD user_manager parameter
     previous_grade: Optional[str] = None,
     initial_mc: Optional[float] = None,
     initial_fdv: Optional[float] = None,
@@ -174,7 +174,7 @@ async def send_alert_to_subscribers(
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
     for chat_id, prefs in active_users.items():
-        # Skip if subscription is invalid
+        # ✅ FIX: Use user_manager.is_subscribed() instead of is_subscribed()
         if not user_manager.is_subscribed(chat_id):
             logging.debug(f"Skipping alert for {chat_id}: not subscribed or expired")
             continue
