@@ -2,13 +2,16 @@
 """
 bot.py - Main entry point for the modular Telegram bot
 FIXED: Proper logging, background tasks, and Supabase integration
+UPDATED: Added group management system for mint broadcasting
 """
 
 import logging
 import asyncio
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults, ChatMemberHandler
+from telegram import Update, ChatMemberUpdated
+from telegram.ext import ContextTypes
 
-from config import BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE
+from config import BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE
 from config import USE_SUPABASE, DOWNLOAD_OVERLAP_ON_STARTUP, SUPABASE_DAILY_SYNC, OVERLAP_FILE, BUCKET_NAME
 
 from shared.file_io import safe_load, safe_save
@@ -20,6 +23,7 @@ from alerts.commands import (
 from alerts.admin_commands import (
     admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
     debug_system_cmd, force_download_cmd,
+    addgroup_cmd, removegroup_cmd, listgroups_cmd,  # NEW
     is_admin_update
 )
 from alerts.monitoring import (
@@ -45,6 +49,84 @@ except Exception:
 # Initialize User Manager
 # ----------------------
 user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
+
+
+# ----------------------
+# NEW: Group Chat Detection Handler
+# ----------------------
+async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Automatically detect when the bot is added to a new group.
+    This logs the event but does NOT auto-enable posting (admin must use /addgroup).
+    """
+    try:
+        result = update.my_chat_member
+        
+        if not result:
+            return
+        
+        chat = result.chat
+        new_status = result.new_chat_member.status
+        old_status = result.old_chat_member.status
+        
+        # Only care about group/supergroup chats
+        if chat.type not in ["group", "supergroup"]:
+            return
+        
+        # Bot was added to group
+        if old_status in ["left", "kicked"] and new_status == "member":
+            group_id = str(chat.id)
+            group_name = chat.title or "Unknown Group"
+            
+            logger.info(f"🆕 Bot added to new group: {group_name} (ID: {group_id})")
+            
+            # Load groups file
+            groups = safe_load(GROUPS_FILE, {})
+            
+            # Add group but mark as INACTIVE (admin must enable it)
+            if group_id not in groups:
+                groups[group_id] = {
+                    "active": False,  # Inactive by default
+                    "name": group_name,
+                    "detected_at": update.my_chat_member.date.isoformat() + "Z"
+                }
+                safe_save(GROUPS_FILE, groups)
+                
+                logger.info(f"📝 Group {group_id} registered (inactive). Admin must use /addgroup to enable.")
+            
+            # Optionally notify admin
+            from config import ADMIN_USER_ID
+            if ADMIN_USER_ID:
+                try:
+                    await context.bot.send_message(
+                        chat_id=int(ADMIN_USER_ID),
+                        text=(
+                            f"🆕 <b>Bot Added to New Group</b>\n\n"
+                            f"• Name: {group_name}\n"
+                            f"• ID: <code>{group_id}</code>\n\n"
+                            f"Use /addgroup {group_id} to enable mint broadcasts."
+                        ),
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not notify admin: {e}")
+        
+        # Bot was removed from group
+        elif old_status == "member" and new_status in ["left", "kicked"]:
+            group_id = str(chat.id)
+            group_name = chat.title or "Unknown Group"
+            
+            logger.info(f"🚫 Bot removed from group: {group_name} (ID: {group_id})")
+            
+            # Mark as inactive
+            groups = safe_load(GROUPS_FILE, {})
+            if group_id in groups:
+                groups[group_id]["active"] = False
+                safe_save(GROUPS_FILE, groups)
+                logger.info(f"📝 Group {group_id} marked as inactive")
+    
+    except Exception as e:
+        logger.exception(f"Error in handle_my_chat_member: {e}")
 
 
 # ----------------------
@@ -87,6 +169,16 @@ async def force_download_wrapper(update, context):
 async def button_wrapper(update, context):
     await button_handler(update, context, user_manager)
 
+# NEW: Group management command wrappers
+async def addgroup_wrapper(update, context):
+    await addgroup_cmd(update, context)
+
+async def removegroup_wrapper(update, context):
+    await removegroup_cmd(update, context)
+
+async def listgroups_wrapper(update, context):
+    await listgroups_cmd(update, context)
+
 
 # ----------------------
 # Startup hook
@@ -100,6 +192,7 @@ async def on_startup(app: Application):
     safe_save(USER_PREFS_FILE, safe_load(USER_PREFS_FILE, {}))
     safe_save(ALERTS_STATE_FILE, safe_load(ALERTS_STATE_FILE, {}))
     safe_save(USER_STATS_FILE, safe_load(USER_STATS_FILE, {}))
+    safe_save(GROUPS_FILE, safe_load(GROUPS_FILE, {}))  # NEW
     logger.info(f"✅ Data directory initialized: {DATA_DIR}")
 
     # 🔥 ALWAYS download from Supabase on startup (both local and Render)
@@ -161,15 +254,20 @@ async def main():
     app.add_handler(CommandHandler("debugsystem", debug_system_wrapper))
     app.add_handler(CommandHandler("forcedownload", force_download_wrapper))
     
+    # NEW: Register group management commands
+    app.add_handler(CommandHandler("addgroup", addgroup_wrapper))
+    app.add_handler(CommandHandler("removegroup", removegroup_wrapper))
+    app.add_handler(CommandHandler("listgroups", listgroups_wrapper))
+    
+    # NEW: Register chat member handler for auto-detection
+    app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    
     # Register callback handler
     app.add_handler(CallbackQueryHandler(button_wrapper))
     
-    logger.info("✅ All command handlers registered")
+    logger.info("✅ All command handlers registered (including group management)")
 
-    # ⛔️ REMOVE THE OLD STARTUP HOOK
-    # app.post_init = on_startup
-
-    logger.info("📌 Starting bot...")
+    logger.info("🔌 Starting bot...")
     
     # This is the standard way to run an application with startup logic
     async with app:

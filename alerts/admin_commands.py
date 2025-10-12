@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 alerts/admin_commands.py - Admin-only bot commands
-UPDATED: Added debug_system_cmd to diagnose alert issues
+UPDATED: Added group management commands for mint broadcasting
 """
 
 import asyncio
@@ -10,8 +10,8 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import ADMIN_USER_ID, OVERLAP_FILE, ALERTS_STATE_FILE, USER_PREFS_FILE
-from shared.file_io import safe_load
+from config import ADMIN_USER_ID, OVERLAP_FILE, ALERTS_STATE_FILE, USER_PREFS_FILE, GROUPS_FILE
+from shared.file_io import safe_load, safe_save
 from alerts.monitoring import upload_bot_data_to_supabase 
 from config import USE_SUPABASE
 
@@ -264,7 +264,7 @@ async def debug_system_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         f"• Total registered: {len(prefs)}\n"
         f"• Active: {len(active_users)}\n"
         f"• Subscribed (valid): {len(subscribed_users)}\n\n"
-        f"<b>🔔 Alert State:</b>\n"
+        f"<b>📢 Alert State:</b>\n"
         f"• Tokens tracked: {len(alerts_state)}\n"
     )
     
@@ -280,7 +280,7 @@ async def debug_system_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     
     # Check if token is in alert state
     if fresh_tokens and alerts_state:
-        msg += f"\n<b>🔍 Alert State Check:</b>\n"
+        msg += f"\n<b>🔎 Alert State Check:</b>\n"
         for tid in list(fresh_tokens.keys())[:3]:
             if tid in alerts_state:
                 last_grade = alerts_state[tid].get("last_grade", "NONE")
@@ -289,3 +289,147 @@ async def debug_system_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
                 msg += f"• {tid[:8]}... NOT tracked yet\n"
     
     await update.message.reply_html(msg)
+
+
+# ----------------------
+# NEW: GROUP MANAGEMENT COMMANDS
+# ----------------------
+
+async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command: Add a group to receive mint broadcasts."""
+    if not is_admin_update(update):
+        await update.message.reply_text("⛔ Access denied. Admins only.")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "⚠️ Usage: /addgroup <group_chat_id>\n\n"
+            "Example: /addgroup -1001234567890"
+        )
+        return
+    
+    try:
+        group_id = str(context.args[0])
+        
+        # Validate it looks like a group ID (starts with -)
+        if not group_id.startswith("-"):
+            await update.message.reply_text(
+                "⚠️ Group IDs typically start with a minus sign (e.g., -1001234567890)\n"
+                "Are you sure this is correct? Proceeding anyway..."
+            )
+        
+        # Load existing groups
+        groups = safe_load(GROUPS_FILE, {})
+        
+        # Try to get group info
+        try:
+            chat = await context.bot.get_chat(int(group_id))
+            group_name = chat.title or "Unknown"
+        except Exception as e:
+            logging.warning(f"Could not fetch group info: {e}")
+            group_name = "Unknown"
+        
+        # Add/update group
+        groups[group_id] = {
+            "active": True,
+            "name": group_name,
+            "added_at": datetime.utcnow().isoformat() + "Z"
+        }
+        
+        safe_save(GROUPS_FILE, groups)
+        
+        await update.message.reply_html(
+            f"✅ <b>Group added!</b>\n\n"
+            f"• ID: <code>{group_id}</code>\n"
+            f"• Name: {group_name}\n"
+            f"• Status: Active\n\n"
+            f"New token mints will now be posted to this group."
+        )
+        
+        logging.info(f"✅ Admin added group {group_id} ({group_name})")
+        
+    except Exception as e:
+        logging.exception("❌ Error in /addgroup:")
+        await update.message.reply_text(f"❌ Failed to add group: {e}")
+
+
+async def removegroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command: Remove a group from mint broadcasts."""
+    if not is_admin_update(update):
+        await update.message.reply_text("⛔ Access denied. Admins only.")
+        return
+    
+    if not context.args:
+        await update.message.reply_text(
+            "⚠️ Usage: /removegroup <group_chat_id>\n\n"
+            "Example: /removegroup -1001234567890"
+        )
+        return
+    
+    try:
+        group_id = str(context.args[0])
+        
+        # Load existing groups
+        groups = safe_load(GROUPS_FILE, {})
+        
+        if group_id not in groups:
+            await update.message.reply_text(
+                f"⚠️ Group {group_id} is not in the active list.\n"
+                f"Use /listgroups to see active groups."
+            )
+            return
+        
+        # Remove group
+        group_name = groups[group_id].get("name", "Unknown")
+        del groups[group_id]
+        
+        safe_save(GROUPS_FILE, groups)
+        
+        await update.message.reply_html(
+            f"✅ <b>Group removed!</b>\n\n"
+            f"• ID: <code>{group_id}</code>\n"
+            f"• Name: {group_name}\n\n"
+            f"This group will no longer receive mint broadcasts."
+        )
+        
+        logging.info(f"✅ Admin removed group {group_id} ({group_name})")
+        
+    except Exception as e:
+        logging.exception("❌ Error in /removegroup:")
+        await update.message.reply_text(f"❌ Failed to remove group: {e}")
+
+
+async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command: List all active groups."""
+    if not is_admin_update(update):
+        await update.message.reply_text("⛔ Access denied. Admins only.")
+        return
+    
+    try:
+        groups = safe_load(GROUPS_FILE, {})
+        
+        if not groups:
+            await update.message.reply_text(
+                "📭 No groups configured yet.\n\n"
+                "Use /addgroup <group_id> to add a group."
+            )
+            return
+        
+        active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
+        
+        msg = f"📋 <b>Active Groups ({len(active_groups)})</b>\n\n"
+        
+        for group_id, info in active_groups.items():
+            name = info.get("name", "Unknown")
+            added = info.get("added_at", "N/A")[:10]
+            msg += f"• <b>{name}</b>\n"
+            msg += f"  ID: <code>{group_id}</code>\n"
+            msg += f"  Added: {added}\n\n"
+        
+        msg += "Use /removegroup <id> to remove a group."
+        
+        await update.message.reply_html(msg)
+        
+    except Exception as e:
+        logging.exception("❌ Error in /listgroups:")
+        await update.message.reply_text(f"❌ Failed to list groups: {e}")

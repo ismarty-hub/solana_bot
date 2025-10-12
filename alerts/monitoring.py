@@ -2,6 +2,7 @@
 """
 alerts/monitoring.py - Background monitoring with Supabase polling
 🔥 COMPLETE VERSION - Downloads from Supabase every 60 seconds!
+UPDATED: Added group mint broadcasting functionality
 """
 
 import os
@@ -15,7 +16,7 @@ from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import (
-    OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE,
+    OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE,
     BUCKET_NAME, USE_SUPABASE, POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES
 )
 from shared.file_io import safe_load, safe_save
@@ -173,6 +174,66 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
 
 
 # ----------------------
+# NEW: GROUP MINT BROADCASTING
+# ----------------------
+
+async def broadcast_mint_to_groups(app: Application, mint_address: str):
+    """
+    Broadcast only the mint address to all active groups.
+    This is called for every new token alert, in parallel with user alerts.
+    """
+    try:
+        # Load active groups
+        groups = safe_load(GROUPS_FILE, {})
+        
+        if not groups:
+            logger.debug("No groups configured for mint broadcasting")
+            return
+        
+        active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
+        
+        if not active_groups:
+            logger.debug("No active groups for mint broadcasting")
+            return
+        
+        logger.info(f"📢 Broadcasting mint to {len(active_groups)} groups: {mint_address}")
+        
+        # Simple message with just the mint address
+        message = mint_address
+        
+        sent_count = 0
+        failed_count = 0
+        
+        for group_id, group_info in active_groups.items():
+            try:
+                await app.bot.send_message(
+                    chat_id=int(group_id),
+                    text=message,
+                    disable_web_page_preview=True
+                )
+                sent_count += 1
+                logger.info(f"✅ Sent mint to group {group_id} ({group_info.get('name', 'Unknown')})")
+                
+            except Exception as e:
+                failed_count += 1
+                logger.warning(f"⚠️ Failed to send to group {group_id}: {e}")
+                
+                # If bot was removed/blocked, mark group as inactive
+                if "bot was blocked" in str(e).lower() or "chat not found" in str(e).lower():
+                    logger.warning(f"🚫 Bot removed from group {group_id}, marking as inactive")
+                    groups[group_id]["active"] = False
+                    safe_save(GROUPS_FILE, groups)
+            
+            # Small delay between sends
+            await asyncio.sleep(0.1)
+        
+        logger.info(f"📊 Group broadcast complete: {sent_count} sent, {failed_count} failed")
+        
+    except Exception as e:
+        logger.exception(f"❌ Error in broadcast_mint_to_groups: {e}")
+
+
+# ----------------------
 # Alert sending
 # ----------------------
 async def send_alert_to_subscribers(
@@ -297,7 +358,7 @@ async def background_loop(app: Application, user_manager):
     Main monitoring loop:
     1. Download overlap_results.pkl from Supabase
     2. Check for new/changed tokens
-    3. Send alerts
+    3. Send alerts to users AND broadcast mints to groups
     4. Wait 60 seconds
     5. Repeat
     """
@@ -306,7 +367,7 @@ async def background_loop(app: Application, user_manager):
 
     # Load alert state
     alerts_state = safe_load(ALERTS_STATE_FILE, {})
-    logger.info(f"📝 Loaded alert state: {len(alerts_state)} tokens tracked")
+    logger.info(f"📂 Loaded alert state: {len(alerts_state)} tokens tracked")
 
     loop_count = 0
 
@@ -318,7 +379,7 @@ async def background_loop(app: Application, user_manager):
             logger.info(f"{'='*60}")
             
             # 🔥 STEP 1: DOWNLOAD FROM SUPABASE
-            logger.info("📥 Step 1: Downloading latest data from Supabase...")
+            logger.info("🔥 Step 1: Downloading latest data from Supabase...")
             download_success = download_latest_overlap()
             
             if not download_success:
@@ -351,7 +412,7 @@ async def background_loop(app: Application, user_manager):
                     logger.info(f"  Sample {i+1}: {tid[:8]}... | {info.get('grade')} | {info.get('checked_at')[:16]}")
 
             # 🔥 STEP 4: PROCESS TOKENS AND SEND ALERTS
-            logger.info("🔍 Step 4: Checking for alerts...")
+            logger.info("🔔 Step 4: Checking for alerts...")
             alerts_sent = 0
 
             for token_id, token in fresh_tokens.items():
@@ -396,7 +457,7 @@ async def background_loop(app: Application, user_manager):
                             logger.info(f"🔄 GRADE CHANGE: {token_id[:8]}...")
                             alerts_state[token_id]["last_grade"] = grade
 
-                        # 🔥 SEND THE ALERT!
+                        # 🔥 SEND THE ALERT TO USERS!
                         state = alerts_state.get(token_id, {})
                         await send_alert_to_subscribers(
                             app,
@@ -408,6 +469,11 @@ async def background_loop(app: Application, user_manager):
                             initial_fdv=state.get("initial_fdv"),
                             first_alert_at=state.get("first_alert_at")
                         )
+                        
+                        # 🔥 NEW: BROADCAST MINT ADDRESS TO GROUPS!
+                        mint_address = token.get("token_metadata", {}).get("mint") or token_id
+                        await broadcast_mint_to_groups(app, mint_address)
+                        
                         alerts_sent += 1
 
             logger.info(f"✅ Alerts sent this cycle: {alerts_sent}")
