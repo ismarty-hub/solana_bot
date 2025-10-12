@@ -338,12 +338,23 @@ async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         safe_save(GROUPS_FILE, groups)
         
+        # Sync to Supabase
+        if USE_SUPABASE:
+            try:
+                upload_bot_data_to_supabase()
+                sync_msg = "\nData synced to Supabase."
+            except Exception as e:
+                logging.error(f"⚠️ Supabase sync failed: {e}")
+                sync_msg = "\n⚠️ Supabase sync failed (saved locally only)."
+        else:
+            sync_msg = ""
+        
         await update.message.reply_html(
             f"✅ <b>Group added!</b>\n\n"
             f"• ID: <code>{group_id}</code>\n"
             f"• Name: {group_name}\n"
             f"• Status: Active\n\n"
-            f"New token mints will now be posted to this group."
+            f"New token mints will now be posted to this group.{sync_msg}"
         )
         
         logging.info(f"✅ Admin added group {group_id} ({group_name})")

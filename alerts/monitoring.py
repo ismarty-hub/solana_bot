@@ -50,7 +50,7 @@ def upload_bot_data_to_supabase():
         logger.debug("Supabase upload skipped (disabled or helper missing).")
         return
     
-    for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE]:
+    for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
         if file.exists():
             try:
                 if now - _last_upload < 43200:  # Only once every 12 hrs
