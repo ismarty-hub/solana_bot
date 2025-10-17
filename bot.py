@@ -94,7 +94,7 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
                 
                 logger.info(f"📝 Group {group_id} registered (inactive). Admin must use /addgroup to enable.")
             
-            # Optionally notify admin
+            # notify admin
             from config import ADMIN_USER_ID
             if ADMIN_USER_ID:
                 try:
@@ -127,7 +127,6 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
     
     except Exception as e:
         logger.exception(f"Error in handle_my_chat_member: {e}")
-
 
 # ----------------------
 # Command wrapper functions (inject user_manager)
@@ -169,7 +168,7 @@ async def force_download_wrapper(update, context):
 async def button_wrapper(update, context):
     await button_handler(update, context, user_manager)
 
-# NEW: Group management command wrappers
+# Group management command wrappers
 async def addgroup_wrapper(update, context):
     await addgroup_cmd(update, context)
 
@@ -254,12 +253,12 @@ async def main():
     app.add_handler(CommandHandler("debugsystem", debug_system_wrapper))
     app.add_handler(CommandHandler("forcedownload", force_download_wrapper))
     
-    # NEW: Register group management commands
+    # Register group management commands
     app.add_handler(CommandHandler("addgroup", addgroup_wrapper))
     app.add_handler(CommandHandler("removegroup", removegroup_wrapper))
     app.add_handler(CommandHandler("listgroups", listgroups_wrapper))
     
-    # NEW: Register chat member handler for auto-detection
+    # Register chat member handler for auto-detection
     app.add_handler(ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     
     # Register callback handler
@@ -269,9 +268,9 @@ async def main():
 
     logger.info("🔌 Starting bot...")
     
-    # This is the standard way to run an application with startup logic
+    # Run application with startup logic
     async with app:
-        # ✅ MANUALLY CALL THE STARTUP FUNCTION HERE
+        # CALL THE STARTUP FUNCTION HERE
         await on_startup(app)
         
         # Start the polling after setup is complete

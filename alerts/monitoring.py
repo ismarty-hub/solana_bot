@@ -202,14 +202,14 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
             f"🆕 <b>New Token Detected</b>\n\n"
             f"📋 Contract Address:\n"
             f"<code>{mint_address}</code>\n\n"
-            f"👇 <i>Click below to analyze with Phanes</i>"
+            f"👇 <i>Click below to analyze the C.A</i>"
         )
 
         # Create inline keyboard - just the CA,
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
-                    "🔍 Phanes Analysis",
+                    "🔍 Analysis",
                     switch_inline_query_current_chat=mint_address
                 )
             ],
@@ -496,9 +496,9 @@ async def background_loop(app: Application, user_manager):
                             first_alert_at=state.get("first_alert_at")
                         )
                         
-                        # 🔥 BROADCAST MINT ADDRESS TO GROUPS (only for new tokens)
+                        # 🔥 BROADCAST MINT ADDRESS TO GROUPS (only for new tokens or tokens of grade None)
                         mint_address = token.get("token_metadata", {}).get("mint") or token_id
-                        if last_grade is None:  # Only broadcast new tokens, not grade changes
+                        if last_grade is None or last_grade == 'None':  # Only broadcast tokens, not grade changes
                             await broadcast_mint_to_groups(app, mint_address)
                         
                         alerts_sent += 1
