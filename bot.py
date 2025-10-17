@@ -23,7 +23,7 @@ from alerts.commands import (
 from alerts.admin_commands import (
     admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
     debug_system_cmd, force_download_cmd,
-    addgroup_cmd, removegroup_cmd, listgroups_cmd,  # NEW
+    addgroup_cmd, removegroup_cmd, listgroups_cmd,  
     is_admin_update
 )
 from alerts.monitoring import (
@@ -52,7 +52,7 @@ user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
 
 
 # ----------------------
-# NEW: Group Chat Detection Handler
+# Group Chat Detection Handler
 # ----------------------
 async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """

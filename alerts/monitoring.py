@@ -174,7 +174,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
 
 
 # ----------------------
-# NEW: GROUP MINT BROADCASTING
+# GROUP MINT BROADCASTING
 # ----------------------
 
 async def broadcast_mint_to_groups(app: Application, mint_address: str):
@@ -470,9 +470,10 @@ async def background_loop(app: Application, user_manager):
                             first_alert_at=state.get("first_alert_at")
                         )
                         
-                        # 🔥 NEW: BROADCAST MINT ADDRESS TO GROUPS!
+                        # BROADCAST MINT ADDRESS TO GROUPS!
                         mint_address = token.get("token_metadata", {}).get("mint") or token_id
-                        await broadcast_mint_to_groups(app, mint_address)
+                        if last_grade is None:
+                            await broadcast_mint_to_groups(app, mint_address)
                         
                         alerts_sent += 1
 
