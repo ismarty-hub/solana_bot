@@ -39,6 +39,7 @@ USER_PREFS_FILE = DATA_DIR / "bot_user_prefs.pkl"
 USER_STATS_FILE = DATA_DIR / "bot_user_stats.pkl"
 ALERTS_STATE_FILE = DATA_DIR / "bot_alerts_state.pkl"
 GROUPS_FILE = DATA_DIR / "bot_groups.pkl"  # NEW: Group chat IDs for mint broadcasting
+PORTFOLIOS_FILE = DATA_DIR / "bot_portfolios.pkl"
 
 # ----------------------
 # Bot Configuration

@@ -289,6 +289,7 @@ def upload_dune_cache_file(file_path: str, bucket: str = BUCKET_NAME) -> bool:
 def download_dune_cache_file(save_path: str, filename: str, bucket: str = BUCKET_NAME) -> bool:
     """Download a dune cache file from dune_cache/ folder."""
     return download_file(save_path, f"dune_cache/{filename}", bucket)
+    
 
 # -------------------
 # Wallet PnL Helpers
