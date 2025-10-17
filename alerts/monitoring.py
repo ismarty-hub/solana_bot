@@ -2,7 +2,7 @@
 """
 alerts/monitoring.py - Background monitoring with Supabase polling
 🔥 COMPLETE VERSION - Downloads from Supabase every 60 seconds!
-UPDATED: Added group mint broadcasting functionality
+UPDATED: Added group mint broadcasting functionality with inline button
 """
 
 import os
@@ -179,28 +179,42 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
 
 async def broadcast_mint_to_groups(app: Application, mint_address: str):
     """
-    Broadcast only the mint address to all active groups.
-    This is called for every new token alert, in parallel with user alerts.
+    Broadcasts a message with the mint address and an inline button
+    that allows users to easily trigger the Phanes bot.
+    
+    Uses HTML formatting to avoid MarkdownV2 escaping issues.
     """
     try:
-        # Load active groups
         groups = safe_load(GROUPS_FILE, {})
-        
         if not groups:
             logger.debug("No groups configured for mint broadcasting")
             return
         
         active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
-        
         if not active_groups:
             logger.debug("No active groups for mint broadcasting")
             return
         
         logger.info(f"📢 Broadcasting mint to {len(active_groups)} groups: {mint_address}")
         
-        # Simple message with just the mint address
-        message = mint_address
-        
+        # Create formatted message with HTML
+        message_text = (
+            f"🆕 <b>New Token Detected</b>\n\n"
+            f"📋 Contract Address:\n"
+            f"<code>{mint_address}</code>\n\n"
+            f"👇 <i>Click below to analyze with Phanes</i>"
+        )
+
+        # Create inline keyboard - just the CA, no @mention needed
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🔍 Analyze with Phanes →",
+                    switch_inline_query_current_chat=mint_address
+                )
+            ]
+        ])
+
         sent_count = 0
         failed_count = 0
         
@@ -208,7 +222,9 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
             try:
                 await app.bot.send_message(
                     chat_id=int(group_id),
-                    text=message,
+                    text=message_text,
+                    reply_markup=keyboard,
+                    parse_mode="HTML",  # HTML is safer than MarkdownV2
                     disable_web_page_preview=True
                 )
                 sent_count += 1
@@ -224,7 +240,7 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
                     groups[group_id]["active"] = False
                     safe_save(GROUPS_FILE, groups)
             
-            # Small delay between sends
+            # Rate limiting protection
             await asyncio.sleep(0.1)
         
         logger.info(f"📊 Group broadcast complete: {sent_count} sent, {failed_count} failed")
@@ -470,9 +486,9 @@ async def background_loop(app: Application, user_manager):
                             first_alert_at=state.get("first_alert_at")
                         )
                         
-                        # BROADCAST MINT ADDRESS TO GROUPS!
+                        # 🔥 BROADCAST MINT ADDRESS TO GROUPS (only for new tokens)
                         mint_address = token.get("token_metadata", {}).get("mint") or token_id
-                        if last_grade is None:
+                        if last_grade is None:  # Only broadcast new tokens, not grade changes
                             await broadcast_mint_to_groups(app, mint_address)
                         
                         alerts_sent += 1
