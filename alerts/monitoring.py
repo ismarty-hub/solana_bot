@@ -478,10 +478,21 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
         )
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Analysis", callback_data=f"analyze_{mint_address}")],
             [
-                InlineKeyboardButton("📊 Quick Trade (Bonkbot)", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint_address}"),
-                InlineKeyboardButton("🤖 Trojan Bot", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint_address}")
+                InlineKeyboardButton(
+                    "🔍 Analysis",
+                    switch_inline_query_current_chat=mint_address
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📊 Quick Trade (Bonkbot)",
+                    url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint_address}"
+                ),
+                InlineKeyboardButton(
+                    "🤖 Trojan Bot",
+                    url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint_address}"
+                )
             ]
         ])
 
