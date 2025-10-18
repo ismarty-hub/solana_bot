@@ -377,8 +377,6 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
     alerts_state = safe_load(ALERTS_STATE_FILE, {})
     logger.info(f"📂 Loaded alert state: {len(alerts_state)} tokens tracked")
     
-    # Signal queue for trade engine (shared with signal_detection_loop)
-    # This allows us to communicate new signals without relying on alerts
     signal_queue = {}
 
     while True:
@@ -404,19 +402,41 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 is_new_token = (last_grade is None)
                 is_grade_change = (grade != last_grade)
                 
+                # ✅ FIX: Initialize state for new tokens FIRST
+                if is_new_token:
+                    mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
+                    alerts_state[token_id] = {
+                        "last_grade": grade, 
+                        "initial_marketcap": mc,
+                        "initial_fdv": fdv, 
+                        "first_alert_at": datetime.utcnow().isoformat() + "Z",
+                        "broadcasted": False  # Initialize broadcast flag
+                    }
+                    logger.info(f"🆕 New token detected: {token_id[:8]}... | Grade: {grade}")
+                
+                # ✅ FIX: Broadcast to groups for ANY valid grade token (not just on grade change)
+                # This should happen for new tokens with any grade (CRITICAL, HIGH, MEDIUM, LOW)
+                state = alerts_state.get(token_id, {})
+                should_broadcast = (
+                    grade != "NONE" and  # Must have a valid grade
+                    not state.get("broadcasted", False)  # Haven't broadcast yet
+                )
+                
+                if should_broadcast:
+                    mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
+                    try:
+                        await broadcast_mint_to_groups(app, mint_address)
+                        alerts_state[token_id]["broadcasted"] = True
+                        logger.info(f"✅ Broadcasted to groups: {mint_address} (Grade: {grade})")
+                    except Exception as e:
+                        logger.error(f"❌ Broadcast failed for {mint_address}: {e}")
+                
+                # Continue with alert logic only if grade actually changed
                 if is_grade_change:
                     logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
                     
-                    if is_new_token:  # First time seeing this token
-                        mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
-                        alerts_state[token_id] = {
-                            "last_grade": grade, 
-                            "initial_marketcap": mc,
-                            "initial_fdv": fdv, 
-                            "first_alert_at": datetime.utcnow().isoformat() + "Z",
-                            "broadcasted": False
-                        }
-                    else:  # Grade changed
+                    # Update grade in state
+                    if not is_new_token:
                         alerts_state[token_id]["last_grade"] = grade
 
                     state = alerts_state.get(token_id, {})
@@ -431,27 +451,18 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     )
                     
                     # ✅ TRIGGER TRADE SIGNALS (for users with "papertrade" mode)
-                    # Note: This doesn't send any messages - just queues signals
-                    # The actual trade logic is in signal_detection_loop in trade_manager.py
                     await trigger_trade_signals(
                         token_info, grade, user_manager, signal_queue
                     )
                     
-                    # ✅ BROADCAST TO GROUPS (only once when first detected)
-                    if is_new_token and grade != "NONE" and not state.get("broadcasted", False):
-                        mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
-                        await broadcast_mint_to_groups(app, mint_address)
-                        alerts_state[token_id]["broadcasted"] = True
-                        logger.info(f"✅ Broadcasted new token to groups: {mint_address} (Grade: {grade})")
-                    
                     alerts_sent_this_cycle += 1
 
-            # Clean up old signals from queue (older than 5 minutes)
+            # Clean up old signals from queue
             current_time = datetime.utcnow()
             expired_signals = []
             for mint, signal_data in signal_queue.items():
                 queued_at = datetime.fromisoformat(signal_data["queued_at"].rstrip("Z"))
-                if (current_time - queued_at).total_seconds() > 300:  # 5 minutes
+                if (current_time - queued_at).total_seconds() > 300:
                     expired_signals.append(mint)
             
             for mint in expired_signals:
@@ -474,3 +485,73 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
         except Exception as e:
             logger.exception(f"❌ Error in background loop: {e}")
             await asyncio.sleep(POLL_INTERVAL_SECS)
+
+
+# ✅ IMPROVED: Enhanced broadcast function with better error handling
+async def broadcast_mint_to_groups(app: Application, mint_address: str):
+    """Broadcasts a message with the mint address and an inline button."""
+    try:
+        groups = safe_load(GROUPS_FILE, {})
+        if not groups:
+            logger.debug("No groups configured for broadcasting")
+            return
+        
+        active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
+        if not active_groups:
+            logger.debug("No active groups for broadcasting")
+            return
+        
+        logger.info(f"📢 Broadcasting mint to {len(active_groups)} groups: {mint_address}")
+        
+        message_text = (
+            f"🆕 <b>New Token Detected</b>\n\n"
+            f"📋 Contract Address:\n"
+            f"<code>{mint_address}</code>\n\n"
+            f"👇 <i>Click below to analyze the C.A</i>"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Analysis", switch_inline_query_current_chat=mint_address)],
+            [
+                InlineKeyboardButton("📊 Quick Trade (Bonkbot)", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint_address}"),
+                InlineKeyboardButton("🤖 Trojan Bot", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint_address}")
+            ]
+        ])
+
+        sent_count = 0
+        failed_count = 0
+        
+        for group_id, group_info in active_groups.items():
+            try:
+                await app.bot.send_message(
+                    chat_id=int(group_id), 
+                    text=message_text, 
+                    reply_markup=keyboard,
+                    parse_mode="HTML", 
+                    disable_web_page_preview=True
+                )
+                sent_count += 1
+                logger.info(f"✅ Sent mint to group {group_id} ({group_info.get('name', 'Unknown')})")
+            except Exception as e:
+                failed_count += 1
+                error_msg = str(e).lower()
+                logger.warning(f"⚠️ Failed to send to group {group_id}: {e}")
+                
+                # Deactivate group if bot was blocked or chat not found
+                if any(keyword in error_msg for keyword in [
+                    "bot was blocked", 
+                    "chat not found", 
+                    "forbidden", 
+                    "bot is not a member",
+                    "have no rights to send"
+                ]):
+                    groups[group_id]["active"] = False
+                    safe_save(GROUPS_FILE, groups)
+                    logger.info(f"🚫 Deactivated group {group_id} due to access error")
+            
+            await asyncio.sleep(0.1)
+        
+        logger.info(f"📊 Broadcast complete: {sent_count} sent, {failed_count} failed")
+            
+    except Exception as e:
+        logger.exception(f"❌ Error in broadcast_mint_to_groups: {e}")

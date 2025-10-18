@@ -363,7 +363,6 @@ async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.exception("❌ Error in /addgroup:")
         await update.message.reply_text(f"❌ Failed to add group: {e}")
 
-
 async def removegroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command: Remove a group from mint broadcasts."""
     if not is_admin_update(update):
@@ -409,7 +408,6 @@ async def removegroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.exception("❌ Error in /removegroup:")
         await update.message.reply_text(f"❌ Failed to remove group: {e}")
 
-
 async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command: List all active groups."""
     if not is_admin_update(update):
@@ -421,7 +419,7 @@ async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not groups:
             await update.message.reply_text(
-                "📭 No groups configured yet.\n\n"
+                "🔭 No groups configured yet.\n\n"
                 "Use /addgroup <group_id> to add a group."
             )
             return
@@ -433,11 +431,13 @@ async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for group_id, info in active_groups.items():
             name = info.get("name", "Unknown")
             added = info.get("added_at", "N/A")[:10]
-            msg += f"• <b>{name}</b>\n"
+            # Escape HTML special characters in name
+            name_escaped = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            msg += f"• <b>{name_escaped}</b>\n"
             msg += f"  ID: <code>{group_id}</code>\n"
             msg += f"  Added: {added}\n\n"
         
-        msg += "Use /removegroup <id> to remove a group."
+        msg += "Use /removegroup &lt;id&gt; to remove a group."
         
         await update.message.reply_html(msg)
         
