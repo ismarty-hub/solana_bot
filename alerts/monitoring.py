@@ -339,29 +339,45 @@ async def background_loop(app: Application, user_manager):
                 current_state = alerts_state.get(token_id)
                 last_grade = current_state.get("last_grade") if isinstance(current_state, dict) else None
 
-                if grade != last_grade:
+                # ✅ FIX: Trigger broadcast only on first detection (last_grade is None)
+                # and only when new grade is not "NONE"
+                is_new_token = (last_grade is None)
+                is_grade_change = (grade != last_grade)
+                
+                if is_grade_change:
                     logger.info(f"🔔 Alert trigger: {token_id[:8]}... | {last_grade} → {grade}")
                     
-                    if last_grade is None: # First time seeing this token
+                    if is_new_token:  # First time seeing this token
                         mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
                         alerts_state[token_id] = {
-                            "last_grade": grade, "initial_marketcap": mc,
-                            "initial_fdv": fdv, "first_alert_at": datetime.utcnow().isoformat() + "Z"
+                            "last_grade": grade, 
+                            "initial_marketcap": mc,
+                            "initial_fdv": fdv, 
+                            "first_alert_at": datetime.utcnow().isoformat() + "Z",
+                            "broadcasted": False  # Track if we've broadcasted this token
                         }
-                    else: # Grade changed
+                    else:  # Grade changed
                         alerts_state[token_id]["last_grade"] = grade
 
-                    # SEND ALERTS & BROADCASTS
+                    # SEND ALERTS to subscribers
                     state = alerts_state.get(token_id, {})
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
-                        previous_grade=last_grade, initial_mc=state.get("initial_marketcap"),
-                        initial_fdv=state.get("initial_fdv"), first_alert_at=state.get("first_alert_at")
+                        previous_grade=last_grade, 
+                        initial_mc=state.get("initial_marketcap"),
+                        initial_fdv=state.get("initial_fdv"), 
+                        first_alert_at=state.get("first_alert_at")
                     )
                     
-                    if last_grade is None or last_grade == "NONE":  # New token detected
+                    # ✅ FIX: Broadcast to groups ONLY when:
+                    # 1. Token is newly discovered (last_grade is None)
+                    # 2. Token has NOT been broadcasted before
+                    # 3. New grade is valid (not "NONE")
+                    if is_new_token and grade != "NONE" and not state.get("broadcasted", False):
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         await broadcast_mint_to_groups(app, mint_address)
+                        alerts_state[token_id]["broadcasted"] = True  # Mark as broadcasted
+                        logger.info(f"✅ Broadcasted new token to groups: {mint_address} (Grade: {grade})")
                     
                     alerts_sent_this_cycle += 1
 
