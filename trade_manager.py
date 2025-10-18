@@ -881,14 +881,14 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             continue
                         
                         # DYNAMIC TRAILING STOP-LOSS
-                        dynamic_stop = calculate_dynamic_trailing_stop(pos, current_price)
-                        if current_price < dynamic_stop:
-                            drawdown_pct = ((pos["peak_price"] - current_price) / pos["peak_price"]) * 100
-                            await portfolio_manager.execute_full_sell(
-                                app, chat_id, mint, current_price, 
-                                f"Trailing Stop (Peak -{drawdown_pct:.1f}%, Profit +{profit_pct:.1f}%)"
-                            )
-                            continue
+                        # dynamic_stop = calculate_dynamic_trailing_stop(pos, current_price)
+                        # if current_price < dynamic_stop:
+                        #     drawdown_pct = ((pos["peak_price"] - current_price) / pos["peak_price"]) * 100
+                        #     await portfolio_manager.execute_full_sell(
+                        #         app, chat_id, mint, current_price, 
+                        #         f"Trailing Stop (Peak -{drawdown_pct:.1f}%, Profit +{profit_pct:.1f}%)"
+                        #     )
+                        #     continue
                         
                         # TIME-BASED EXIT (Enhanced)
                         entry_time = datetime.fromisoformat(pos["entry_time"].rstrip("Z"))

@@ -418,13 +418,20 @@ async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         groups = safe_load(GROUPS_FILE, {})
         
         if not groups:
-            await update.message.reply_text(
-                "🔭 No groups configured yet.\n\n"
-                "Use /addgroup <group_id> to add a group."
+            await update.message.reply_html(
+                "🔭 <b>No groups configured yet.</b>\n\n"
+                "Use /addgroup &lt;group_id&gt; to add a group."
             )
             return
         
         active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
+        
+        if not active_groups:
+            await update.message.reply_html(
+                "🔭 <b>No active groups.</b>\n\n"
+                "All groups have been deactivated. Use /addgroup &lt;group_id&gt; to add a new group."
+            )
+            return
         
         msg = f"📋 <b>Active Groups ({len(active_groups)})</b>\n\n"
         
@@ -437,7 +444,7 @@ async def listgroups_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"  ID: <code>{group_id}</code>\n"
             msg += f"  Added: {added}\n\n"
         
-        msg += "Use /removegroup &lt;id&gt; to remove a group."
+        msg += "Use /removegroup &lt;group_id&gt; to remove a group."
         
         await update.message.reply_html(msg)
         
