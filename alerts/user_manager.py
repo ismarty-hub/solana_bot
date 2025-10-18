@@ -228,12 +228,18 @@ class UserManager:
                 }
 
             # Update user data
+            # ✅ --- FIX ---
+            # Added "modes" to this update block.
+            # This ensures that if an inactive user (who only had ["alerts"])
+            # is re-subscribed, their modes are correctly set to both.
             prefs[chat_id].update({
                 "updated_at": now,
                 "expires_at": expiry_date,
                 "active": True,
-                "subscribed": True
+                "subscribed": True,
+                "modes": ["alerts", "papertrade"]
             })
+            # ✅ --- END FIX ---
 
             safe_save(self.prefs_file, prefs)
             logging.info(f"✅ Saved user {chat_id} with subscribed=True, expires_at={expiry_date}")

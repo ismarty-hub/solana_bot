@@ -75,8 +75,11 @@ def download_bot_data_from_supabase():
         logger.debug("Supabase download skipped (disabled or helper missing).")
         return
     
-    # Download user prefs, stats, and alert state
-    for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE]:
+    # Download user prefs, stats, alert state, and groups
+    # ✅ --- FIX ---
+    # Added GROUPS_FILE to this list
+    for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
+    # ✅ --- END FIX ---
         try:
             download_file(str(file), os.path.basename(file), bucket=BUCKET_NAME)
         except Exception as e:

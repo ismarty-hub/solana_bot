@@ -500,7 +500,7 @@ class PortfolioManager:
                f"<b>Reason:</b> {reason}\n"
                f"<b>Hold Time:</b> {hold_duration.seconds // 60} mins\n"
                f"<b>Entry:</b> ${position['entry_price']:.6f}\n"
-               f"<b>Exit:</b> ${current_price:.6f}\n"
+               f"<b>Exit:</b> ${current_price:,.6f}\n"
                f"<b>Peak:</b> ${position['peak_price']:.6f}\n\n"
                f"<b>Total P/L:</b> ${total_pnl:,.2f} ({total_pnl_pct:+.1f}%)\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>\n"
@@ -958,7 +958,9 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                     grade = latest.get("grade", "NONE")
                     
                     if grade in VALID_GRADES:
-                        processed_signals.add(token_id)
+                        # ✅ --- FIX ---
+                        # Moved processed_signals.add(token_id) from here...
+                        # processed_signals.add(token_id)
                         
                         dex_data = await fetch_dexscreener_data(session, token_id)
                         if not dex_data:
@@ -1001,6 +1003,12 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                             
                             for user_id in trading_users:
                                 await portfolio_manager.add_to_watchlist(user_id, token_info)
+                            
+                            # ✅ --- FIX ---
+                            # ...to here. Now it only gets added if it passes
+                            # all filters and is sent to users.
+                            processed_signals.add(token_id)
+                            # ✅ --- END FIX ---
 
             except Exception as e:
                 logger.exception(f"❌ SIGNAL LOOP: Error in detection: {e}")
