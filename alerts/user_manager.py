@@ -206,8 +206,10 @@ class UserManager:
             safe_save(self.prefs_file, prefs)
 
             if USE_SUPABASE:
-                from alerts.monitoring import upload_bot_data_to_supabase
-                upload_bot_data_to_supabase()
+                # ✅ --- FIX: Call the new, correct upload function ---
+                from alerts.monitoring import upload_all_bot_data_to_supabase
+                upload_all_bot_data_to_supabase()
+                # ✅ --- END FIX ---
 
     def add_user_with_expiry(self, chat_id: str, days_valid: int) -> str:
         """Add or update a user with subscription expiry."""
@@ -228,10 +230,6 @@ class UserManager:
                 }
 
             # Update user data
-            # ✅ --- FIX ---
-            # Added "modes" to this update block.
-            # This ensures that if an inactive user (who only had ["alerts"])
-            # is re-subscribed, their modes are correctly set to both.
             prefs[chat_id].update({
                 "updated_at": now,
                 "expires_at": expiry_date,
@@ -239,7 +237,6 @@ class UserManager:
                 "subscribed": True,
                 "modes": ["alerts", "papertrade"]
             })
-            # ✅ --- END FIX ---
 
             safe_save(self.prefs_file, prefs)
             logging.info(f"✅ Saved user {chat_id} with subscribed=True, expires_at={expiry_date}")
@@ -249,8 +246,10 @@ class UserManager:
             logging.info(f"🔍 Verification - User {chat_id}: subscribed={verify_user.get('subscribed')}, active={verify_user.get('active')}")
 
             if USE_SUPABASE:
-                from alerts.monitoring import upload_bot_data_to_supabase
-                upload_bot_data_to_supabase()
+                # ✅ --- FIX: Call the new, correct upload function ---
+                from alerts.monitoring import upload_all_bot_data_to_supabase
+                upload_all_bot_data_to_supabase()
+                # ✅ --- END FIX ---
 
             return expiry_date
 

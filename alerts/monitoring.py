@@ -37,36 +37,47 @@ except Exception as e:
 # ----------------------
 # Supabase sync functions
 # ----------------------
-_last_upload = 0
 
-def upload_bot_data_to_supabase():
-    """Upload bot data files to Supabase (opt-in)."""
-    global _last_upload
-    now = time.time()
-    
+# ✅ --- FIX: Replaced the old, buggy upload function with a single, robust one ---
+def upload_all_bot_data_to_supabase():
+    """Upload ALL bot data files to Supabase."""
     if not USE_SUPABASE or upload_file is None:
         logger.debug("Supabase upload skipped (disabled or helper missing).")
         return
+
+    logger.info("☁️ Starting periodic upload of all bot data to Supabase...")
     
-    # Upload user data files
-    for file in [USER_PREFS_FILE, USER_STATS_FILE, GROUPS_FILE]:
+    files_to_upload = [
+        USER_PREFS_FILE, 
+        USER_STATS_FILE, 
+        GROUPS_FILE, 
+        ALERTS_STATE_FILE, 
+        PORTFOLIOS_FILE
+    ]
+    
+    uploaded_count = 0
+    failed_count = 0
+    
+    for file in files_to_upload:
         if file.exists():
             try:
-                if now - _last_upload < 60: 
-                    continue
-                upload_file(str(file), bucket=BUCKET_NAME)
-                _last_upload = now
+                # Handle portfolio's special remote path
+                remote_path = None
+                if file == PORTFOLIOS_FILE:
+                    remote_path = f"paper_trade/{PORTFOLIOS_FILE.name}"
+                
+                if upload_file(str(file), bucket=BUCKET_NAME, remote_path=remote_path):
+                    uploaded_count += 1
+                else:
+                    failed_count += 1
             except Exception as e:
+                failed_count += 1
                 logger.exception(f"Failed to upload {file} to Supabase: {e}")
+        else:
+            logger.debug(f"Skipping upload for non-existent file: {file.name}")
     
-    # Upload critical state files more often if needed (currently handled elsewhere)
-    for file in [ALERTS_STATE_FILE, PORTFOLIOS_FILE]:
-         if file.exists():
-            try:
-                # This upload can be more frequent, handled by managers
-                pass
-            except Exception as e:
-                logger.exception(f"Failed to upload {file} to Supabase: {e}")
+    logger.info(f"☁️ Periodic sync complete: {uploaded_count} files uploaded, {failed_count} failed.")
+# ✅ --- END FIX ---
 
 
 def download_bot_data_from_supabase():
@@ -77,7 +88,6 @@ def download_bot_data_from_supabase():
     
     # Download user prefs, stats, alert state, and groups
     for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
-    # ✅ --- END FIX ---
         try:
             download_file(str(file), os.path.basename(file), bucket=BUCKET_NAME)
         except Exception as e:
@@ -112,20 +122,26 @@ def download_latest_overlap():
         logger.error(f"❌ Download failed: {e}")
         return False
 
-async def daily_supabase_sync():
-    """Daily background task to sync data with Supabase."""
+# ✅ --- FIX: Renamed from daily_ to periodic_, changed sleep to 5 mins ---
+async def periodic_supabase_sync():
+    """Periodic background task to sync all data with Supabase."""
     if not (USE_SUPABASE):
-        logger.debug("Daily Supabase sync disabled by configuration.")
+        logger.debug("Periodic Supabase sync disabled by configuration.")
         return
     
-    logger.info("📅 Daily Supabase sync task started.")
+    # Run first sync after a short delay
+    await asyncio.sleep(60)
+    
+    logger.info("📅 Starting periodic Supabase sync task (every 5 minutes).")
     while True:
-        await asyncio.sleep(24 * 3600)
         try:
-            upload_bot_data_to_supabase()
-            logger.info("✅ Daily sync with Supabase complete")
+            upload_all_bot_data_to_supabase()
+            logger.info("✅ Periodic sync with Supabase complete")
         except Exception as e:
-            logger.exception(f"Supabase daily sync failed: {e}")
+            logger.exception(f"Supabase periodic sync failed: {e}")
+        
+        await asyncio.sleep(300) # Sync every 5 minutes (300 seconds)
+# ✅ --- END FIX ---
 
 # ----------------------
 # Token loading
@@ -428,11 +444,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
             if alerts_sent_this_cycle > 0:
                 logger.info(f"💾 Saving alert state after processing {alerts_sent_this_cycle} changes...")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
-                if USE_SUPABASE and upload_file:
-                    try:
-                        upload_file(str(ALERTS_STATE_FILE), bucket=BUCKET_NAME)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Failed to upload alerts_state: {e}")
+                # Note: We no longer upload ALERTS_STATE_FILE here.
+                # It will be uploaded by the periodic_supabase_sync task.
 
             await asyncio.sleep(POLL_INTERVAL_SECS)
 

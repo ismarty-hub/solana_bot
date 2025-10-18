@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 
 from config import ADMIN_USER_ID, OVERLAP_FILE, ALERTS_STATE_FILE, USER_PREFS_FILE, GROUPS_FILE
 from shared.file_io import safe_load, safe_save
-from alerts.monitoring import upload_bot_data_to_supabase 
+from alerts.monitoring import periodic_supabase_sync 
 from config import USE_SUPABASE
 
 
@@ -140,7 +140,7 @@ async def adduser_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         # If Supabase sync is enabled
         if USE_SUPABASE:
             try:
-                upload_bot_data_to_supabase()
+                periodic_supabase_sync()
                 await update.message.reply_text(
                     f"✅ User {chat_id} added/updated.\n"
                     f"Expires on: `{expiry_date_str}`\n"
@@ -341,7 +341,7 @@ async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Sync to Supabase
         if USE_SUPABASE:
             try:
-                upload_bot_data_to_supabase()
+                periodic_supabase_sync()
                 sync_msg = "\nData synced to Supabase."
             except Exception as e:
                 logging.error(f"⚠️ Supabase sync failed: {e}")
