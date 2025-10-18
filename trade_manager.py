@@ -1003,12 +1003,7 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                             
                             for user_id in trading_users:
                                 await portfolio_manager.add_to_watchlist(user_id, token_info)
-                            
-                            # ✅ --- FIX ---
-                            # ...to here. Now it only gets added if it passes
-                            # all filters and is sent to users.
                             processed_signals.add(token_id)
-                            # ✅ --- END FIX ---
 
             except Exception as e:
                 logger.exception(f"❌ SIGNAL LOOP: Error in detection: {e}")

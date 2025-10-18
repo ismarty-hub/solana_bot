@@ -48,11 +48,11 @@ def upload_bot_data_to_supabase():
         logger.debug("Supabase upload skipped (disabled or helper missing).")
         return
     
-    # Upload user data files less frequently
+    # Upload user data files
     for file in [USER_PREFS_FILE, USER_STATS_FILE, GROUPS_FILE]:
         if file.exists():
             try:
-                if now - _last_upload < 43200:  # Only once every 12 hrs
+                if now - _last_upload < 60: 
                     continue
                 upload_file(str(file), bucket=BUCKET_NAME)
                 _last_upload = now
@@ -76,8 +76,6 @@ def download_bot_data_from_supabase():
         return
     
     # Download user prefs, stats, alert state, and groups
-    # ✅ --- FIX ---
-    # Added GROUPS_FILE to this list
     for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
     # ✅ --- END FIX ---
         try:
