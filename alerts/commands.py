@@ -739,14 +739,48 @@ async def testalert_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle inline keyboard button callbacks."""
     query = update.callback_query
-    await query.answer()
-    chat_id = str(query.from_user.id)
+    await query.answer() # Acknowledge the click immediately
     
+    chat_id = str(query.from_user.id)
+    data = query.data
+
+    # --- New: Handle CA Analysis Button in Groups ---
+    if data.startswith("analyze_"):
+        # This button is intended for groups.
+        # query.message.chat.type can be 'group', 'supergroup', or 'private'
+        if query.message.chat.type in ["group", "supergroup"]:
+            try:
+                mint_address = data.split("_", 1)[1]
+                # Send the CA as a new message in the group
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"<code>{mint_address}</code>",
+                    parse_mode="HTML"
+                )
+                # We don't edit the original message, just send a new one.
+                # We already called query.answer()
+                return # Exit handler
+            except Exception as e:
+                logging.warning(f"Failed to send CA in group: {e}")
+                try:
+                    # Notify user who clicked that it failed
+                    await query.answer("Error sending address.", show_alert=True)
+                except:
+                    pass
+                return # Exit handler
+        else:
+            # User clicked it in a private chat (shouldn't happen, but handle it)
+            try:
+                mint_address = data.split("_", 1)[1]
+                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
+            except Exception as e:
+                logging.warning(f"Failed to send CA in private chat: {e}")
+            return # Exit handler
+
+    # --- Subscription Check (for all other user-specific commands) ---
     if not user_manager.is_subscribed(chat_id):
         await query.answer("⛔ You are not subscribed.", show_alert=True)
         return
-
-    data = query.data
     
     # --- Mode Selection ---
     if data == "mode_alerts":

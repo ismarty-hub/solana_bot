@@ -164,53 +164,6 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
         return {}
 
 # ----------------------
-# GROUP MINT BROADCASTING
-# ----------------------
-async def broadcast_mint_to_groups(app: Application, mint_address: str):
-    """Broadcasts a message with the mint address and an inline button."""
-    try:
-        groups = safe_load(GROUPS_FILE, {})
-        if not groups:
-            return
-        
-        active_groups = {k: v for k, v in groups.items() if v.get("active", True)}
-        if not active_groups:
-            return
-        
-        logger.info(f"📢 Broadcasting mint to {len(active_groups)} groups: {mint_address}")
-        
-        message_text = (
-            f"🆕 <b>New Token Detected</b>\n\n"
-            f"📋 Contract Address:\n"
-            f"<code>{mint_address}</code>\n\n"
-            f"👇 <i>Click below to analyze the C.A</i>"
-        )
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Analysis", switch_inline_query_current_chat=mint_address)],
-            [
-                InlineKeyboardButton("📊 Quick Trade (Bonkbot)", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint_address}"),
-                InlineKeyboardButton("🤖 Trojan Bot", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint_address}")
-            ]
-        ])
-
-        for group_id, group_info in active_groups.items():
-            try:
-                await app.bot.send_message(
-                    chat_id=int(group_id), text=message_text, reply_markup=keyboard,
-                    parse_mode="HTML", disable_web_page_preview=True
-                )
-                logger.info(f"✅ Sent mint to group {group_id} ({group_info.get('name', 'Unknown')})")
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to send to group {group_id}: {e}")
-                if "bot was blocked" in str(e).lower() or "chat not found" in str(e).lower():
-                    groups[group_id]["active"] = False
-                    safe_save(GROUPS_FILE, groups)
-            await asyncio.sleep(0.1)
-            
-    except Exception as e:
-        logger.exception(f"❌ Error in broadcast_mint_to_groups: {e}")
-
-# ----------------------
 # Alert sending (ONLY for users with "alerts" mode)
 # ----------------------
 async def send_alert_to_subscribers(
@@ -511,7 +464,7 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
         )
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Analysis", switch_inline_query_current_chat=mint_address)],
+            [InlineKeyboardButton("🔍 Analysis", callback_data=f"analyze_{mint_address}")],
             [
                 InlineKeyboardButton("📊 Quick Trade (Bonkbot)", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint_address}"),
                 InlineKeyboardButton("🤖 Trojan Bot", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint_address}")
