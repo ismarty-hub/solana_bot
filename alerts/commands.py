@@ -59,7 +59,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     await update.message.reply_html(welcome_msg, reply_markup=reply_markup)
 
 async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
-    """Handle /setalerts command."""
+    """Handle /setalerts command with improved UX."""
     chat_id = str(update.effective_chat.id)
     
     if not user_manager.is_subscribed(chat_id):
@@ -71,13 +71,31 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     chosen = [a.upper() for a in args if a.upper() in valid]
 
     if not chosen:
+        # Show interactive buttons AND usage instructions
         keyboard = [
             [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
              InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
             [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
         ]
+        
+        current_grades = user_manager.get_user_prefs(chat_id).get('grades', [])
+        current_str = ', '.join(current_grades) if current_grades else "None set"
+        
         await update.message.reply_html(
-            "⚠️ Usage: /setalerts GRADE1 GRADE2 ...\nAvailable: CRITICAL, HIGH, MEDIUM, LOW",
+            f"⚙️ <b>Configure Alert Grades</b>\n\n"
+            f"<b>Current Setting:</b> {current_str}\n\n"
+            f"<b>📝 Manual Setup:</b>\n"
+            f"Usage: <code>/setalerts GRADE1 GRADE2 ...</code>\n\n"
+            f"<b>Available Grades:</b>\n"
+            f"• CRITICAL - Highest priority signals\n"
+            f"• HIGH - Strong signals\n"
+            f"• MEDIUM - Moderate signals\n"
+            f"• LOW - All signals\n\n"
+            f"<b>Examples:</b>\n"
+            f"<code>/setalerts CRITICAL</code>\n"
+            f"<code>/setalerts CRITICAL HIGH</code>\n"
+            f"<code>/setalerts CRITICAL HIGH MEDIUM LOW</code>\n\n"
+            f"<b>Or choose a preset below:</b>",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -147,45 +165,96 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- ENHANCED TRADING COMMANDS ---
 
 async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
-    """Enable paper trading mode and configure capital."""
+    """Enable paper trading mode and configure capital with improved UX."""
     chat_id = str(update.effective_chat.id)
     if not user_manager.is_subscribed(chat_id):
         await update.message.reply_text("⛔ You must be a subscribed user to enable paper trading.")
         return
     
+    # Check if already enabled
+    prefs = user_manager.get_user_prefs(chat_id)
+    is_already_enabled = "papertrade" in prefs.get("modes", [])
+    
+    if not context.args:
+        # Show helpful prompt with current status
+        portfolio = portfolio_manager.get_portfolio(chat_id)
+        current_capital = portfolio.get('capital_usd', 0)
+        
+        status_msg = ""
+        if is_already_enabled:
+            status_msg = f"<b>Current Status:</b> ✅ Enabled\n<b>Current Capital:</b> ${current_capital:,.2f}\n\n"
+        else:
+            status_msg = "<b>Current Status:</b> ❌ Not enabled\n\n"
+        
+        await update.message.reply_html(
+            f"📈 <b>Paper Trading Setup</b>\n\n"
+            f"{status_msg}"
+            f"<b>📝 How to use:</b>\n"
+            f"<code>/papertrade [amount]</code>\n\n"
+            f"<b>Examples:</b>\n"
+            f"<code>/papertrade 1000</code> - Start with $1,000\n"
+            f"<code>/papertrade 5000</code> - Start with $5,000\n"
+            f"<code>/papertrade 10000</code> - Start with $10,000\n\n"
+            f"<b>Requirements:</b>\n"
+            f"• Minimum: $100\n"
+            f"• Maximum: $1,000,000\n\n"
+            f"💡 <i>Tip: Start with $1,000-$5,000 for realistic results</i>"
+        )
+        return
+    
     capital = 1000.0  # Default capital
-    if context.args:
-        try:
-            capital = float(context.args[0])
-            if capital <= 0:
-                await update.message.reply_text("❌ Please provide a positive number for capital.")
-                return
-            if capital < 100:
-                await update.message.reply_text("❌ Minimum capital is $100 USD.")
-                return
-            if capital > 1000000:
-                await update.message.reply_text("❌ Maximum capital is $1,000,000 USD.")
-                return
-        except ValueError:
-            await update.message.reply_text("❌ Invalid capital amount. Please use a number.")
+    try:
+        capital = float(context.args[0])
+        if capital <= 0:
+            await update.message.reply_html(
+                "❌ <b>Invalid Amount</b>\n\n"
+                "Please provide a positive number.\n"
+                "Example: <code>/papertrade 1000</code>"
+            )
             return
+        if capital < 100:
+            await update.message.reply_html(
+                "❌ <b>Amount Too Low</b>\n\n"
+                "Minimum capital is <b>$100 USD</b>.\n"
+                "Example: <code>/papertrade 100</code>"
+            )
+            return
+        if capital > 1000000:
+            await update.message.reply_html(
+                "❌ <b>Amount Too High</b>\n\n"
+                "Maximum capital is <b>$1,000,000 USD</b>.\n"
+                "Example: <code>/papertrade 10000</code>"
+            )
+            return
+    except ValueError:
+        await update.message.reply_html(
+            "❌ <b>Invalid Format</b>\n\n"
+            "Please provide a valid number.\n\n"
+            "<b>Examples:</b>\n"
+            "<code>/papertrade 1000</code>\n"
+            "<code>/papertrade 5000</code>"
+        )
+        return
             
     user_manager.enable_papertrade_mode(chat_id)
     portfolio_manager.set_capital(chat_id, capital)
     
+    action_word = "updated to" if is_already_enabled else "set up with"
+    
     await update.message.reply_html(
-        f"📈 <b>Paper Trading Enabled!</b>\n\n"
-        f"Your virtual portfolio has been set up with <b>${capital:,.2f} USD</b>.\n\n"
-        f"<b>Strategy Overview:</b>\n"
+        f"📈 <b>Paper Trading {'Updated' if is_already_enabled else 'Enabled'}!</b>\n\n"
+        f"Your virtual portfolio has been {action_word} <b>${capital:,.2f} USD</b>.\n\n"
+        f"<b>🎯 Strategy Overview:</b>\n"
         f"• Position Size: 8-12% per trade (max $150)\n"
         f"• Partial Profits: 40% @ +40%, 30% @ +80%, 20% @ +150%\n"
         f"• Trailing Stop: Dynamic 15-25% from peak\n"
         f"• Liquidity Protection: Exit on 40% drain\n"
         f"• Max Hold: 4 hours\n\n"
-        f"<b>Commands:</b>\n"
-        f"• /portfolio - View your positions\n"
+        f"<b>📊 Track Your Performance:</b>\n"
+        f"• /portfolio - View positions\n"
         f"• /pnl - Check unrealized P/L\n"
-        f"• /performance - See detailed stats\n\n"
+        f"• /performance - Detailed stats\n"
+        f"• /history - Trade log\n\n"
         f"The bot will now automatically trade signals. Good luck! 🚀"
     )
 
@@ -324,7 +393,7 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
     await update.message.reply_html(msg)
 
 async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
-    """View trade history with optional limit."""
+    """View trade history with optional limit and improved UX."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     
@@ -332,26 +401,54 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    history = portfolio.get('trade_history', [])
+    
+    # Parse limit argument
     limit = 10  # Default limit
     if context.args:
         try:
             limit = int(context.args[0])
-            limit = max(1, min(limit, 50))  # Between 1 and 50
+            if limit < 1:
+                await update.message.reply_html(
+                    "❌ <b>Invalid Limit</b>\n\n"
+                    "Please provide a number greater than 0.\n"
+                    "Example: <code>/history 20</code>"
+                )
+                return
+            if limit > 50:
+                await update.message.reply_html(
+                    "⚠️ <b>Limit Too High</b>\n\n"
+                    "Maximum is 50 trades at a time.\n"
+                    "Showing last 50 trades instead..."
+                )
+                limit = 50
         except ValueError:
-            pass
-    
-    portfolio = portfolio_manager.get_portfolio(chat_id)
-    history = portfolio.get('trade_history', [])
+            await update.message.reply_html(
+                "❌ <b>Invalid Format</b>\n\n"
+                "Please provide a valid number.\n\n"
+                "<b>Usage:</b> <code>/history [number]</code>\n\n"
+                "<b>Examples:</b>\n"
+                "<code>/history</code> - Last 10 trades (default)\n"
+                "<code>/history 20</code> - Last 20 trades\n"
+                "<code>/history 50</code> - Last 50 trades"
+            )
+            return
     
     if not history:
-        await update.message.reply_html("📜 No trade history yet. Start trading to see your results here!")
+        await update.message.reply_html(
+            "📜 <b>No Trade History</b>\n\n"
+            "You haven't closed any trades yet.\n\n"
+            "Start trading to see your results here!\n"
+            "Use <code>/portfolio</code> to see open positions."
+        )
         return
     
     # Get most recent trades
     recent_trades = history[-limit:]
     recent_trades.reverse()  # Most recent first
     
-    msg = f"📜 <b>Trade History (Last {len(recent_trades)})</b>\n\n"
+    msg = f"📜 <b>Trade History (Last {len(recent_trades)}/{len(history)})</b>\n\n"
     
     for i, trade in enumerate(recent_trades, 1):
         pnl_symbol = "🟢" if trade.get('total_pnl_usd', trade.get('pnl_usd', 0)) > 0 else "🔴"
@@ -371,12 +468,15 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     stats = portfolio.get('stats', {})
     
     msg += (
-        f"<b>Overall:</b>\n"
+        f"<b>Overall Statistics:</b>\n"
         f"Total P/L: <b>${total_pnl:,.2f}</b>\n"
         f"Win Rate: <b>{(stats.get('wins', 0) / max(stats.get('total_trades', 1), 1) * 100):.1f}%</b>\n"
         f"Best Trade: <b>+{stats.get('best_trade', 0):.1f}%</b>\n"
-        f"Worst Trade: <b>{stats.get('worst_trade', 0):.1f}%</b>"
+        f"Worst Trade: <b>{stats.get('worst_trade', 0):.1f}%</b>\n\n"
     )
+    
+    if len(history) > limit:
+        msg += f"<i>💡 Use /history {min(limit + 10, 50)} to see more</i>"
     
     await update.message.reply_html(msg)
 
@@ -524,7 +624,7 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     await update.message.reply_html(msg)
 
 async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
-    """Reset trading capital (closes all positions)."""
+    """Reset trading capital with improved UX and confirmation."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     
@@ -532,25 +632,56 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    current_capital = portfolio.get('capital_usd', 0)
+    open_positions = len([p for p in portfolio.get('positions', {}).values() if p.get('status') == 'active'])
+    
     if not context.args:
+        # Show detailed prompt with current status
         await update.message.reply_html(
-            "⚠️ <b>Reset Capital</b>\n\n"
-            "This will close all open positions and reset your portfolio.\n\n"
-            "Usage: <code>/resetcapital [amount]</code>\n"
-            "Example: <code>/resetcapital 2000</code>"
+            f"⚠️ <b>Reset Trading Capital</b>\n\n"
+            f"<b>Current Status:</b>\n"
+            f"• Capital: ${current_capital:,.2f}\n"
+            f"• Open Positions: {open_positions}\n\n"
+            f"⚠️ <b>Warning:</b> This will:\n"
+            f"• Close ALL open positions\n"
+            f"• Clear watchlist and re-entry candidates\n"
+            f"• Reset your capital to a new amount\n"
+            f"• Preserve your trade history\n\n"
+            f"<b>📝 Usage:</b>\n"
+            f"<code>/resetcapital [amount]</code>\n\n"
+            f"<b>Examples:</b>\n"
+            f"<code>/resetcapital 1000</code> - Reset to $1,000\n"
+            f"<code>/resetcapital 5000</code> - Reset to $5,000\n"
+            f"<code>/resetcapital 10000</code> - Reset to $10,000\n\n"
+            f"<b>Requirements:</b>\n"
+            f"• Min: $100 | Max: $1,000,000"
         )
         return
     
     try:
         capital = float(context.args[0])
         if capital < 100 or capital > 1000000:
-            await update.message.reply_html("❌ Capital must be between $100 and $1,000,000.")
+            await update.message.reply_html(
+                "❌ <b>Invalid Amount</b>\n\n"
+                "Capital must be between <b>$100</b> and <b>$1,000,000</b>.\n\n"
+                "<b>Examples:</b>\n"
+                "<code>/resetcapital 1000</code>\n"
+                "<code>/resetcapital 5000</code>"
+            )
             return
     except ValueError:
-        await update.message.reply_html("❌ Invalid amount. Please provide a number.")
+        await update.message.reply_html(
+            "❌ <b>Invalid Format</b>\n\n"
+            "Please provide a valid number.\n\n"
+            "<b>Usage:</b> <code>/resetcapital [amount]</code>\n\n"
+            "<b>Examples:</b>\n"
+            "<code>/resetcapital 1000</code>\n"
+            "<code>/resetcapital 5000</code>"
+        )
         return
     
-    portfolio = portfolio_manager.get_portfolio(chat_id)
+    # Perform reset
     old_positions = len(portfolio.get('positions', {}))
     
     # Clear everything except history
@@ -563,11 +694,13 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     portfolio_manager.save()
     
     await update.message.reply_html(
-        f"🔄 <b>Portfolio Reset</b>\n\n"
-        f"• Closed {old_positions} position(s)\n"
-        f"• New capital: <b>${capital:,.2f}</b>\n"
-        f"• Trade history preserved\n\n"
-        f"<i>Ready to start fresh! 🚀</i>"
+        f"✅ <b>Portfolio Reset Complete</b>\n\n"
+        f"<b>Changes:</b>\n"
+        f"• Closed: {old_positions} position(s)\n"
+        f"• New Capital: <b>${capital:,.2f}</b>\n"
+        f"• Trade History: ✅ Preserved\n\n"
+        f"<i>Ready to start fresh! 🚀</i>\n\n"
+        f"The bot will now watch for new signals with your updated capital."
     )
 
 async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, is_admin: bool = False):
