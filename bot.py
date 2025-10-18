@@ -185,8 +185,8 @@ async def on_startup(app: Application):
 
     # --- Start ALL background loops ---
     logger.info("🔄 Starting background tasks...")
-    # 1. Original alert monitoring loop
-    asyncio.create_task(background_loop(app, user_manager))
+    # 1. Original alert monitoring loop - NOW PASSES portfolio_manager
+    asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
     # 2. Monthly expiry notifier
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
     # 3. Daily Supabase sync

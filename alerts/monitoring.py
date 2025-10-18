@@ -211,7 +211,7 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
         logger.exception(f"❌ Error in broadcast_mint_to_groups: {e}")
 
 # ----------------------
-# Alert sending
+# Alert sending (ONLY for users with "alerts" mode)
 # ----------------------
 async def send_alert_to_subscribers(
     app: Application,
@@ -223,11 +223,11 @@ async def send_alert_to_subscribers(
     initial_fdv: Optional[float] = None,
     first_alert_at: Optional[str] = None
 ):
-    """Send an alert to subscribed users who have alerts enabled."""
+    """Send an alert notification to subscribed users who have 'alerts' mode enabled."""
     alerting_users = user_manager.get_alerting_users()
     
     if not alerting_users:
-        logger.debug("No users with alerts enabled to send to.")
+        logger.debug("No users with alerts mode enabled to send to.")
         return
 
     message = format_alert_html(
@@ -267,7 +267,62 @@ async def send_alert_to_subscribers(
 
         await asyncio.sleep(0.1)
     
-    logger.info(f"📤 Sent {sent_count} alerts for grade {grade}")
+    logger.info(f"📤 Sent {sent_count} alert notifications for grade {grade}")
+
+
+# ----------------------
+# Trade signal triggering (for paper trade engine - NO user notifications)
+# ----------------------
+async def trigger_trade_signals(
+    token_data: Dict[str, Any],
+    grade: str,
+    user_manager,
+    signal_queue: Dict[str, list]
+):
+    """
+    Queue trade signals for users with 'papertrade' mode enabled.
+    This does NOT send any messages to users - it just adds signals to the queue
+    that signal_detection_loop will process.
+    """
+    trading_users = user_manager.get_trading_users()
+    
+    if not trading_users:
+        logger.debug("No users with papertrade mode enabled.")
+        return
+    
+    mint = token_data.get("token_metadata", {}).get("mint") or token_data.get("token") or ""
+    if not mint:
+        logger.warning("No mint address found in token_data for trade signal")
+        return
+    
+    signals_queued = 0
+    for chat_id in trading_users:
+        if not user_manager.is_subscribed(chat_id):
+            continue
+        
+        # Check if user's grade preferences include this grade
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        subscribed_grades = user_prefs.get("grades", ALL_GRADES)
+        if grade not in subscribed_grades:
+            continue
+        
+        # Add signal to queue (will be picked up by signal_detection_loop)
+        if mint not in signal_queue:
+            signal_queue[mint] = {
+                "symbol": token_data.get("token_metadata", {}).get("symbol", "Unknown"),
+                "name": token_data.get("token_metadata", {}).get("name", "Unknown"),
+                "grade": grade,
+                "queued_at": datetime.utcnow().isoformat() + "Z",
+                "queued_for_users": []
+            }
+        
+        signal_queue[mint]["queued_for_users"].append(chat_id)
+        signals_queued += 1
+        
+        logger.debug(f"🎯 Trade signal queued for {chat_id}: {grade} - {mint[:8]}...")
+    
+    if signals_queued > 0:
+        logger.info(f"📊 Queued {signals_queued} trade signals for grade {grade} token {mint[:8]}...")
 
 
 # ----------------------
@@ -309,15 +364,22 @@ async def monthly_expiry_notifier(app: Application, user_manager):
             logger.exception(f"Error in expiry notifier: {e}")
 
 # ----------------------
-# Main Background Loop
+# Main Background Loop (DECOUPLED alerts and trade signals)
 # ----------------------
-async def background_loop(app: Application, user_manager):
-    """Main monitoring loop: Downloads from Supabase, checks for changes, sends alerts."""
+async def background_loop(app: Application, user_manager, portfolio_manager=None):
+    """
+    Main monitoring loop: Downloads from Supabase, checks for changes, 
+    sends alerts to alert users AND triggers trades for paper trade users.
+    """
     logger.info("🔄 Background alert loop started!")
     logger.info(f"⏰ Polling every {POLL_INTERVAL_SECS} seconds")
 
     alerts_state = safe_load(ALERTS_STATE_FILE, {})
     logger.info(f"📂 Loaded alert state: {len(alerts_state)} tokens tracked")
+    
+    # Signal queue for trade engine (shared with signal_detection_loop)
+    # This allows us to communicate new signals without relying on alerts
+    signal_queue = {}
 
     while True:
         try:
@@ -339,13 +401,11 @@ async def background_loop(app: Application, user_manager):
                 current_state = alerts_state.get(token_id)
                 last_grade = current_state.get("last_grade") if isinstance(current_state, dict) else None
 
-                # ✅ FIX: Trigger broadcast only on first detection (last_grade is None)
-                # and only when new grade is not "NONE"
                 is_new_token = (last_grade is None)
                 is_grade_change = (grade != last_grade)
                 
                 if is_grade_change:
-                    logger.info(f"🔔 Alert trigger: {token_id[:8]}... | {last_grade} → {grade}")
+                    logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
                     
                     if is_new_token:  # First time seeing this token
                         mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
@@ -354,13 +414,14 @@ async def background_loop(app: Application, user_manager):
                             "initial_marketcap": mc,
                             "initial_fdv": fdv, 
                             "first_alert_at": datetime.utcnow().isoformat() + "Z",
-                            "broadcasted": False  # Track if we've broadcasted this token
+                            "broadcasted": False
                         }
                     else:  # Grade changed
                         alerts_state[token_id]["last_grade"] = grade
 
-                    # SEND ALERTS to subscribers
                     state = alerts_state.get(token_id, {})
+                    
+                    # ✅ SEND ALERT NOTIFICATIONS (only to users with "alerts" mode)
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
                         previous_grade=last_grade, 
@@ -369,20 +430,38 @@ async def background_loop(app: Application, user_manager):
                         first_alert_at=state.get("first_alert_at")
                     )
                     
-                    # ✅ FIX: Broadcast to groups ONLY when:
-                    # 1. Token is newly discovered (last_grade is None)
-                    # 2. Token has NOT been broadcasted before
-                    # 3. New grade is valid (not "NONE")
+                    # ✅ TRIGGER TRADE SIGNALS (for users with "papertrade" mode)
+                    # Note: This doesn't send any messages - just queues signals
+                    # The actual trade logic is in signal_detection_loop in trade_manager.py
+                    await trigger_trade_signals(
+                        token_info, grade, user_manager, signal_queue
+                    )
+                    
+                    # ✅ BROADCAST TO GROUPS (only once when first detected)
                     if is_new_token and grade != "NONE" and not state.get("broadcasted", False):
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         await broadcast_mint_to_groups(app, mint_address)
-                        alerts_state[token_id]["broadcasted"] = True  # Mark as broadcasted
+                        alerts_state[token_id]["broadcasted"] = True
                         logger.info(f"✅ Broadcasted new token to groups: {mint_address} (Grade: {grade})")
                     
                     alerts_sent_this_cycle += 1
 
+            # Clean up old signals from queue (older than 5 minutes)
+            current_time = datetime.utcnow()
+            expired_signals = []
+            for mint, signal_data in signal_queue.items():
+                queued_at = datetime.fromisoformat(signal_data["queued_at"].rstrip("Z"))
+                if (current_time - queued_at).total_seconds() > 300:  # 5 minutes
+                    expired_signals.append(mint)
+            
+            for mint in expired_signals:
+                del signal_queue[mint]
+            
+            if expired_signals:
+                logger.debug(f"🧹 Cleaned up {len(expired_signals)} expired signals from queue")
+
             if alerts_sent_this_cycle > 0:
-                logger.info(f"💾 Saving alert state after sending {alerts_sent_this_cycle} alerts...")
+                logger.info(f"💾 Saving alert state after processing {alerts_sent_this_cycle} changes...")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
                 if USE_SUPABASE and upload_file:
                     try:
