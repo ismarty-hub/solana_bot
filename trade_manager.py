@@ -828,7 +828,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             continue
                         
                         # Tier 2: Major liquidity drain + price dropping = exit
-                        if liq_drop_pct >= 25 and profit_pct < -5:
+                        if liq_drop_pct >= 35 and profit_pct < -5:
                             await portfolio_manager.execute_full_sell(
                                 app, chat_id, mint, current_price, 
                                 f"⚠️ Liquidity Drain + Price Drop (Liq -{liq_drop_pct:.0f}%, Price {profit_pct:.1f}%)"
@@ -836,12 +836,12 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             continue
                         
                         # Tier 3: Moderate liquidity loss + significant price drop = exit
-                        if liq_drop_pct >= 15 and profit_pct < -15:
-                            await portfolio_manager.execute_full_sell(
-                                app, chat_id, mint, current_price, 
-                                f"🛑 Combined Risk Exit (Liq -{liq_drop_pct:.0f}%, Price -{abs(profit_pct):.1f}%)"
-                            )
-                            continue
+                        # if liq_drop_pct >= 15 and profit_pct < -15:
+                        #     await portfolio_manager.execute_full_sell(
+                        #         app, chat_id, mint, current_price, 
+                        #         f"🛑 Combined Risk Exit (Liq -{liq_drop_pct:.0f}%, Price -{abs(profit_pct):.1f}%)"
+                        #     )
+                        #     continue
                         
                         # CRITICAL EXIT 2: Catastrophic Price Collapse (Only for extreme drops)
                         # This is a safety net for flash crashes - rare but important
