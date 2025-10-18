@@ -359,7 +359,7 @@ async def background_loop(app: Application, user_manager):
                         initial_fdv=state.get("initial_fdv"), first_alert_at=state.get("first_alert_at")
                     )
                     
-                    if last_grade is None:
+                    if last_grade is None or last_grade == "NONE":  # New token detected
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         await broadcast_mint_to_groups(app, mint_address)
                     
