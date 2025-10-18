@@ -844,13 +844,13 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         #     continue
                         
                         # CRITICAL EXIT 2: Catastrophic Price Collapse (Only for extreme drops)
-                        # This is a safety net for flash crashes - rare but important
-                        if profit_pct < -35:
-                            await portfolio_manager.execute_full_sell(
-                                app, chat_id, mint, current_price, 
-                                f"💥 Catastrophic Loss Protection (-{abs(profit_pct):.1f}%)"
-                            )
-                            continue
+                        # # This is a safety net for flash crashes - rare but important
+                        # if profit_pct < -35:
+                        #     await portfolio_manager.execute_full_sell(
+                        #         app, chat_id, mint, current_price, 
+                        #         f"💥 Catastrophic Loss Protection (-{abs(profit_pct):.1f}%)"
+                        #     )
+                        #     continue
                         
                         # PARTIAL PROFIT TAKING
                         partial_exits = pos.get("partial_exits", [])
