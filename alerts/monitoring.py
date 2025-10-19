@@ -23,7 +23,6 @@ from alerts.formatters import format_alert_html
 
 logger = logging.getLogger(__name__)
 
-# Import Supabase helpers
 try:
     from supabase_utils import download_overlap_results, upload_file, download_file
     logger.info("✅ Supabase utils loaded successfully")
@@ -34,11 +33,6 @@ except Exception as e:
     download_file = None
 
 
-# ----------------------
-# Supabase sync functions
-# ----------------------
-
-# ✅ --- FIX: Replaced the old, buggy upload function with a single, robust one ---
 def upload_all_bot_data_to_supabase():
     """Upload ALL bot data files to Supabase."""
     if not USE_SUPABASE or upload_file is None:
@@ -61,7 +55,6 @@ def upload_all_bot_data_to_supabase():
     for file in files_to_upload:
         if file.exists():
             try:
-                # Handle portfolio's special remote path
                 remote_path = None
                 if file == PORTFOLIOS_FILE:
                     remote_path = f"paper_trade/{PORTFOLIOS_FILE.name}"
@@ -77,7 +70,6 @@ def upload_all_bot_data_to_supabase():
             logger.debug(f"Skipping upload for non-existent file: {file.name}")
     
     logger.info(f"☁️ Periodic sync complete: {uploaded_count} files uploaded, {failed_count} failed.")
-# ✅ --- END FIX ---
 
 
 def download_bot_data_from_supabase():
@@ -86,14 +78,12 @@ def download_bot_data_from_supabase():
         logger.debug("Supabase download skipped (disabled or helper missing).")
         return
     
-    # Download user prefs, stats, alert state, and groups
     for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
         try:
             download_file(str(file), os.path.basename(file), bucket=BUCKET_NAME)
         except Exception as e:
             logger.debug(f"Could not download {file} from Supabase: {e}")
 
-    # Download portfolios into the correct folder structure
     try:
         remote_path = f"paper_trade/{PORTFOLIOS_FILE.name}"
         download_file(str(PORTFOLIOS_FILE), remote_path, bucket=BUCKET_NAME)
@@ -102,7 +92,7 @@ def download_bot_data_from_supabase():
 
 
 def download_latest_overlap():
-    """Download overlap_results.pkl from Supabase RIGHT NOW."""
+    """Download overlap_results.pkl from Supabase."""
     if not download_overlap_results:
         logger.warning("⚠️ download_overlap_results function not available!")
         return False
@@ -122,14 +112,13 @@ def download_latest_overlap():
         logger.error(f"❌ Download failed: {e}")
         return False
 
-# ✅ --- FIX: Renamed from daily_ to periodic_, changed sleep to 5 mins ---
+
 async def periodic_supabase_sync():
     """Periodic background task to sync all data with Supabase."""
-    if not (USE_SUPABASE):
+    if not USE_SUPABASE:
         logger.debug("Periodic Supabase sync disabled by configuration.")
         return
     
-    # Run first sync after a short delay
     await asyncio.sleep(60)
     
     logger.info("📅 Starting periodic Supabase sync task (every 5 minutes).")
@@ -140,14 +129,11 @@ async def periodic_supabase_sync():
         except Exception as e:
             logger.exception(f"Supabase periodic sync failed: {e}")
         
-        await asyncio.sleep(300) # Sync every 5 minutes (300 seconds)
-# ✅ --- END FIX ---
+        await asyncio.sleep(300)
 
-# ----------------------
-# Token loading
-# ----------------------
+
 def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
-    """Load overlap_results.pkl from local disk (after download from Supabase)."""
+    """Load overlap_results.pkl from local disk."""
     if not OVERLAP_FILE.exists() or OVERLAP_FILE.stat().st_size == 0:
         logger.info("ℹ️ No local overlap file yet (will be downloaded from Supabase)")
         return {}
@@ -180,9 +166,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
         logger.exception(f"❌ Failed to load overlap file: {e}")
         return {}
 
-# ----------------------
-# Alert sending (ONLY for users with "alerts" mode)
-# ----------------------
+
 async def send_alert_to_subscribers(
     app: Application,
     token_data: Dict[str, Any],
@@ -193,7 +177,7 @@ async def send_alert_to_subscribers(
     initial_fdv: Optional[float] = None,
     first_alert_at: Optional[str] = None
 ):
-    """Send an alert notification to subscribed users who have 'alerts' mode enabled."""
+    """Send alert notification to subscribed users with 'alerts' mode enabled."""
     alerting_users = user_manager.get_alerting_users()
     
     if not alerting_users:
@@ -240,9 +224,6 @@ async def send_alert_to_subscribers(
     logger.info(f"📤 Sent {sent_count} alert notifications for grade {grade}")
 
 
-# ----------------------
-# Trade signal triggering (for paper trade engine - NO user notifications)
-# ----------------------
 async def trigger_trade_signals(
     token_data: Dict[str, Any],
     grade: str,
@@ -251,8 +232,7 @@ async def trigger_trade_signals(
 ):
     """
     Queue trade signals for users with 'papertrade' mode enabled.
-    This does NOT send any messages to users - it just adds signals to the queue
-    that signal_detection_loop will process.
+    This does NOT send messages - signals are queued for processing.
     """
     trading_users = user_manager.get_trading_users()
     
@@ -270,13 +250,11 @@ async def trigger_trade_signals(
         if not user_manager.is_subscribed(chat_id):
             continue
         
-        # Check if user's grade preferences include this grade
         user_prefs = user_manager.get_user_prefs(chat_id)
         subscribed_grades = user_prefs.get("grades", ALL_GRADES)
         if grade not in subscribed_grades:
             continue
         
-        # Add signal to queue (will be picked up by signal_detection_loop)
         if mint not in signal_queue:
             signal_queue[mint] = {
                 "symbol": token_data.get("token_metadata", {}).get("symbol", "Unknown"),
@@ -295,9 +273,6 @@ async def trigger_trade_signals(
         logger.info(f"📊 Queued {signals_queued} trade signals for grade {grade} token {mint[:8]}...")
 
 
-# ----------------------
-# Monthly expiry notifier
-# ----------------------
 async def monthly_expiry_notifier(app: Application, user_manager):
     """Notify expired users once per month."""
     logger.info("📅 Starting monthly expiry notifier...")
@@ -317,7 +292,8 @@ async def monthly_expiry_notifier(app: Application, user_manager):
                             last_dt = datetime.fromisoformat(last_notified.rstrip("Z"))
                             if (datetime.utcnow() - last_dt).days < 30:
                                 should_notify = False
-                        except: pass
+                        except: 
+                            pass
                     
                     if should_notify:
                         try:
@@ -333,9 +309,7 @@ async def monthly_expiry_notifier(app: Application, user_manager):
         except Exception as e:
             logger.exception(f"Error in expiry notifier: {e}")
 
-# ----------------------
-# Main Background Loop (DECOUPLED alerts and trade signals)
-# ----------------------
+
 async def background_loop(app: Application, user_manager, portfolio_manager=None):
     """
     Main monitoring loop: Downloads from Supabase, checks for changes, 
@@ -351,10 +325,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
 
     while True:
         try:
-            # STEP 1: DOWNLOAD FROM SUPABASE
             download_latest_overlap()
             
-            # STEP 2: LOAD TOKENS
             tokens = load_latest_tokens_from_overlap()
             if not tokens:
                 await asyncio.sleep(POLL_INTERVAL_SECS)
@@ -372,7 +344,6 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 is_new_token = (last_grade is None)
                 is_grade_change = (grade != last_grade)
                 
-                # ✅ FIX: Initialize state for new tokens FIRST
                 if is_new_token:
                     mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
                     alerts_state[token_id] = {
@@ -380,16 +351,14 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         "initial_marketcap": mc,
                         "initial_fdv": fdv, 
                         "first_alert_at": datetime.utcnow().isoformat() + "Z",
-                        "broadcasted": False  # Initialize broadcast flag
+                        "broadcasted": False
                     }
                     logger.info(f"🆕 New token detected: {token_id[:8]}... | Grade: {grade}")
                 
-                # ✅ FIX: Broadcast to groups for ANY valid grade token (not just on grade change)
-                # This should happen for new tokens with any grade (CRITICAL, HIGH, MEDIUM, LOW)
                 state = alerts_state.get(token_id, {})
                 should_broadcast = (
-                    grade != "NONE" and  # Must have a valid grade
-                    not state.get("broadcasted", False)  # Haven't broadcast yet
+                    grade != "NONE" and
+                    not state.get("broadcasted", False)
                 )
                 
                 if should_broadcast:
@@ -401,17 +370,14 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     except Exception as e:
                         logger.error(f"❌ Broadcast failed for {mint_address}: {e}")
                 
-                # Continue with alert logic only if grade actually changed
                 if is_grade_change:
                     logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
                     
-                    # Update grade in state
                     if not is_new_token:
                         alerts_state[token_id]["last_grade"] = grade
 
                     state = alerts_state.get(token_id, {})
                     
-                    # ✅ SEND ALERT NOTIFICATIONS (only to users with "alerts" mode)
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
                         previous_grade=last_grade, 
@@ -420,14 +386,12 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         first_alert_at=state.get("first_alert_at")
                     )
                     
-                    # ✅ TRIGGER TRADE SIGNALS (for users with "papertrade" mode)
                     await trigger_trade_signals(
                         token_info, grade, user_manager, signal_queue
                     )
                     
                     alerts_sent_this_cycle += 1
 
-            # Clean up old signals from queue
             current_time = datetime.utcnow()
             expired_signals = []
             for mint, signal_data in signal_queue.items():
@@ -444,8 +408,6 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
             if alerts_sent_this_cycle > 0:
                 logger.info(f"💾 Saving alert state after processing {alerts_sent_this_cycle} changes...")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
-                # Note: We no longer upload ALERTS_STATE_FILE here.
-                # It will be uploaded by the periodic_supabase_sync task.
 
             await asyncio.sleep(POLL_INTERVAL_SECS)
 
@@ -454,7 +416,6 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
             await asyncio.sleep(POLL_INTERVAL_SECS)
 
 
-# ✅ IMPROVED: Enhanced broadcast function with better error handling
 async def broadcast_mint_to_groups(app: Application, mint_address: str):
     """Broadcasts a message with the mint address and an inline button."""
     try:
@@ -515,7 +476,6 @@ async def broadcast_mint_to_groups(app: Application, mint_address: str):
                 error_msg = str(e).lower()
                 logger.warning(f"⚠️ Failed to send to group {group_id}: {e}")
                 
-                # Deactivate group if bot was blocked or chat not found
                 if any(keyword in error_msg for keyword in [
                     "bot was blocked", 
                     "chat not found", 
