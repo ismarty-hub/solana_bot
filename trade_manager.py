@@ -135,6 +135,11 @@ class PortfolioManager:
                 if "validation_fails" not in item:
                     item["validation_fails"] = 0
                     migrated = True
+                
+                # Track price history for better momentum calculation
+                if "price_history" not in item:
+                    item["price_history"] = []
+                    migrated = True
         
         if migrated:
             self.save()
@@ -354,52 +359,58 @@ class PortfolioManager:
             "entry_attempts": 0,
             "promoted_from_epoch": token_info.get('promoted_from_epoch', 0),
             "epoch_pass_rate": token_info.get('epoch_pass_rate', 0),
-            "max_wait_minutes": 45
+            "max_wait_minutes": 45,
+            "price_history": []  # Track recent prices for momentum analysis
         }
         self.save()
         logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f} "
                    f"(from Epoch {token_info.get('promoted_from_epoch', '?')})")
 
-    async def calculate_momentum(self, mint: str, price_history: List[float]) -> float:
+    def calculate_short_term_momentum(self, price_history: List[float], lookback: int = 3) -> float:
         """
-        Calculate the momentum of a token based on its price history.
-
+        Calculate SHORT-TERM momentum from recent price movements.
+        
+        This is different from long-term momentum. We only look at the last few
+        price points to see if the token is CURRENTLY gaining strength.
+        
         Args:
-            mint: Token mint address.
-            price_history: List of recent prices (oldest to newest).
-
+            price_history: List of recent prices (oldest to newest)
+            lookback: Number of recent prices to compare (default 3)
+        
         Returns:
-            Momentum value (positive for upward momentum, negative for downward).
+            Momentum percentage (positive = rising NOW, negative = falling NOW)
         """
         if len(price_history) < 2:
-            logger.warning(f"Insufficient price history for {mint} to calculate momentum.")
             return 0.0
-
-        # Simple momentum calculation: percentage change between the last two prices
-        return ((price_history[-1] - price_history[-2]) / price_history[-2]) * 100
+        
+        # Use only the most recent prices
+        recent_prices = price_history[-min(lookback, len(price_history)):]
+        
+        if len(recent_prices) < 2:
+            return 0.0
+        
+        # Compare most recent price to average of previous prices
+        current = recent_prices[-1]
+        previous_avg = sum(recent_prices[:-1]) / len(recent_prices[:-1])
+        
+        return ((current - previous_avg) / previous_avg) * 100
 
     async def execute_buy(self, app: Application, chat_id: str, mint: str, 
                          current_price: float, current_liquidity: float, entry_reason: str = "Entry"):
-        """Execute buy with partial position sizing."""
+        """
+        Execute buy with context-aware validation.
+        
+        CRITICAL CHANGE: Momentum check is now scenario-specific:
+        - Dip Entry: NO momentum check (we WANT to buy dips)
+        - Recovery Entry: NO momentum check (recovering from dips)
+        - Momentum Entry: YES momentum check (must be rising NOW)
+        """
         portfolio = self.get_portfolio(chat_id)
         watch_item = portfolio["watchlist"].get(mint)
         if not watch_item:
             return
 
-        # Fetch price history (example: replace with actual API call or data source)
-        price_history = [watch_item["signal_price"], current_price]  # Placeholder for real data
-        momentum = await self.calculate_momentum(mint, price_history)
-
-        # Check momentum threshold
-        if momentum < 0:
-            logger.info(f"[{chat_id}] Momentum check failed for {watch_item['symbol']} ({momentum:.2f}%). Keeping in watchlist for reevaluation.")
-            
-            # Update watchlist entry for reevaluation
-            watch_item["last_check_time"] = datetime.utcnow().isoformat() + "Z"
-            watch_item["momentum_fail_count"] = watch_item.get("momentum_fail_count", 0) + 1
-            self.save()
-            return
-
+        # Check capital FIRST (fail fast if insufficient funds)
         capital = portfolio["capital_usd"]
         
         # Dynamic position sizing
@@ -418,6 +429,33 @@ class PortfolioManager:
             self.save()
             return
 
+        # CONTEXT-AWARE MOMENTUM CHECK
+        # Only check momentum for "Strong Momentum" entry scenario
+        if "Strong Momentum" in entry_reason or "sustained buying" in entry_reason:
+            # For momentum entries, we want to see SHORT-TERM upward movement
+            price_history = watch_item.get("price_history", [])
+            
+            if len(price_history) >= 2:
+                short_term_momentum = self.calculate_short_term_momentum(price_history, lookback=3)
+                
+                # Require positive momentum for momentum entries
+                if short_term_momentum < 0:
+                    logger.info(f"[{chat_id}] Momentum entry blocked for {watch_item['symbol']} "
+                               f"(short-term momentum: {short_term_momentum:.2f}%). "
+                               f"Keeping in watchlist for reevaluation.")
+                    
+                    watch_item["last_check_time"] = datetime.utcnow().isoformat() + "Z"
+                    watch_item["momentum_fail_count"] = watch_item.get("momentum_fail_count", 0) + 1
+                    self.save()
+                    return
+                else:
+                    logger.info(f"[{chat_id}] Momentum entry approved for {watch_item['symbol']} "
+                               f"(short-term momentum: +{short_term_momentum:.2f}%)")
+        
+        # NO momentum check for Dip Entry or Recovery Entry
+        # These scenarios are DESIGNED to buy at lower prices
+        
+        # Execute buy
         portfolio["capital_usd"] -= investment_usd
         token_amount = investment_usd / current_price
 
@@ -441,15 +479,20 @@ class PortfolioManager:
         del portfolio["watchlist"][mint]
         self.save()
 
+        # Calculate momentum for display purposes
+        price_vs_signal = ((current_price - watch_item["signal_price"]) / watch_item["signal_price"]) * 100
+
         msg = (f"✅ <b>PAPER TRADE: BUY</b>\n\n"
                f"<b>Token:</b> {watch_item['name']} (${watch_item['symbol']})\n"
+               f"<b>Entry Reason:</b> {entry_reason}\n"
                f"<b>Price:</b> ${current_price:.6f}\n"
+               f"<b>vs Signal:</b> {price_vs_signal:+.1f}%\n"
                f"<b>Investment:</b> ${investment_usd:.2f}\n"
-               f"<b>Momentum:</b> {momentum:.2f}%\n")
+               f"<b>Liquidity:</b> ${current_liquidity:,.0f}\n")
 
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"[{chat_id}] Executed buy for {watch_item['symbol']} at ${current_price:.6f}")
+            logger.info(f"✅ [{chat_id}] BUY EXECUTED: {watch_item['symbol']} at ${current_price:.6f} | {entry_reason}")
         except Exception as e:
             logger.error(f"Failed to send buy confirmation for {chat_id}: {e}")
 
@@ -910,6 +953,13 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         item["highest_price"] = max(item["highest_price"], current_price)
                         item["lowest_price"] = min(item["lowest_price"], current_price)
                         
+                        # Track price history for momentum calculation (keep last 10 prices)
+                        if "price_history" not in item:
+                            item["price_history"] = []
+                        item["price_history"].append(current_price)
+                        if len(item["price_history"]) > 10:
+                            item["price_history"].pop(0)
+                        
                         # RE-VALIDATE before executing buy
                         if not validate_token_criteria(data, min_liquidity=40000, min_buys_5m=180, min_ratio=1.3):
                             # Failed validation - move back to pending for re-evaluation
@@ -938,11 +988,13 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         entry_reason = ""
                         
                         # ENTRY SCENARIO 1: Ideal dip (12-20% below signal)
+                        # NO momentum check - we WANT to buy dips!
                         if signal_price * 0.80 <= current_price <= signal_price * 0.88:
                             entry_triggered = True
                             entry_reason = "Dip Entry (12-20% pullback)"
                         
                         # ENTRY SCENARIO 2: Continuing momentum
+                        # HAS momentum check - must be rising NOW
                         elif wait_time >= 15 and current_price >= signal_price * 0.95:
                             buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
                             if buys_5m >= 200 and current_liquidity >= item["signal_liquidity"] * 1.15:
@@ -950,6 +1002,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 entry_reason = "Strong Momentum (sustained buying)"
                         
                         # ENTRY SCENARIO 3: Recovery from dip
+                        # NO momentum check - recovering from weakness
                         elif item["lowest_price"] < signal_price * 0.85 and current_price >= signal_price * 0.92:
                             if wait_time <= 30:
                                 entry_triggered = True
