@@ -301,10 +301,23 @@ class PortfolioManager:
         if mint in portfolio["positions"] or mint in portfolio["watchlist"] or mint in portfolio.get("blacklist", {}):
             return
 
+        # Load signal price from overlap_results.pkl
+        overlap_data = joblib.load(OVERLAP_FILE)
+        history = overlap_data.get(mint, [])
+        if not history or not isinstance(history[-1], dict):
+            logger.warning(f"No valid history found for {mint} in overlap_results.pkl")
+            return
+
+        latest_entry = history[-1]
+        signal_price = latest_entry.get("dexscreener", {}).get("current_price_usd")
+        if signal_price is None:
+            logger.warning(f"No signal price found for {mint} in overlap_results.pkl")
+            return
+
         current_time = datetime.utcnow().isoformat() + "Z"
-        
+
         portfolio["pending_signals"][mint] = {
-            "signal_price": token_info['price'],
+            "signal_price": signal_price,
             "signal_time": current_time,
             "symbol": token_info['symbol'],
             "name": token_info['name'],
@@ -319,7 +332,7 @@ class PortfolioManager:
             "current_epoch_number": 1
         }
         self.save()
-        logger.info(f"🔍 [{chat_id}] Added {token_info['symbol']} to pending signals for epoch-based evaluation")
+        logger.info(f"🔍 [{chat_id}] Added {token_info['symbol']} to pending signals for epoch-based evaluation with signal price ${signal_price:.6f}")
 
     async def add_to_watchlist(self, chat_id: str, token_info: Dict[str, Any]):
         """Add a token to watchlist after passing epoch validation."""
@@ -347,12 +360,44 @@ class PortfolioManager:
         logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f} "
                    f"(from Epoch {token_info.get('promoted_from_epoch', '?')})")
 
+    async def calculate_momentum(self, mint: str, price_history: List[float]) -> float:
+        """
+        Calculate the momentum of a token based on its price history.
+
+        Args:
+            mint: Token mint address.
+            price_history: List of recent prices (oldest to newest).
+
+        Returns:
+            Momentum value (positive for upward momentum, negative for downward).
+        """
+        if len(price_history) < 2:
+            logger.warning(f"Insufficient price history for {mint} to calculate momentum.")
+            return 0.0
+
+        # Simple momentum calculation: percentage change between the last two prices
+        return ((price_history[-1] - price_history[-2]) / price_history[-2]) * 100
+
     async def execute_buy(self, app: Application, chat_id: str, mint: str, 
                          current_price: float, current_liquidity: float, entry_reason: str = "Entry"):
         """Execute buy with partial position sizing."""
         portfolio = self.get_portfolio(chat_id)
         watch_item = portfolio["watchlist"].get(mint)
         if not watch_item:
+            return
+
+        # Fetch price history (example: replace with actual API call or data source)
+        price_history = [watch_item["signal_price"], current_price]  # Placeholder for real data
+        momentum = await self.calculate_momentum(mint, price_history)
+
+        # Check momentum threshold
+        if momentum < 0:
+            logger.info(f"[{chat_id}] Momentum check failed for {watch_item['symbol']} ({momentum:.2f}%). Keeping in watchlist for reevaluation.")
+            
+            # Update watchlist entry for reevaluation
+            watch_item["last_check_time"] = datetime.utcnow().isoformat() + "Z"
+            watch_item["momentum_fail_count"] = watch_item.get("momentum_fail_count", 0) + 1
+            self.save()
             return
 
         capital = portfolio["capital_usd"]
@@ -398,16 +443,15 @@ class PortfolioManager:
 
         msg = (f"✅ <b>PAPER TRADE: BUY</b>\n\n"
                f"<b>Token:</b> {watch_item['name']} (${watch_item['symbol']})\n"
-               f"<b>Investment:</b> ${investment_usd:,.2f}\n"
-               f"<b>Entry Price:</b> ${current_price:,.6f}\n"
-               f"<b>Reason:</b> {entry_reason}\n"
-               f"<b>Liquidity:</b> ${current_liquidity:,.0f}\n\n"
-               f"<i>Remaining Capital: ${portfolio['capital_usd']:,.2f}</i>")
+               f"<b>Price:</b> ${current_price:.6f}\n"
+               f"<b>Investment:</b> ${investment_usd:.2f}\n"
+               f"<b>Momentum:</b> {momentum:.2f}%\n")
+
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"📈 [{chat_id}] BOUGHT {watch_item['symbol']} for ${investment_usd:,.2f} - {entry_reason}")
+            logger.info(f"[{chat_id}] Executed buy for {watch_item['symbol']} at ${current_price:.6f}")
         except Exception as e:
-            logger.error(f"Failed to send buy notification to {chat_id}: {e}")
+            logger.error(f"Failed to send buy confirmation for {chat_id}: {e}")
 
     async def execute_partial_sell(self, app: Application, chat_id: str, mint: str, 
                                    current_price: float, sell_percentage: float, reason: str):
