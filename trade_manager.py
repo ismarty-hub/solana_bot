@@ -125,7 +125,8 @@ class PortfolioManager:
                     migrated = True
                 
                 if "max_wait_minutes" not in item:
-                    item["max_wait_minutes"] = 45
+                    # UPDATED to 10 minutes as per new logic
+                    item["max_wait_minutes"] = 10
                     migrated = True
                 
                 if "validation_passes" not in item:
@@ -359,12 +360,14 @@ class PortfolioManager:
             "entry_attempts": 0,
             "promoted_from_epoch": token_info.get('promoted_from_epoch', 0),
             "epoch_pass_rate": token_info.get('epoch_pass_rate', 0),
-            "max_wait_minutes": 45,
+            # --- LOGIC CHANGE ---
+            # Set max wait to 10 minutes as requested
+            "max_wait_minutes": 10,
             "price_history": []  # Track recent prices for momentum analysis
         }
         self.save()
         logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f} "
-                   f"(from Epoch {token_info.get('promoted_from_epoch', '?')})")
+                   f"(from Epoch {token_info.get('promoted_from_epoch', '?')}) - 10 min window")
 
     def calculate_short_term_momentum(self, price_history: List[float], lookback: int = 3) -> float:
         """
@@ -960,11 +963,49 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         if len(item["price_history"]) > 10:
                             item["price_history"].pop(0)
                         
-                        # RE-VALIDATE before executing buy
-                        if not validate_token_criteria(data, min_liquidity=40000, min_buys_5m=180, min_ratio=1.3):
-                            # Failed validation - move back to pending for re-evaluation
+                        # --- START: LOGIC CHANGE ---
+                        # The harsh RE-VALIDATE block that was here has been REMOVED as requested.
+                        # We now trust the epoch validation and look for an entry.
+
+                        entry_triggered = False
+                        entry_reason = ""
+                        buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
+
+                        # NEW CHECK: Only proceed if buy pressure is > 100 (user's requested floor)
+                        if buys_5m > 100:
+                            # ENTRY SCENARIO 1: Ideal dip (12-20% below signal)
+                            # NO momentum check - we WANT to buy dips!
+                            if signal_price * 0.80 <= current_price <= signal_price * 0.88:
+                                entry_triggered = True
+                                entry_reason = "Dip Entry (12-20% pullback)"
+                            
+                            # ENTRY SCENARIO 2: Continuing momentum
+                            # HAS momentum check - must be rising NOW
+                            elif wait_time >= 15 and current_price >= signal_price * 0.95:
+                                # We already know buys_5m > 100.
+                                # We just check for increasing liquidity.
+                                if current_liquidity >= item["signal_liquidity"] * 1.15:
+                                    entry_triggered = True
+                                    entry_reason = "Strong Momentum (sustained buying)"
+                            
+                            # ENTRY SCENARIO 3: Recovery from dip
+                            # NO momentum check - recovering from weakness
+                            elif item["lowest_price"] < signal_price * 0.85 and current_price >= signal_price * 0.92:
+                                # Note: max_wait_minutes is 10, so wait_time <= 30 is fine.
+                                if wait_time <= 30: 
+                                    entry_triggered = True
+                                    entry_reason = "Recovery Entry (bounced from dip)"
+                        
+                        # else:
+                        #   buys_5m <= 100, so we don't trigger an entry.
+                        #   We just let the loop continue and wait.
+                        
+                        # Timeout check (max_wait_minutes is now 10)
+                        if wait_time >= item["max_wait_minutes"]:
+                            logger.info(f"⏰ [{chat_id}] Timeout for {item['symbol']} (10 min), demoting to pending")
                             del portfolio["watchlist"][mint]
                             
+                            # Demote back to pending_signals as requested
                             current_time = datetime.utcnow().isoformat() + "Z"
                             portfolio["pending_signals"][mint] = {
                                 "signal_price": signal_price,
@@ -981,39 +1022,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 "current_epoch_number": 1
                             }
                             portfolio_manager.save()
-                            logger.info(f"🔄 [{chat_id}] {item['symbol']} moved back to pending (Epoch 1) - failed re-validation")
                             continue
                         
-                        entry_triggered = False
-                        entry_reason = ""
-                        
-                        # ENTRY SCENARIO 1: Ideal dip (12-20% below signal)
-                        # NO momentum check - we WANT to buy dips!
-                        if signal_price * 0.80 <= current_price <= signal_price * 0.88:
-                            entry_triggered = True
-                            entry_reason = "Dip Entry (12-20% pullback)"
-                        
-                        # ENTRY SCENARIO 2: Continuing momentum
-                        # HAS momentum check - must be rising NOW
-                        elif wait_time >= 15 and current_price >= signal_price * 0.95:
-                            buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
-                            if buys_5m >= 200 and current_liquidity >= item["signal_liquidity"] * 1.15:
-                                entry_triggered = True
-                                entry_reason = "Strong Momentum (sustained buying)"
-                        
-                        # ENTRY SCENARIO 3: Recovery from dip
-                        # NO momentum check - recovering from weakness
-                        elif item["lowest_price"] < signal_price * 0.85 and current_price >= signal_price * 0.92:
-                            if wait_time <= 30:
-                                entry_triggered = True
-                                entry_reason = "Recovery Entry (bounced from dip)"
-                        
-                        # Timeout
-                        if wait_time >= item["max_wait_minutes"]:
-                            logger.info(f"⏰ [{chat_id}] Timeout for {item['symbol']}, removing from watchlist")
-                            del portfolio["watchlist"][mint]
-                            portfolio_manager.save()
-                            continue
+                        # --- END: LOGIC CHANGE ---
                         
                         if entry_triggered:
                             await portfolio_manager.execute_buy(
