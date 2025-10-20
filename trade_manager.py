@@ -216,12 +216,15 @@ class PortfolioManager:
         if not positions:
             return {
                 "total_unrealized_usd": 0.0,
+                "total_realized_usd": 0.0,
                 "total_unrealized_pct": 0.0,
+                "total_cost_basis": 0.0,
                 "position_count": 0,
                 "positions_detail": []
             }
         
         total_unrealized_pnl = 0.0
+        total_realized_pnl = 0.0
         total_cost_basis = 0.0
         positions_detail = []
         
@@ -246,6 +249,16 @@ class PortfolioManager:
             total_unrealized_pnl += unrealized_pnl
             total_cost_basis += cost_basis
             
+            # Get realized P/L and calculate new percentages
+            locked_profit_usd = pos.get("locked_profit_usd", 0)
+            total_realized_pnl += locked_profit_usd
+            
+            # Calculate percentages based on current cost basis, per user format
+            realized_pct = (locked_profit_usd / cost_basis) * 100 if cost_basis > 0 else 0
+            
+            total_pnl = locked_profit_usd + unrealized_pnl
+            total_pct = (total_pnl / cost_basis) * 100 if cost_basis > 0 else 0
+            
             positions_detail.append({
                 "symbol": pos["symbol"],
                 "mint": mint,
@@ -257,18 +270,24 @@ class PortfolioManager:
                 "cost_basis": cost_basis,
                 "unrealized_pnl_usd": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pct,
-                "locked_profit_usd": pos.get("locked_profit_usd", 0),
-                "remaining_pct": pos.get("remaining_percentage", 100)
+                "locked_profit_usd": locked_profit_usd,
+                "remaining_pct": pos.get("remaining_percentage", 100),
+                
+                # NEW FIELDS FOR FORMATTER
+                "realized_pct": realized_pct,
+                "total_pnl": total_pnl,
+                "total_pct": total_pct
             })
         
         total_unrealized_pct = (total_unrealized_pnl / total_cost_basis) * 100 if total_cost_basis > 0 else 0
         
         return {
             "total_unrealized_usd": total_unrealized_pnl,
+            "total_realized_usd": total_realized_pnl,
             "total_unrealized_pct": total_unrealized_pct,
             "total_cost_basis": total_cost_basis,
             "position_count": len(positions_detail),
-            "positions_detail": sorted(positions_detail, key=lambda x: x["unrealized_pnl_pct"], reverse=True)
+            "positions_detail": sorted(positions_detail, key=lambda x: x["total_pct"], reverse=True)
         }
     
     async def send_pnl_update(self, app: Application, chat_id: str, pnl_data: Dict[str, Any], 
@@ -278,41 +297,56 @@ class PortfolioManager:
         
         if pnl_data["position_count"] == 0:
             return
+
+        total_unrealized_pnl = pnl_data["total_unrealized_usd"]
+        total_realized_pnl = pnl_data.get("total_realized_usd", 0.0)
+        total_cost_basis = pnl_data["total_cost_basis"]
         
-        total_pnl = pnl_data["total_unrealized_usd"]
-        total_pct = pnl_data["total_unrealized_pct"]
-        pnl_symbol = "🟢" if total_pnl >= 0 else "🔴"
+        total_value = total_cost_basis + total_unrealized_pnl # Current value of open positions
         
-        total_value = pnl_data["total_cost_basis"] + total_pnl
+        pnl_symbol = "🟢" if (total_unrealized_pnl + total_realized_pnl) >= 0 else "🔴"
         
-        msg = f"{pnl_symbol} <b>UNREALIZED P/L UPDATE</b>\n\n"
+        msg = f"{pnl_symbol} <b>TRADE PERFORMANCE UPDATE</b>\n\n"
         msg += f"<b>Open Positions:</b> {pnl_data['position_count']}\n"
         msg += f"<b>Total Value:</b> ${total_value:,.2f}\n"
-        msg += f"<b>Cost Basis:</b> ${pnl_data['total_cost_basis']:,.2f}\n"
-        msg += f"<b>Unrealized P/L:</b> ${total_pnl:,.2f} ({total_pct:+.1f}%)\n\n"
+        msg += f"<b>Available Capital:</b> ${portfolio['capital_usd']:,.2f}\n\n"
         
-        positions = pnl_data["positions_detail"][:5]
-        msg += "<b>Positions:</b>\n"
+        msg += f"<b>Cost Basis:</b> ${total_cost_basis:,.2f}\n"
+        msg += f"<b>Realized P/L:</b> ${total_realized_pnl:+,_2f}\n"
+        msg += f"<b>Unrealized P/L:</b> ${total_unrealized_pnl:+,_2f}\n"
+        
+        positions = pnl_data["positions_detail"] # No limit
         
         for pos in positions:
-            pos_symbol = "🟢" if pos["unrealized_pnl_usd"] >= 0 else "🔴"
-            locked_note = f" | 💰${pos['locked_profit_usd']:.0f}" if pos["locked_profit_usd"] > 0 else ""
+            pos_symbol = "💎"
             remaining_note = f" ({pos['remaining_pct']:.0f}%)" if pos["remaining_pct"] < 100 else ""
             
-            msg += (f"\n{pos_symbol} <b>{pos['symbol']}</b>{remaining_note}\n"
-                   f"   Avg Buy: ${pos['avg_buy_price']:.6f} → Now: ${pos['current_price']:.6f}\n"
-                   f"   P/L: ${pos['unrealized_pnl_usd']:,.2f} ({pos['unrealized_pnl_pct']:+.1f}%){locked_note}\n")
-        
-        if len(pnl_data["positions_detail"]) > 5:
-            msg += f"\n<i>...and {len(pnl_data['positions_detail']) - 5} more</i>\n"
-        
-        msg += f"\n<i>Available Capital: ${portfolio['capital_usd']:,.2f}</i>"
+            # Determine summary line
+            summary_line = ""
+            if pos['locked_profit_usd'] > 0:
+                summary_line = "✅ Partially exited — letting profits run 💰"
+            elif pos['total_pnl'] > 0:
+                summary_line = "✅ Still riding strong in profit 🚀"
+            else:
+                summary_line = "⏳ Holding position, awaiting recovery..."
+
+            msg += (
+                f"\n{pos_symbol} <b>{pos['symbol']}</b>{remaining_note}\n\n"
+                f"• <b>Tokens Held:</b> {pos['token_balance']:,.0f}\n"
+                f"• <b>Entry:</b> ${pos['avg_buy_price']:.6f} → <b>Now:</b> ${pos['current_price']:.6f}\n"
+                f"• <b>Cost Basis:</b> ${pos['cost_basis']:.2f}\n"
+                f"• <b>Realized P/L:</b> ${pos['locked_profit_usd']:+,_2f} ({pos['realized_pct']:+.1f}%)\n"
+                f"• <b>Unrealized P/L:</b> ${pos['unrealized_pnl_usd']:+,_2f} ({pos['unrealized_pnl_pct']:+.1f}%)\n"
+                f"• <b>Total P/L:</b> ${pos['total_pnl']:+,_2f} ({pos['total_pct']:+.1f}%)\n\n"
+                f"<i>{summary_line}</i>\n"
+            )
         
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
             portfolio["last_pnl_update"] = datetime.utcnow().isoformat() + "Z"
             self.save()
-            logger.info(f"📊 [{chat_id}] Sent P/L update: {total_pct:+.1f}% ({trigger_reason})")
+            total_overall_pct = ((total_realized_pnl + total_unrealized_pnl) / total_cost_basis) * 100 if total_cost_basis > 0 else 0
+            logger.info(f"📊 [{chat_id}] Sent P/L update: {total_overall_pct:+.1f}% ({trigger_reason})")
         except Exception as e:
             logger.error(f"Failed to send P/L update to {chat_id}: {e}")
 
@@ -535,8 +569,8 @@ class PortfolioManager:
                f"<b>Reason:</b> {reason}\n"
                f"<b>Tokens Sold:</b> {tokens_to_sell:,.2f}\n"
                f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
-               f"<b>Sell Price:</b> ${current_price:,.6f}\n"
-               f"<b>Realized P/L:</b> ${partial_pnl:,.2f} ({pnl_pct:+.1f}%)\n"
+               f"<b>Sell Price:</b> ${current_price:.6f}\n"
+               f"<b>Realized P/L:</b> ${partial_pnl:+,_2f} ({pnl_pct:+.1f}%)\n"
                f"<b>Remaining:</b> {position['remaining_percentage']:.0f}%\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>")
         
@@ -651,9 +685,9 @@ class PortfolioManager:
                f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                f"<b>Exit:</b> ${current_price:,.6f}\n"
                f"<b>Peak:</b> ${position['peak_price']:.6f}\n\n"
-               f"<b>Total P/L:</b> ${total_pnl:,.2f} ({total_pnl_pct:+.1f}%)\n"
+               f"<b>Total P/L:</b> ${total_pnl:+,_2f} ({total_pnl_pct:+.1f}%)\n"
                f"<b>Locked:</b> ${position['locked_profit_usd']:,.2f}\n"
-               f"<b>Final:</b> ${final_pnl:,.2f}\n\n"
+               f"<b>Final:</b> ${final_pnl:+,_2f}\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>\n"
                f"<i>Win Rate: {win_rate:.1f}% ({stats['wins']}/{stats['total_trades']})</i>"
                f"{status_note}")
@@ -1050,8 +1084,8 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                                    f"<b>Token:</b> {pos['symbol']}\n"
                                                    f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                                                    f"<b>Current:</b> ${current_price:.6f}\n"
-                                                   f"<b>Peak Gain:</b> +{profit_pct:.1f}%\n"
-                                                   f"<b>Total P/L:</b> ${total_pnl:,.2f}\n\n"
+                                                   f"<b>Peak Gain:</b> {profit_pct:+.1f}%\n"
+                                                   f"<b>Total P/L:</b> ${total_pnl:+,_2f}\n\n"
                                                    f"<i>Keep riding or take profits! 🎯</i>")
                                     try:
                                         await app.bot.send_message(chat_id=chat_id, text=milestone_msg, parse_mode="HTML")
@@ -1113,14 +1147,14 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             if buys_5m < 100 or liq_drop_pct >= 20:
                                 await portfolio_manager.execute_full_sell(
                                     app, chat_id, mint, current_price, 
-                                    f"Time Exit (2hr+, low activity, +{profit_pct:.1f}%)"
+                                    f"Time Exit (2hr+, low activity, {profit_pct:+.1f}%)"
                                 )
                                 continue
                         
                         if hold_minutes >= 240:
                             await portfolio_manager.execute_full_sell(
                                 app, chat_id, mint, current_price, 
-                                f"Max Hold Time (4hr, +{profit_pct:.1f}%)"
+                                f"Max Hold Time (4hr, {profit_pct:+.1f}%)"
                             )
                             continue
 
