@@ -784,10 +784,9 @@ def validate_token_criteria(data: Dict[str, Any], min_liquidity: float = 35000,
     
     return all([passes_liquidity, passes_buys, passes_ratio, passes_marketcap, passes_volume])
 
-
 async def trade_monitoring_loop(app: Application, user_manager: UserManager, 
                                portfolio_manager: PortfolioManager):
-    """Enhanced monitoring with better entry/exit logic."""
+    """Enhanced monitoring with patient dip-focused entry logic."""
     logger.info("🔄 TRADE LOOP: Enhanced monitoring starting.")
     await asyncio.sleep(10)
     
@@ -936,7 +935,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         if data:
                             await portfolio_manager.check_reentry_opportunity(app, chat_id, mint, data)
                     
-                    # --- WATCHLIST PROCESSING ---
+                    # --- WATCHLIST PROCESSING (PATIENT DIP-FOCUSED ENTRY) ---
                     for mint, item in list(portfolio.get("watchlist", {}).items()):
                         if mint in portfolio.get("blacklist", {}):
                             del portfolio["watchlist"][mint]
@@ -953,83 +952,89 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         signal_time = datetime.fromisoformat(item["signal_time"].rstrip("Z"))
                         wait_time = (datetime.utcnow() - signal_time).total_seconds() / 60
                         
+                        # Update price tracking
                         item["highest_price"] = max(item["highest_price"], current_price)
                         item["lowest_price"] = min(item["lowest_price"], current_price)
                         
-                        # Track price history for momentum calculation (keep last 10 prices)
+                        # Track price history for momentum (keep last 10 prices)
                         if "price_history" not in item:
                             item["price_history"] = []
                         item["price_history"].append(current_price)
                         if len(item["price_history"]) > 10:
                             item["price_history"].pop(0)
                         
-                        # --- START: LOGIC CHANGE ---
-                        # The harsh RE-VALIDATE block that was here has been REMOVED as requested.
-                        # We now trust the epoch validation and look for an entry.
-
-                        entry_triggered = False
-                        entry_reason = ""
-                        buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
-
-                        # NEW CHECK: Only proceed if buy pressure is > 100 (user's requested floor)
-                        if buys_5m > 100:
-                            # ENTRY SCENARIO 1: Ideal dip (12-20% below signal)
-                            # NO momentum check - we WANT to buy dips!
-                            if signal_price * 0.80 <= current_price <= signal_price * 0.88:
-                                entry_triggered = True
-                                entry_reason = "Dip Entry (12-20% pullback)"
-                            
-                            # ENTRY SCENARIO 2: Continuing momentum
-                            # HAS momentum check - must be rising NOW
-                            elif wait_time >= 15 and current_price >= signal_price * 0.95:
-                                # We already know buys_5m > 100.
-                                # We just check for increasing liquidity.
-                                if current_liquidity >= item["signal_liquidity"] * 1.15:
-                                    entry_triggered = True
-                                    entry_reason = "Strong Momentum (sustained buying)"
-                            
-                            # ENTRY SCENARIO 3: Recovery from dip
-                            # NO momentum check - recovering from weakness
-                            elif item["lowest_price"] < signal_price * 0.85 and current_price >= signal_price * 0.92:
-                                # Note: max_wait_minutes is 10, so wait_time <= 30 is fine.
-                                if wait_time <= 30: 
-                                    entry_triggered = True
-                                    entry_reason = "Recovery Entry (bounced from dip)"
-                        
-                        # else:
-                        #   buys_5m <= 100, so we don't trigger an entry.
-                        #   We just let the loop continue and wait.
-                        
-                        # Timeout check (max_wait_minutes is now 10)
-                        if wait_time >= item["max_wait_minutes"]:
-                            logger.info(f"⏰ [{chat_id}] Timeout for {item['symbol']} (10 min), demoting to pending")
+                        # Check timeout FIRST (30 min max - gives room for dips)
+                        if wait_time >= 30:
+                            logger.info(f"⏰ [{chat_id}] Entry window expired for {item['symbol']} after 30 mins - no qualifying dip found")
                             del portfolio["watchlist"][mint]
-                            
-                            # Demote back to pending_signals as requested
-                            current_time = datetime.utcnow().isoformat() + "Z"
-                            portfolio["pending_signals"][mint] = {
-                                "signal_price": signal_price,
-                                "signal_time": signal_time.isoformat() + "Z",
-                                "symbol": item["symbol"],
-                                "name": item["name"],
-                                "signal_liquidity": item["signal_liquidity"],
-                                "last_check_time": current_time,
-                                "max_evaluation_minutes": 30,
-                                "epochs": [],
-                                "current_epoch_start": current_time,
-                                "current_epoch_checks": 0,
-                                "current_epoch_passes": 0,
-                                "current_epoch_number": 1
-                            }
                             portfolio_manager.save()
                             continue
                         
-                        # --- END: LOGIC CHANGE ---
+                        # === PATIENT DIP-FOCUSED ENTRY DETECTION ===
+                        # Check EVERY LOOP ITERATION (every ~1 second) for entry conditions
+                        # Philosophy: Wait for dips, only chase real breakouts
                         
+                        buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
+                        buys_1h = data.get("txns", {}).get("h1", {}).get("buys", 0)
+                        sells_1h = data.get("txns", {}).get("h1", {}).get("sells", 0)
+                        ratio_1h = buys_1h / sells_1h if sells_1h > 0 else buys_1h
+                        
+                        entry_triggered = False
+                        entry_reason = ""
+                        
+                        # CRITICAL CHECK: Must have buy pressure >= 100
+                        if buys_5m >= 100:
+                            
+                            # ENTRY SCENARIO 1: Deep Dip (25-35% below signal)
+                            # Extreme fear - best risk/reward if buying pressure returns
+                            if signal_price * 0.65 <= current_price <= signal_price * 0.75:
+                                if ratio_1h >= 1.15:  # Ensure buying is returning
+                                    entry_triggered = True
+                                    entry_reason = f"Deep Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
+                            
+                            # ENTRY SCENARIO 2: Strong Dip (15-25% below signal)
+                            # Standard dip buy - solid entry point
+                            elif signal_price * 0.75 <= current_price <= signal_price * 0.85:
+                                entry_triggered = True
+                                entry_reason = f"Strong Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% pullback, {buys_5m} buys/5m)"
+                            
+                            # ENTRY SCENARIO 3: Moderate Dip (8-15% below signal)
+                            # Light pullback with good buying pressure
+                            elif signal_price * 0.85 <= current_price <= signal_price * 0.92:
+                                if buys_5m >= 120:  # Need slightly stronger confirmation
+                                    entry_triggered = True
+                                    entry_reason = f"Moderate Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
+                            
+                            # ENTRY SCENARIO 4: Strong Momentum ONLY (>20% above signal)
+                            # Only chase if it's REALLY flying with clear acceleration
+                            elif current_price > signal_price * 1.20:
+                                if buys_5m >= 180 and current_liquidity >= item["signal_liquidity"] * 1.30:
+                                    entry_triggered = True
+                                    entry_reason = f"Strong Breakout (+{((current_price/signal_price - 1) * 100):.1f}%, {buys_5m} buys/5m)"
+                            
+                            # ENTRY SCENARIO 5: Recovery Play (bounced from deep dip)
+                            # Token dipped >25% but is now recovering with strong volume
+                            elif item["lowest_price"] < signal_price * 0.75:
+                                if current_price >= signal_price * 0.88 and buys_5m >= 140:
+                                    entry_triggered = True
+                                    entry_reason = f"Recovery Entry (bounced from {((1 - item['lowest_price']/signal_price) * 100):.0f}% dip, {buys_5m} buys/5m)"
+                        
+                        else:
+                            # buys_5m < 100 - not enough buying pressure yet
+                            # Log occasionally to show we're watching (every 60 seconds)
+                            if int(wait_time * 60) % 60 == 0:
+                                logger.debug(f"⏳ [{chat_id}] Waiting for {item['symbol']}: "
+                                            f"{buys_5m}/100 buys, ${current_price:.6f} "
+                                            f"({((current_price/signal_price - 1) * 100):+.1f}% vs signal), "
+                                            f"{wait_time:.1f}/30 min")
+                        
+                        # EXECUTE ENTRY if triggered
                         if entry_triggered:
+                            logger.info(f"🎯 [{chat_id}] ENTRY TRIGGER: {item['symbol']} | {entry_reason}")
                             await portfolio_manager.execute_buy(
                                 app, chat_id, mint, current_price, current_liquidity, entry_reason
                             )
+                            # Note: execute_buy removes from watchlist automatically
                     
                     # --- POSITION MANAGEMENT ---
                     for mint, pos in list(portfolio.get("positions", {}).items()):
@@ -1141,8 +1146,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                 logger.exception(f"❌ TRADE LOOP: Error in monitoring: {e}")
             
             await asyncio.sleep(1)
-
-
+            
 async def signal_detection_loop(app: Application, user_manager: UserManager, 
                                portfolio_manager: PortfolioManager):
     """Enhanced signal detection - adds to pending_signals for evaluation."""
