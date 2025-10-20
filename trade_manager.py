@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-trade_manager.py - Enhanced paper trading with improved signal tracking and profitability
+trade_manager.py - Enhanced paper trading with CORRECTED P/L calculations
 """
 
 import logging
@@ -24,7 +24,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class PortfolioManager:
-    """Manages virtual portfolios with enhanced position tracking."""
+    """Manages virtual portfolios with CORRECTED position tracking."""
 
     def __init__(self, portfolio_file: Path):
         self.file = portfolio_file
@@ -76,7 +76,7 @@ class PortfolioManager:
                 portfolio["last_pnl_update"] = None
                 migrated = True
             
-            # Migrate position objects
+            # Migrate position objects - ADD avg_buy_price tracking
             for mint, pos in portfolio.get("positions", {}).items():
                 if "name" not in pos:
                     pos["name"] = pos.get("symbol", "Unknown")
@@ -105,6 +105,16 @@ class PortfolioManager:
                 if "last_pnl_milestone" not in pos:
                     pos["last_pnl_milestone"] = 0
                     migrated = True
+                
+                # NEW: Track average buy price for P/L calculation
+                if "avg_buy_price" not in pos:
+                    pos["avg_buy_price"] = pos.get("entry_price", 0)
+                    migrated = True
+                
+                # NEW: Track original token amount (before any sells)
+                if "original_token_amount" not in pos:
+                    pos["original_token_amount"] = pos.get("token_amount", 0)
+                    migrated = True
             
             # Migrate watchlist objects
             for mint, item in portfolio.get("watchlist", {}).items():
@@ -125,7 +135,6 @@ class PortfolioManager:
                     migrated = True
                 
                 if "max_wait_minutes" not in item:
-                    # UPDATED to 10 minutes as per new logic
                     item["max_wait_minutes"] = 10
                     migrated = True
                 
@@ -137,7 +146,6 @@ class PortfolioManager:
                     item["validation_fails"] = 0
                     migrated = True
                 
-                # Track price history for better momentum calculation
                 if "price_history" not in item:
                     item["price_history"] = []
                     migrated = True
@@ -173,7 +181,7 @@ class PortfolioManager:
                 "capital_usd": 1000.0,
                 "positions": {},
                 "watchlist": {},
-                "pending_signals": {},  # Tokens being evaluated
+                "pending_signals": {},
                 "trade_history": [],
                 "reentry_candidates": {},
                 "blacklist": {},
@@ -192,7 +200,16 @@ class PortfolioManager:
         return self.portfolios[chat_id]
     
     def calculate_unrealized_pnl(self, chat_id: str, live_prices: Dict[str, float]) -> Dict[str, Any]:
-        """Calculate total unrealized P/L for all open positions."""
+        """
+        Calculate total unrealized P/L for all open positions.
+        
+        CORRECTED FORMULA:
+        Unrealized P/L = token_balance * avg_buy_price - token_balance * current_price
+        Or simplified: token_balance * (avg_buy_price - current_price)
+        
+        Note: The formula gives NEGATIVE value for profit (price went up from buy price)
+        So we negate it to show profit as positive.
+        """
         portfolio = self.get_portfolio(chat_id)
         positions = portfolio.get("positions", {})
         
@@ -204,7 +221,7 @@ class PortfolioManager:
                 "positions_detail": []
             }
         
-        total_current_value = 0.0
+        total_unrealized_pnl = 0.0
         total_cost_basis = 0.0
         positions_detail = []
         
@@ -212,23 +229,31 @@ class PortfolioManager:
             if pos.get("status") != "active":
                 continue
             
+            token_balance = pos["token_amount"]
+            avg_buy_price = pos.get("avg_buy_price", pos["entry_price"])
             current_price = live_prices.get(mint, pos.get("entry_price", 0))
-            current_value = pos["token_amount"] * current_price
-            cost_basis = pos["investment_usd"] * (pos["remaining_percentage"] / 100.0)
             
-            unrealized_pnl = current_value - cost_basis
-            unrealized_pct = (unrealized_pnl / cost_basis) * 100 if cost_basis > 0 else 0
+            # CORRECTED: Unrealized P/L = token_balance * (current_price - avg_buy_price)
+            # This makes profit positive when current > buy
+            unrealized_pnl = token_balance * (current_price - avg_buy_price)
             
-            total_current_value += current_value
+            # Cost basis = what we paid for remaining tokens
+            cost_basis = token_balance * avg_buy_price
+            
+            # Percentage gain/loss
+            unrealized_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100 if avg_buy_price > 0 else 0
+            
+            total_unrealized_pnl += unrealized_pnl
             total_cost_basis += cost_basis
             
             positions_detail.append({
                 "symbol": pos["symbol"],
                 "mint": mint,
                 "current_price": current_price,
+                "avg_buy_price": avg_buy_price,
                 "entry_price": pos["entry_price"],
                 "peak_price": pos.get("peak_price", current_price),
-                "current_value": current_value,
+                "token_balance": token_balance,
                 "cost_basis": cost_basis,
                 "unrealized_pnl_usd": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pct,
@@ -236,13 +261,11 @@ class PortfolioManager:
                 "remaining_pct": pos.get("remaining_percentage", 100)
             })
         
-        total_unrealized = total_current_value - total_cost_basis
-        total_unrealized_pct = (total_unrealized / total_cost_basis) * 100 if total_cost_basis > 0 else 0
+        total_unrealized_pct = (total_unrealized_pnl / total_cost_basis) * 100 if total_cost_basis > 0 else 0
         
         return {
-            "total_unrealized_usd": total_unrealized,
+            "total_unrealized_usd": total_unrealized_pnl,
             "total_unrealized_pct": total_unrealized_pct,
-            "total_current_value": total_current_value,
             "total_cost_basis": total_cost_basis,
             "position_count": len(positions_detail),
             "positions_detail": sorted(positions_detail, key=lambda x: x["unrealized_pnl_pct"], reverse=True)
@@ -260,9 +283,11 @@ class PortfolioManager:
         total_pct = pnl_data["total_unrealized_pct"]
         pnl_symbol = "🟢" if total_pnl >= 0 else "🔴"
         
+        total_value = pnl_data["total_cost_basis"] + total_pnl
+        
         msg = f"{pnl_symbol} <b>UNREALIZED P/L UPDATE</b>\n\n"
         msg += f"<b>Open Positions:</b> {pnl_data['position_count']}\n"
-        msg += f"<b>Total Value:</b> ${pnl_data['total_current_value']:,.2f}\n"
+        msg += f"<b>Total Value:</b> ${total_value:,.2f}\n"
         msg += f"<b>Cost Basis:</b> ${pnl_data['total_cost_basis']:,.2f}\n"
         msg += f"<b>Unrealized P/L:</b> ${total_pnl:,.2f} ({total_pct:+.1f}%)\n\n"
         
@@ -275,7 +300,7 @@ class PortfolioManager:
             remaining_note = f" ({pos['remaining_pct']:.0f}%)" if pos["remaining_pct"] < 100 else ""
             
             msg += (f"\n{pos_symbol} <b>{pos['symbol']}</b>{remaining_note}\n"
-                   f"   Entry: ${pos['entry_price']:.6f} → Now: ${pos['current_price']:.6f}\n"
+                   f"   Avg Buy: ${pos['avg_buy_price']:.6f} → Now: ${pos['current_price']:.6f}\n"
                    f"   P/L: ${pos['unrealized_pnl_usd']:,.2f} ({pos['unrealized_pnl_pct']:+.1f}%){locked_note}\n")
         
         if len(pnl_data["positions_detail"]) > 5:
@@ -303,11 +328,9 @@ class PortfolioManager:
         portfolio = self.get_portfolio(chat_id)
         mint = token_info['mint']
 
-        # Skip if already in positions, watchlist, or blacklisted
         if mint in portfolio["positions"] or mint in portfolio["watchlist"] or mint in portfolio.get("blacklist", {}):
             return
 
-        # Load signal price from overlap_results.pkl
         overlap_data = joblib.load(OVERLAP_FILE)
         history = overlap_data.get(mint, [])
         if not history or not isinstance(history[-1], dict):
@@ -330,15 +353,14 @@ class PortfolioManager:
             "signal_liquidity": token_info.get('liquidity', 0),
             "last_check_time": current_time,
             "max_evaluation_minutes": 30,
-            # Epoch tracking (6 epochs of 5 minutes each)
-            "epochs": [],  # List of completed epochs with their stats
+            "epochs": [],
             "current_epoch_start": current_time,
             "current_epoch_checks": 0,
             "current_epoch_passes": 0,
             "current_epoch_number": 1
         }
         self.save()
-        logger.info(f"🔍 [{chat_id}] Added {token_info['symbol']} to pending signals for epoch-based evaluation with signal price ${signal_price:.6f}")
+        logger.info(f"🔍 [{chat_id}] Added {token_info['symbol']} to pending signals with signal price ${signal_price:.6f}")
 
     async def add_to_watchlist(self, chat_id: str, token_info: Dict[str, Any]):
         """Add a token to watchlist after passing epoch validation."""
@@ -360,39 +382,22 @@ class PortfolioManager:
             "entry_attempts": 0,
             "promoted_from_epoch": token_info.get('promoted_from_epoch', 0),
             "epoch_pass_rate": token_info.get('epoch_pass_rate', 0),
-            # --- LOGIC CHANGE ---
-            # Set max wait to 10 minutes as requested
             "max_wait_minutes": 10,
-            "price_history": []  # Track recent prices for momentum analysis
+            "price_history": []
         }
         self.save()
-        logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f} "
-                   f"(from Epoch {token_info.get('promoted_from_epoch', '?')}) - 10 min window")
+        logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f}")
 
     def calculate_short_term_momentum(self, price_history: List[float], lookback: int = 3) -> float:
-        """
-        Calculate SHORT-TERM momentum from recent price movements.
-        
-        This is different from long-term momentum. We only look at the last few
-        price points to see if the token is CURRENTLY gaining strength.
-        
-        Args:
-            price_history: List of recent prices (oldest to newest)
-            lookback: Number of recent prices to compare (default 3)
-        
-        Returns:
-            Momentum percentage (positive = rising NOW, negative = falling NOW)
-        """
+        """Calculate SHORT-TERM momentum from recent price movements."""
         if len(price_history) < 2:
             return 0.0
         
-        # Use only the most recent prices
         recent_prices = price_history[-min(lookback, len(price_history)):]
         
         if len(recent_prices) < 2:
             return 0.0
         
-        # Compare most recent price to average of previous prices
         current = recent_prices[-1]
         previous_avg = sum(recent_prices[:-1]) / len(recent_prices[:-1])
         
@@ -400,23 +405,14 @@ class PortfolioManager:
 
     async def execute_buy(self, app: Application, chat_id: str, mint: str, 
                          current_price: float, current_liquidity: float, entry_reason: str = "Entry"):
-        """
-        Execute buy with context-aware validation.
-        
-        CRITICAL CHANGE: Momentum check is now scenario-specific:
-        - Dip Entry: NO momentum check (we WANT to buy dips)
-        - Recovery Entry: NO momentum check (recovering from dips)
-        - Momentum Entry: YES momentum check (must be rising NOW)
-        """
+        """Execute buy with context-aware validation."""
         portfolio = self.get_portfolio(chat_id)
         watch_item = portfolio["watchlist"].get(mint)
         if not watch_item:
             return
 
-        # Check capital FIRST (fail fast if insufficient funds)
         capital = portfolio["capital_usd"]
         
-        # Dynamic position sizing
         if capital >= 5000:
             position_pct = 0.08
         elif capital >= 2000:
@@ -432,20 +428,15 @@ class PortfolioManager:
             self.save()
             return
 
-        # CONTEXT-AWARE MOMENTUM CHECK
-        # Only check momentum for "Strong Momentum" entry scenario
         if "Strong Momentum" in entry_reason or "sustained buying" in entry_reason:
-            # For momentum entries, we want to see SHORT-TERM upward movement
             price_history = watch_item.get("price_history", [])
             
             if len(price_history) >= 2:
                 short_term_momentum = self.calculate_short_term_momentum(price_history, lookback=3)
                 
-                # Require positive momentum for momentum entries
                 if short_term_momentum < 0:
                     logger.info(f"[{chat_id}] Momentum entry blocked for {watch_item['symbol']} "
-                               f"(short-term momentum: {short_term_momentum:.2f}%). "
-                               f"Keeping in watchlist for reevaluation.")
+                               f"(short-term momentum: {short_term_momentum:.2f}%)")
                     
                     watch_item["last_check_time"] = datetime.utcnow().isoformat() + "Z"
                     watch_item["momentum_fail_count"] = watch_item.get("momentum_fail_count", 0) + 1
@@ -455,10 +446,6 @@ class PortfolioManager:
                     logger.info(f"[{chat_id}] Momentum entry approved for {watch_item['symbol']} "
                                f"(short-term momentum: +{short_term_momentum:.2f}%)")
         
-        # NO momentum check for Dip Entry or Recovery Entry
-        # These scenarios are DESIGNED to buy at lower prices
-        
-        # Execute buy
         portfolio["capital_usd"] -= investment_usd
         token_amount = investment_usd / current_price
 
@@ -466,6 +453,8 @@ class PortfolioManager:
             "symbol": watch_item["symbol"],
             "name": watch_item["name"],
             "entry_price": current_price,
+            "avg_buy_price": current_price,  # NEW: Track average buy price
+            "original_token_amount": token_amount,  # NEW: Track original amount
             "entry_time": datetime.utcnow().isoformat() + "Z",
             "entry_liquidity": current_liquidity,
             "signal_price": watch_item["signal_price"],
@@ -482,7 +471,6 @@ class PortfolioManager:
         del portfolio["watchlist"][mint]
         self.save()
 
-        # Calculate momentum for display purposes
         price_vs_signal = ((current_price - watch_item["signal_price"]) / watch_item["signal_price"]) * 100
 
         msg = (f"✅ <b>PAPER TRADE: BUY</b>\n\n"
@@ -491,26 +479,36 @@ class PortfolioManager:
                f"<b>Price:</b> ${current_price:.6f}\n"
                f"<b>vs Signal:</b> {price_vs_signal:+.1f}%\n"
                f"<b>Investment:</b> ${investment_usd:.2f}\n"
+               f"<b>Token Amount:</b> {token_amount:,.2f}\n"
                f"<b>Liquidity:</b> ${current_liquidity:,.0f}\n")
 
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"✅ [{chat_id}] BUY EXECUTED: {watch_item['symbol']} at ${current_price:.6f} | {entry_reason}")
+            logger.info(f"✅ [{chat_id}] BUY EXECUTED: {watch_item['symbol']} at ${current_price:.6f}")
         except Exception as e:
             logger.error(f"Failed to send buy confirmation for {chat_id}: {e}")
 
     async def execute_partial_sell(self, app: Application, chat_id: str, mint: str, 
                                    current_price: float, sell_percentage: float, reason: str):
-        """Execute partial sell to lock in profits."""
+        """
+        Execute partial sell to lock in profits.
+        
+        CORRECTED FORMULA:
+        Realized P/L = (sell_price - avg_buy_price) * amount_token_sold
+        """
         portfolio = self.get_portfolio(chat_id)
         position = portfolio["positions"].get(mint)
         if not position or position.get("status") != "active":
             return
 
         tokens_to_sell = position["token_amount"] * (sell_percentage / 100.0)
+        avg_buy_price = position.get("avg_buy_price", position["entry_price"])
+        
+        # CORRECTED: Realized P/L = (sell_price - avg_buy_price) * tokens_sold
+        partial_pnl = (current_price - avg_buy_price) * tokens_to_sell
+        
         sell_value_usd = tokens_to_sell * current_price
-        cost_basis = position["investment_usd"] * (sell_percentage / 100.0)
-        partial_pnl = sell_value_usd - cost_basis
+        cost_basis_sold = tokens_to_sell * avg_buy_price
         
         portfolio["capital_usd"] += sell_value_usd
         position["token_amount"] -= tokens_to_sell
@@ -521,6 +519,7 @@ class PortfolioManager:
             "time": datetime.utcnow().isoformat() + "Z",
             "price": current_price,
             "percentage": sell_percentage,
+            "tokens_sold": tokens_to_sell,
             "value_usd": sell_value_usd,
             "pnl_usd": partial_pnl,
             "reason": reason
@@ -529,19 +528,21 @@ class PortfolioManager:
         self.save()
 
         pnl_symbol = "🟢" if partial_pnl >= 0 else "🔴"
-        pnl_pct = (partial_pnl / cost_basis) * 100
+        pnl_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100
         
         msg = (f"{pnl_symbol} <b>PARTIAL SELL: {sell_percentage:.0f}%</b>\n\n"
                f"<b>Token:</b> {position['symbol']}\n"
                f"<b>Reason:</b> {reason}\n"
+               f"<b>Tokens Sold:</b> {tokens_to_sell:,.2f}\n"
+               f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                f"<b>Sell Price:</b> ${current_price:,.6f}\n"
-               f"<b>P/L:</b> ${partial_pnl:,.2f} ({pnl_pct:+.1f}%)\n"
+               f"<b>Realized P/L:</b> ${partial_pnl:,.2f} ({pnl_pct:+.1f}%)\n"
                f"<b>Remaining:</b> {position['remaining_percentage']:.0f}%\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>")
         
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"📊 [{chat_id}] PARTIAL SELL {position['symbol']}: {sell_percentage}% at ${current_price:.6f}")
+            logger.info(f"📊 [{chat_id}] PARTIAL SELL {position['symbol']}: {sell_percentage}% at ${current_price:.6f}, P/L: ${partial_pnl:,.2f}")
         except Exception as e:
             logger.error(f"Failed to send partial sell notification: {e}")
 
@@ -552,18 +553,31 @@ class PortfolioManager:
     
     async def execute_full_sell(self, app: Application, chat_id: str, mint: str, 
                                current_price: float, reason: str):
-        """Execute complete position exit."""
+        """
+        Execute complete position exit.
+        
+        CORRECTED FORMULA:
+        Final Realized P/L = (sell_price - avg_buy_price) * remaining_tokens
+        Total P/L = locked_profit + final_realized_pnl
+        """
         portfolio = self.get_portfolio(chat_id)
         position = portfolio["positions"].get(mint)
         if not position or position.get("status") != "active":
             return
 
-        remaining_value = position["token_amount"] * current_price
-        remaining_cost = position["investment_usd"] * (position["remaining_percentage"] / 100.0)
-        final_pnl = remaining_value - remaining_cost
+        remaining_tokens = position["token_amount"]
+        avg_buy_price = position.get("avg_buy_price", position["entry_price"])
+        
+        # CORRECTED: Final realized P/L = (sell_price - avg_buy_price) * remaining_tokens
+        final_pnl = (current_price - avg_buy_price) * remaining_tokens
+        
+        # Total P/L includes previously locked profits from partial sells
         total_pnl = position["locked_profit_usd"] + final_pnl
+        
+        # Calculate percentage based on original investment
         total_pnl_pct = (total_pnl / position["investment_usd"]) * 100
 
+        remaining_value = remaining_tokens * current_price
         portfolio["capital_usd"] += remaining_value
         position["status"] = "closed"
 
@@ -589,7 +603,7 @@ class PortfolioManager:
             "total_pnl_usd": total_pnl,
             "total_pnl_percent": total_pnl_pct,
             "exit_reason": reason,
-            "peak_profit_pct": ((position["peak_price"] - position["entry_price"]) / position["entry_price"]) * 100
+            "peak_profit_pct": ((position["peak_price"] - avg_buy_price) / avg_buy_price) * 100
         }
         portfolio["trade_history"].append(trade_log)
         
@@ -634,17 +648,19 @@ class PortfolioManager:
                f"<b>Token:</b> {position['symbol']}\n"
                f"<b>Reason:</b> {reason}\n"
                f"<b>Hold Time:</b> {hold_duration.seconds // 60} mins\n"
-               f"<b>Entry:</b> ${position['entry_price']:.6f}\n"
+               f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                f"<b>Exit:</b> ${current_price:,.6f}\n"
                f"<b>Peak:</b> ${position['peak_price']:.6f}\n\n"
-               f"<b>Total P/L:</b> ${total_pnl:,.2f} ({total_pnl_pct:+.1f}%)\n\n"
+               f"<b>Total P/L:</b> ${total_pnl:,.2f} ({total_pnl_pct:+.1f}%)\n"
+               f"<b>Locked:</b> ${position['locked_profit_usd']:,.2f}\n"
+               f"<b>Final:</b> ${final_pnl:,.2f}\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>\n"
                f"<i>Win Rate: {win_rate:.1f}% ({stats['wins']}/{stats['total_trades']})</i>"
                f"{status_note}")
         
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"📉 [{chat_id}] FULL SELL {position['symbol']}. P/L: ${total_pnl:,.2f}")
+            logger.info(f"📉 [{chat_id}] FULL SELL {position['symbol']}. Total P/L: ${total_pnl:,.2f}")
         except Exception as e:
             logger.error(f"Failed to send full sell notification: {e}")
     
@@ -843,15 +859,12 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         last_check = datetime.fromisoformat(signal["last_check_time"].rstrip("Z"))
                         time_since_check = (datetime.utcnow() - last_check).total_seconds()
                         
-                        # Check every 15 seconds
                         if time_since_check >= 15:
                             signal["last_check_time"] = datetime.utcnow().isoformat() + "Z"
                             
-                            # Check if current epoch has completed (5 minutes)
                             epoch_start = datetime.fromisoformat(signal["current_epoch_start"].rstrip("Z"))
                             epoch_elapsed = (datetime.utcnow() - epoch_start).total_seconds() / 60
                             
-                            # Perform validation check
                             passed = validate_token_criteria(data, min_liquidity=35000, min_buys_5m=150, min_ratio=1.2)
                             
                             if passed:
@@ -863,12 +876,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                        f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} passed "
                                        f"({epoch_elapsed:.1f}/5.0 min)")
                             
-                            # Check if epoch is complete (5 minutes)
                             if epoch_elapsed >= 5.0:
-                                # Calculate pass rate for this epoch
                                 epoch_pass_rate = signal["current_epoch_passes"] / signal["current_epoch_checks"] if signal["current_epoch_checks"] > 0 else 0
                                 
-                                # Store completed epoch
                                 completed_epoch = {
                                     "epoch_number": signal["current_epoch_number"],
                                     "checks": signal["current_epoch_checks"],
@@ -882,7 +892,6 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                           f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} "
                                           f"({epoch_pass_rate*100:.1f}% pass rate)")
                                 
-                                # Check if this epoch passed the 2/3 threshold
                                 if epoch_pass_rate >= 0.67:
                                     current_price = float(data["priceUsd"])
                                     current_liquidity = data.get("liquidity", {}).get("usd", 0)
@@ -901,11 +910,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     del portfolio["pending_signals"][mint]
                                     portfolio_manager.save()
                                     
-                                    logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']} "
-                                              f"({epoch_pass_rate*100:.0f}% pass rate)")
+                                    logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']}")
                                     continue
                                 
-                                # Start next epoch if we haven't reached 6 epochs yet
                                 if signal["current_epoch_number"] < 6:
                                     signal["current_epoch_number"] += 1
                                     signal["current_epoch_start"] = datetime.utcnow().isoformat() + "Z"
@@ -915,14 +922,12 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     
                                     logger.info(f"🔄 [{chat_id}] {signal['symbol']} starting Epoch {signal['current_epoch_number']}")
                                 else:
-                                    # All 6 epochs completed, none passed - remove from pending
                                     del portfolio["pending_signals"][mint]
                                     portfolio_manager.save()
                                     
                                     epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
-                                    logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 6 epochs - no epoch passed 67% ({epoch_summary})")
+                                    logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 6 epochs ({epoch_summary})")
                         
-                        # Total timeout after 30 minutes regardless of epoch progress
                         if total_elapsed_minutes >= signal["max_evaluation_minutes"]:
                             epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
                             del portfolio["pending_signals"][mint]
@@ -935,7 +940,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         if data:
                             await portfolio_manager.check_reentry_opportunity(app, chat_id, mint, data)
                     
-                    # --- WATCHLIST PROCESSING (PATIENT DIP-FOCUSED ENTRY) ---
+                    # --- WATCHLIST PROCESSING ---
                     for mint, item in list(portfolio.get("watchlist", {}).items()):
                         if mint in portfolio.get("blacklist", {}):
                             del portfolio["watchlist"][mint]
@@ -952,27 +957,20 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         signal_time = datetime.fromisoformat(item["signal_time"].rstrip("Z"))
                         wait_time = (datetime.utcnow() - signal_time).total_seconds() / 60
                         
-                        # Update price tracking
                         item["highest_price"] = max(item["highest_price"], current_price)
                         item["lowest_price"] = min(item["lowest_price"], current_price)
                         
-                        # Track price history for momentum (keep last 10 prices)
                         if "price_history" not in item:
                             item["price_history"] = []
                         item["price_history"].append(current_price)
                         if len(item["price_history"]) > 10:
                             item["price_history"].pop(0)
                         
-                        # Check timeout FIRST (30 min max - gives room for dips)
                         if wait_time >= 30:
-                            logger.info(f"⏰ [{chat_id}] Entry window expired for {item['symbol']} after 30 mins - no qualifying dip found")
+                            logger.info(f"⏰ [{chat_id}] Entry window expired for {item['symbol']} after 30 mins")
                             del portfolio["watchlist"][mint]
                             portfolio_manager.save()
                             continue
-                        
-                        # === PATIENT DIP-FOCUSED ENTRY DETECTION ===
-                        # Check EVERY LOOP ITERATION (every ~1 second) for entry conditions
-                        # Philosophy: Wait for dips, only chase real breakouts
                         
                         buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
                         buys_1h = data.get("txns", {}).get("h1", {}).get("buys", 0)
@@ -982,59 +980,44 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         entry_triggered = False
                         entry_reason = ""
                         
-                        # CRITICAL CHECK: Must have buy pressure >= 100
                         if buys_5m >= 100:
                             
-                            # ENTRY SCENARIO 1: Deep Dip (25-35% below signal)
-                            # Extreme fear - best risk/reward if buying pressure returns
                             if signal_price * 0.65 <= current_price <= signal_price * 0.75:
-                                if ratio_1h >= 1.15:  # Ensure buying is returning
+                                if ratio_1h >= 1.15:
                                     entry_triggered = True
                                     entry_reason = f"Deep Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
                             
-                            # ENTRY SCENARIO 2: Strong Dip (15-25% below signal)
-                            # Standard dip buy - solid entry point
                             elif signal_price * 0.75 <= current_price <= signal_price * 0.85:
                                 entry_triggered = True
                                 entry_reason = f"Strong Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% pullback, {buys_5m} buys/5m)"
                             
-                            # ENTRY SCENARIO 3: Moderate Dip (8-15% below signal)
-                            # Light pullback with good buying pressure
                             elif signal_price * 0.85 <= current_price <= signal_price * 0.92:
-                                if buys_5m >= 120:  # Need slightly stronger confirmation
+                                if buys_5m >= 120:
                                     entry_triggered = True
                                     entry_reason = f"Moderate Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
                             
-                            # ENTRY SCENARIO 4: Strong Momentum ONLY (>20% above signal)
-                            # Only chase if it's REALLY flying with clear acceleration
                             elif current_price > signal_price * 1.20:
                                 if buys_5m >= 180 and current_liquidity >= item["signal_liquidity"] * 1.30:
                                     entry_triggered = True
                                     entry_reason = f"Strong Breakout (+{((current_price/signal_price - 1) * 100):.1f}%, {buys_5m} buys/5m)"
                             
-                            # ENTRY SCENARIO 5: Recovery Play (bounced from deep dip)
-                            # Token dipped >25% but is now recovering with strong volume
                             elif item["lowest_price"] < signal_price * 0.75:
                                 if current_price >= signal_price * 0.88 and buys_5m >= 140:
                                     entry_triggered = True
                                     entry_reason = f"Recovery Entry (bounced from {((1 - item['lowest_price']/signal_price) * 100):.0f}% dip, {buys_5m} buys/5m)"
                         
                         else:
-                            # buys_5m < 100 - not enough buying pressure yet
-                            # Log occasionally to show we're watching (every 60 seconds)
                             if int(wait_time * 60) % 60 == 0:
                                 logger.debug(f"⏳ [{chat_id}] Waiting for {item['symbol']}: "
                                             f"{buys_5m}/100 buys, ${current_price:.6f} "
                                             f"({((current_price/signal_price - 1) * 100):+.1f}% vs signal), "
                                             f"{wait_time:.1f}/30 min")
                         
-                        # EXECUTE ENTRY if triggered
                         if entry_triggered:
                             logger.info(f"🎯 [{chat_id}] ENTRY TRIGGER: {item['symbol']} | {entry_reason}")
                             await portfolio_manager.execute_buy(
                                 app, chat_id, mint, current_price, current_liquidity, entry_reason
                             )
-                            # Note: execute_buy removes from watchlist automatically
                     
                     # --- POSITION MANAGEMENT ---
                     for mint, pos in list(portfolio.get("positions", {}).items()):
@@ -1044,8 +1027,10 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
 
                         current_price = float(data["priceUsd"])
                         current_liquidity = data.get("liquidity", {}).get("usd", 0)
-                        entry_price = pos["entry_price"]
-                        profit_pct = ((current_price - entry_price) / entry_price) * 100
+                        avg_buy_price = pos.get("avg_buy_price", pos["entry_price"])
+                        
+                        # CORRECTED: Profit % based on avg_buy_price
+                        profit_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100
                         
                         if current_price > pos["peak_price"]:
                             pos["peak_price"] = current_price
@@ -1057,16 +1042,16 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 if profit_pct >= milestone and last_milestone < milestone:
                                     pos["last_pnl_milestone"] = milestone
                                     
-                                    unrealized_value = pos["token_amount"] * current_price
-                                    cost_basis = pos["investment_usd"] * (pos["remaining_percentage"] / 100.0)
-                                    unrealized_pnl = unrealized_value - cost_basis + pos.get("locked_profit_usd", 0)
+                                    # Calculate unrealized P/L using corrected formula
+                                    unrealized_pnl = pos["token_amount"] * (current_price - avg_buy_price)
+                                    total_pnl = unrealized_pnl + pos.get("locked_profit_usd", 0)
                                     
                                     milestone_msg = (f"🚀 <b>MILESTONE: +{milestone}%</b>\n\n"
                                                    f"<b>Token:</b> {pos['symbol']}\n"
-                                                   f"<b>Entry:</b> ${entry_price:.6f}\n"
+                                                   f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                                                    f"<b>Current:</b> ${current_price:.6f}\n"
                                                    f"<b>Peak Gain:</b> +{profit_pct:.1f}%\n"
-                                                   f"<b>Unrealized P/L:</b> ${unrealized_pnl:,.2f}\n\n"
+                                                   f"<b>Total P/L:</b> ${total_pnl:,.2f}\n\n"
                                                    f"<i>Keep riding or take profits! 🎯</i>")
                                     try:
                                         await app.bot.send_message(chat_id=chat_id, text=milestone_msg, parse_mode="HTML")
@@ -1094,10 +1079,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             )
                             continue
                         
-                        # PARTIAL PROFIT TAKING (LOWERED THRESHOLDS)
+                        # PARTIAL PROFIT TAKING
                         remaining = pos["remaining_percentage"]
                         
-                        # First partial: 40% at +30% (lowered from +40%)
                         if profit_pct >= 30 and remaining == 100:
                             await portfolio_manager.execute_partial_sell(
                                 app, chat_id, mint, current_price, 40.0, 
@@ -1105,7 +1089,6 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             )
                             continue
                         
-                        # Second partial: 30% at +50% (lowered from +80%)
                         if profit_pct >= 50 and remaining == 60:
                             await portfolio_manager.execute_partial_sell(
                                 app, chat_id, mint, current_price, 30.0, 
@@ -1113,7 +1096,6 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             )
                             continue
                         
-                        # Third partial: 20% at +100% (lowered from +150%)
                         if profit_pct >= 100 and remaining == 30:
                             await portfolio_manager.execute_partial_sell(
                                 app, chat_id, mint, current_price, 20.0, 
@@ -1195,7 +1177,6 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                         market_cap = dex_data.get("marketCap", 0)
                         fdv = dex_data.get("fdv", 0)
                         
-                        # Basic sanity checks
                         if liquidity < 25000 or (market_cap < 30000 and fdv < 50000):
                             continue
                         
