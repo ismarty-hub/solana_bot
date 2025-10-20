@@ -908,9 +908,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             
                             logger.debug(f"📊 [{chat_id}] {signal['symbol']} Epoch {signal['current_epoch_number']}: "
                                        f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} passed "
-                                       f"({epoch_elapsed:.1f}/5.0 min)")
+                                       f"({epoch_elapsed:.1f}/3.0 min)")
                             
-                            if epoch_elapsed >= 5.0:
+                            if epoch_elapsed >= 3.0:
                                 epoch_pass_rate = signal["current_epoch_passes"] / signal["current_epoch_checks"] if signal["current_epoch_checks"] > 0 else 0
                                 
                                 completed_epoch = {
@@ -947,7 +947,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']}")
                                     continue
                                 
-                                if signal["current_epoch_number"] < 6:
+                                if signal["current_epoch_number"] < 10:
                                     signal["current_epoch_number"] += 1
                                     signal["current_epoch_start"] = datetime.utcnow().isoformat() + "Z"
                                     signal["current_epoch_checks"] = 0
