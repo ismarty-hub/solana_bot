@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-trade_manager.py - Enhanced paper trading with CORRECTED P/L calculations
-AND Low-Balance (Sub-$200) Strategy
+trade_manager.py
 """
 
 import logging
@@ -448,7 +447,7 @@ class PortfolioManager:
 
         capital = portfolio["capital_usd"]
         
-        # --- NEW LOW-BALANCE STRATEGY ---
+        # --- LOW-BALANCE STRATEGY ---
         is_low_balance_trade = capital < 200.0
         
         if is_low_balance_trade:
@@ -456,7 +455,7 @@ class PortfolioManager:
             investment_usd = capital * 0.30
             logger.info(f"[{chat_id}] Low-balance strategy active. Investing 30% (${investment_usd:.2f})")
         else:
-            # Original tiered strategy
+            # tiered strategy
             if capital >= 5000:
                 position_pct = 0.08
             elif capital >= 2000:
@@ -1036,6 +1035,21 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 if buys_5m >= 120:
                                     entry_triggered = True
                                     entry_reason = f"Moderate Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
+                            
+                            elif signal_price * 1.05 <= current_price <= signal_price * 1.20:
+                                # Token is up 5% to 20% from its signal price
+                                
+                                # Calculate recent momentum
+                                short_term_momentum = portfolio_manager.calculate_short_term_momentum(item.get("price_history", []), lookback=3)
+                                
+                                if buys_5m >= 150 and ratio_1h >= 1.3 and short_term_momentum > 2.5:
+                                    # We require:
+                                    # 1. Strong 5-min buy pressure (150+ buys)
+                                    # 2. Healthy 1-hour buy/sell ratio (1.3+)
+                                    # 3. Positive short-term momentum (> +2.5%)
+                                    
+                                    entry_triggered = True
+                                    entry_reason = f"Strong Momentum Entry ({short_term_momentum:+.1f}% mom, {buys_5m} buys/5m)"
                             
                             elif current_price > signal_price * 1.20:
                                 if buys_5m >= 180 and current_liquidity >= item["signal_liquidity"] * 1.30:
