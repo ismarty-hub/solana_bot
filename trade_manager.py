@@ -960,7 +960,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     portfolio_manager.save()
                                     
                                     epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
-                                    logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 6 epochs ({epoch_summary})")
+                                    logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 10 epochs ({epoch_summary})")
                         
                         if total_elapsed_minutes >= signal["max_evaluation_minutes"]:
                             epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])

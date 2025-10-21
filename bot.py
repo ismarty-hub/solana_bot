@@ -192,9 +192,7 @@ async def on_startup(app: Application):
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
     # 3. Periodic Supabase sync
     if USE_SUPABASE:
-        # ✅ --- FIX: Start the renamed, frequent task ---
         asyncio.create_task(periodic_supabase_sync())
-        # ✅ --- END FIX ---
     # 4. Paper trading signal detection loop
     asyncio.create_task(signal_detection_loop(app, user_manager, portfolio_manager))
     # 5. Paper trading high-frequency monitoring loop
