@@ -312,8 +312,8 @@ class PortfolioManager:
         msg += f"<b>Available Capital:</b> ${portfolio['capital_usd']:,.2f}\n\n"
         
         msg += f"<b>Cost Basis:</b> ${total_cost_basis:,.2f}\n"
-        msg += f"<b>Realized P/L:</b> ${total_realized_pnl:+, .2f}\n"
-        msg += f"<b>Unrealized P/L:</b> ${total_unrealized_pnl:+, .2f}\n"
+        msg += f"<b>Realized P/L:</b> ${total_realized_pnl:+,.2f}\n"
+        msg += f"<b>Unrealized P/L:</b> ${total_unrealized_pnl:+,.2f}\n"
         
         positions = pnl_data["positions_detail"] # No limit
         
@@ -335,9 +335,9 @@ class PortfolioManager:
                 f"• <b>Tokens Held:</b> {pos['token_balance']:,.0f}\n"
                 f"• <b>Entry:</b> ${pos['avg_buy_price']:.6f} → <b>Now:</b> ${pos['current_price']:.6f}\n"
                 f"• <b>Cost Basis:</b> ${pos['cost_basis']:.2f}\n"
-                f"• <b>Realized P/L:</b> ${pos['locked_profit_usd']:+, .2f} ({pos['realized_pct']:+.1f}%)\n"
-                f"• <b>Unrealized P/L:</b> ${pos['unrealized_pnl_usd']:+, .2f} ({pos['unrealized_pnl_pct']:+.1f}%)\n"
-                f"• <b>Total P/L:</b> ${pos['total_pnl']:+, .2f} ({pos['total_pct']:+.1f}%)\n\n"
+                f"• <b>Realized P/L:</b> ${pos['locked_profit_usd']:+,.2f} ({pos['realized_pct']:+.1f}%)\n"
+                f"• <b>Unrealized P/L:</b> ${pos['unrealized_pnl_usd']:+,.2f} ({pos['unrealized_pnl_pct']:+.1f}%)\n"
+                f"• <b>Total P/L:</b> ${pos['total_pnl']:+,.2f} ({pos['total_pct']:+.1f}%)\n\n"
                 f"<i>{summary_line}</i>\n"
             )
         
@@ -570,7 +570,7 @@ class PortfolioManager:
                f"<b>Tokens Sold:</b> {tokens_to_sell:,.2f}\n"
                f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                f"<b>Sell Price:</b> ${current_price:.6f}\n"
-               f"<b>Realized P/L:</b> ${partial_pnl:+, .2f} ({pnl_pct:+.1f}%)\n"
+               f"<b>Realized P/L:</b> ${partial_pnl:+,.2f} ({pnl_pct:+.1f}%)\n"
                f"<b>Remaining:</b> {position['remaining_percentage']:.0f}%\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>")
         
@@ -683,11 +683,11 @@ class PortfolioManager:
                f"<b>Reason:</b> {reason}\n"
                f"<b>Hold Time:</b> {hold_duration.seconds // 60} mins\n"
                f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
-               f"<b>Exit:</b> ${current_price:,.6f}\n"
+               f"<b>Exit:</b> ${current_price:.6f}\n"
                f"<b>Peak:</b> ${position['peak_price']:.6f}\n\n"
-               f"<b>Total P/L:</b> ${total_pnl:+, .2f} ({total_pnl_pct:+.1f}%)\n"
+               f"<b>Total P/L:</b> ${total_pnl:+,.2f} ({total_pnl_pct:+.1f}%)\n"
                f"<b>Locked:</b> ${position['locked_profit_usd']:,.2f}\n"
-               f"<b>Final:</b> ${final_pnl:+, .2f}\n\n"
+               f"<b>Final:</b> ${final_pnl:+,.2f}\n\n"
                f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>\n"
                f"<i>Win Rate: {win_rate:.1f}% ({stats['wins']}/{stats['total_trades']})</i>"
                f"{status_note}")
@@ -1085,7 +1085,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                                    f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
                                                    f"<b>Current:</b> ${current_price:.6f}\n"
                                                    f"<b>Peak Gain:</b> {profit_pct:+.1f}%\n"
-                                                   f"<b>Total P/L:</b> ${total_pnl:+, .2f}\n\n"
+                                                   f"<b>Total P/L:</b> ${total_pnl:+,.2f}\n\n"
                                                    f"<i>Keep riding or take profits! 🎯</i>")
                                     try:
                                         await app.bot.send_message(chat_id=chat_id, text=milestone_msg, parse_mode="HTML")
