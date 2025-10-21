@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-trade_manager.py
+trade_manager.py - OPTIMIZED FOR REAL-TIME TRADING
+Sleep intervals optimized for minimal latency while respecting API rate limits
 """
 
 import logging
@@ -118,7 +119,7 @@ class PortfolioManager:
                 
                 # NEW: Track low-balance strategy
                 if "is_low_balance_trade" not in pos:
-                    pos["is_low_balance_trade"] = False # Default for old trades
+                    pos["is_low_balance_trade"] = False
                     migrated = True
             
             # Migrate watchlist objects
@@ -302,7 +303,7 @@ class PortfolioManager:
         total_realized_pnl = pnl_data.get("total_realized_usd", 0.0)
         total_cost_basis = pnl_data["total_cost_basis"]
         
-        total_value = total_cost_basis + total_unrealized_pnl # Current value of open positions
+        total_value = total_cost_basis + total_unrealized_pnl
         
         pnl_symbol = "🟢" if (total_unrealized_pnl + total_realized_pnl) >= 0 else "🔴"
         
@@ -315,16 +316,15 @@ class PortfolioManager:
         msg += f"<b>Realized P/L:</b> ${total_realized_pnl:+,.2f}\n"
         msg += f"<b>Unrealized P/L:</b> ${total_unrealized_pnl:+,.2f}\n"
         
-        positions = pnl_data["positions_detail"] # No limit
+        positions = pnl_data["positions_detail"]
         
         for pos in positions:
             pos_symbol = "💎"
             remaining_note = f" ({pos['remaining_pct']:.0f}%)" if pos["remaining_pct"] < 100 else ""
             
-            # Determine summary line
             summary_line = ""
             if pos['locked_profit_usd'] > 0:
-                summary_line = "✅ Partially exited — letting profits run 💰"
+                summary_line = "✅ Partially exited – letting profits run 💰"
             elif pos['total_pnl'] > 0:
                 summary_line = "✅ Still riding strong in profit 🚀"
             else:
@@ -451,11 +451,9 @@ class PortfolioManager:
         is_low_balance_trade = capital < 200.0
         
         if is_low_balance_trade:
-            # Allocate 30% of total capital
             investment_usd = capital * 0.30
             logger.info(f"[{chat_id}] Low-balance strategy active. Investing 30% (${investment_usd:.2f})")
         else:
-            # tiered strategy
             if capital >= 5000:
                 position_pct = 0.08
             elif capital >= 2000:
@@ -464,7 +462,6 @@ class PortfolioManager:
                 position_pct = 0.12
             
             investment_usd = min(capital * position_pct, 150)
-        # --- END OF STRATEGY BLOCK ---
         
         if capital < investment_usd:
             logger.warning(f"[{chat_id}] Insufficient capital to buy {watch_item['symbol']} (Need ${investment_usd:.2f}, Have ${capital:.2f})")
@@ -511,12 +508,11 @@ class PortfolioManager:
             "remaining_percentage": 100.0,
             "locked_profit_usd": 0.0,
             "last_pnl_milestone": 0,
-            "is_low_balance_trade": is_low_balance_trade # Flag for exit logic
+            "is_low_balance_trade": is_low_balance_trade
         }
         del portfolio["watchlist"][mint]
         self.save()
 
-        # --- NEW NOTIFICATION FORMAT ---
         msg = (f"🟢 <b>TRADE UPDATE</b>\n\n"
                f"<b>Token:</b> {watch_item['name']}\n"
                f"<b>Action:</b> BUY ({entry_reason})\n"
@@ -548,7 +544,6 @@ class PortfolioManager:
         tokens_to_sell = position["token_amount"] * (sell_percentage / 100.0)
         avg_buy_price = position.get("avg_buy_price", position["entry_price"])
         
-        # CORRECTED: Realized P/L = (sell_price - avg_buy_price) * tokens_sold
         partial_pnl = (current_price - avg_buy_price) * tokens_to_sell
         
         sell_value_usd = tokens_to_sell * current_price
@@ -570,7 +565,6 @@ class PortfolioManager:
         
         self.save()
 
-        # --- NEW NOTIFICATION FORMAT ---
         pnl_symbol = "🟢" if partial_pnl >= 0 else "🔴"
         pnl_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100
         
@@ -612,13 +606,10 @@ class PortfolioManager:
         remaining_tokens = position["token_amount"]
         avg_buy_price = position.get("avg_buy_price", position["entry_price"])
         
-        # CORRECTED: Final realized P/L = (sell_price - avg_buy_price) * remaining_tokens
         final_pnl = (current_price - avg_buy_price) * remaining_tokens
         
-        # Total P/L includes previously locked profits from partial sells
         total_pnl = position["locked_profit_usd"] + final_pnl
         
-        # Calculate percentage based on original investment
         total_pnl_pct = (total_pnl / position["investment_usd"]) * 100 if position["investment_usd"] > 0 else 0
 
         remaining_value = remaining_tokens * current_price
@@ -653,12 +644,10 @@ class PortfolioManager:
         
         should_blacklist = self._should_blacklist_token(trade_log, reason)
         
-        # --- LOW-BALANCE STRATEGY: NO RE-ENTRY ---
         is_low_balance_trade = position.get("is_low_balance_trade", False)
         should_watch_reentry = self._should_add_to_reentry(trade_log, reason)
         if is_low_balance_trade:
-            should_watch_reentry = False # Disable re-entry for low-balance trades
-        # --- END OF BLOCK ---
+            should_watch_reentry = False
         
         if should_blacklist:
             portfolio["blacklist"][mint] = {
@@ -685,7 +674,6 @@ class PortfolioManager:
         del portfolio["positions"][mint]
         self.save()
 
-        # --- NEW NOTIFICATION FORMAT ---
         pnl_symbol = "🟢" if total_pnl >= 0 else "🔴"
         
         msg = (f"{pnl_symbol} <b>TRADE UPDATE</b>\n\n"
@@ -799,10 +787,10 @@ class PortfolioManager:
 
 
 async def fetch_dexscreener_data(session: aiohttp.ClientSession, token_mint: str) -> Optional[Dict[str, Any]]:
-    """Fetch best pair data from DexScreener."""
+    """Fetch best pair data from DexScreener with minimal delay."""
     url = f"https://api.dexscreener.com/latest/dex/tokens/{token_mint}"
     try:
-        async with session.get(url, timeout=5) as response:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as response:
             if response.status != 200:
                 return None
             data = await response.json()
@@ -812,6 +800,9 @@ async def fetch_dexscreener_data(session: aiohttp.ClientSession, token_mint: str
             
             best_pair = max(pairs, key=lambda p: p.get("liquidity", {}).get("usd", 0))
             return best_pair
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout fetching data for {token_mint[:8]}...")
+        return None
     except Exception:
         return None
 
@@ -840,22 +831,37 @@ def validate_token_criteria(data: Dict[str, Any], min_liquidity: float = 35000,
     
     return all([passes_liquidity, passes_buys, passes_ratio, passes_marketcap, passes_volume])
 
+
 async def trade_monitoring_loop(app: Application, user_manager: UserManager, 
                                portfolio_manager: PortfolioManager):
-    """Enhanced monitoring with patient dip-focused entry logic."""
-    logger.info("🔄 TRADE LOOP: Enhanced monitoring starting.")
-    await asyncio.sleep(10)
+    """
+    OPTIMIZED: Real-time monitoring with proper sleep intervals.
+    
+    Key optimizations:
+    - Main loop: 0.5s (fast response to price changes)
+    - Epoch checks: Every 15s (batch validation)
+    - P/L updates: Every 5min (300 iterations)
+    - Minimal API delays: Concurrent fetching
+    """
+    logger.info("🔄 TRADE LOOP: Real-time monitoring starting (0.5s cycle)")
+    
+    # Reduced startup delay from 10s to 2s
+    await asyncio.sleep(2.0)
     
     pnl_update_counter = 0
+    epoch_check_counter = 0
     
     async with aiohttp.ClientSession() as session:
         while True:
+            loop_start = asyncio.get_event_loop().time()
+            
             try:
                 trading_users = user_manager.get_trading_users()
                 if not trading_users:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2.0)  # Longer wait when no users
                     continue
 
+                # Collect all tokens that need monitoring
                 mints_to_check = set()
                 for chat_id in trading_users:
                     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -865,122 +871,133 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                     mints_to_check.update(portfolio.get("reentry_candidates", {}).keys())
                 
                 if not mints_to_check:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(1.0)  # Wait when nothing to monitor
                     continue
 
+                # OPTIMIZED: Concurrent API fetching with minimal delay
                 tasks = [fetch_dexscreener_data(session, mint) for mint in mints_to_check]
-                results = await asyncio.gather(*tasks)
-                live_data = {data['baseToken']['address']: data for data in results if data}
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Filter out exceptions and build data dict
+                live_data = {}
+                for data in results:
+                    if isinstance(data, dict) and data:
+                        live_data[data['baseToken']['address']] = data
                 
                 live_prices = {mint: float(data["priceUsd"]) for mint, data in live_data.items() if data.get("priceUsd")}
                 
+                # P/L updates every 5 minutes (300 * 0.5s = 150s, adjusted to 600 * 0.5s = 300s)
                 pnl_update_counter += 1
-                should_send_periodic_pnl = (pnl_update_counter % 300 == 0)
+                should_send_periodic_pnl = (pnl_update_counter >= 600)
+                if should_send_periodic_pnl:
+                    pnl_update_counter = 0
+                
+                # Epoch checks every 15 seconds (30 * 0.5s = 15s)
+                epoch_check_counter += 1
+                should_check_epochs = (epoch_check_counter >= 30)
+                if should_check_epochs:
+                    epoch_check_counter = 0
 
                 for chat_id in trading_users:
                     portfolio = portfolio_manager.get_portfolio(chat_id)
                     
+                    # Send periodic P/L updates
                     if should_send_periodic_pnl and portfolio.get("positions"):
                         pnl_data = portfolio_manager.calculate_unrealized_pnl(chat_id, live_prices)
                         if pnl_data["position_count"] > 0:
                             await portfolio_manager.send_pnl_update(app, chat_id, pnl_data, "5-min update")
                     
-                    # --- PENDING SIGNALS EVALUATION (EPOCH-BASED) ---
-                    for mint in list(portfolio.get("pending_signals", {}).keys()):
-                        signal = portfolio["pending_signals"][mint]
-                        data = live_data.get(mint)
-                        
-                        if not data:
-                            continue
-                        
-                        signal_time = datetime.fromisoformat(signal["signal_time"].rstrip("Z"))
-                        total_elapsed_minutes = (datetime.utcnow() - signal_time).total_seconds() / 60
-                        
-                        last_check = datetime.fromisoformat(signal["last_check_time"].rstrip("Z"))
-                        time_since_check = (datetime.utcnow() - last_check).total_seconds()
-                        
-                        if time_since_check >= 15:
-                            signal["last_check_time"] = datetime.utcnow().isoformat() + "Z"
+                    # --- PENDING SIGNALS EVALUATION (EPOCH-BASED) - Every 15s ---
+                    if should_check_epochs:
+                        for mint in list(portfolio.get("pending_signals", {}).keys()):
+                            signal = portfolio["pending_signals"][mint]
+                            data = live_data.get(mint)
                             
-                            epoch_start = datetime.fromisoformat(signal["current_epoch_start"].rstrip("Z"))
-                            epoch_elapsed = (datetime.utcnow() - epoch_start).total_seconds() / 60
+                            if not data:
+                                continue
                             
-                            passed = validate_token_criteria(data, min_liquidity=35000, min_buys_5m=150, min_ratio=1.2)
+                            signal_time = datetime.fromisoformat(signal["signal_time"].rstrip("Z"))
+                            total_elapsed_minutes = (datetime.utcnow() - signal_time).total_seconds() / 60
                             
-                            if passed:
-                                signal["current_epoch_passes"] += 1
+                            last_check = datetime.fromisoformat(signal["last_check_time"].rstrip("Z"))
+                            time_since_check = (datetime.utcnow() - last_check).total_seconds()
                             
-                            signal["current_epoch_checks"] += 1
-                            
-                            logger.debug(f"📊 [{chat_id}] {signal['symbol']} Epoch {signal['current_epoch_number']}: "
-                                       f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} passed "
-                                       f"({epoch_elapsed:.1f}/3.0 min)")
-                            
-                            if epoch_elapsed >= 3.0:
-                                epoch_pass_rate = signal["current_epoch_passes"] / signal["current_epoch_checks"] if signal["current_epoch_checks"] > 0 else 0
+                            if time_since_check >= 15:
+                                signal["last_check_time"] = datetime.utcnow().isoformat() + "Z"
                                 
-                                completed_epoch = {
-                                    "epoch_number": signal["current_epoch_number"],
-                                    "checks": signal["current_epoch_checks"],
-                                    "passes": signal["current_epoch_passes"],
-                                    "pass_rate": epoch_pass_rate,
-                                    "completed_at": datetime.utcnow().isoformat() + "Z"
-                                }
-                                signal["epochs"].append(completed_epoch)
+                                epoch_start = datetime.fromisoformat(signal["current_epoch_start"].rstrip("Z"))
+                                epoch_elapsed = (datetime.utcnow() - epoch_start).total_seconds() / 60
                                 
-                                logger.info(f"✅ [{chat_id}] {signal['symbol']} Epoch {signal['current_epoch_number']} complete: "
-                                          f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} "
-                                          f"({epoch_pass_rate*100:.1f}% pass rate)")
+                                passed = validate_token_criteria(data, min_liquidity=35000, min_buys_5m=150, min_ratio=1.2)
                                 
-                                if epoch_pass_rate >= 0.67:
-                                    current_price = float(data["priceUsd"])
-                                    current_liquidity = data.get("liquidity", {}).get("usd", 0)
+                                if passed:
+                                    signal["current_epoch_passes"] += 1
+                                
+                                signal["current_epoch_checks"] += 1
+                                
+                                if epoch_elapsed >= 3.0:
+                                    epoch_pass_rate = signal["current_epoch_passes"] / signal["current_epoch_checks"] if signal["current_epoch_checks"] > 0 else 0
                                     
-                                    token_info = {
-                                        "mint": mint,
-                                        "price": current_price,
-                                        "symbol": signal["symbol"],
-                                        "name": signal["name"],
-                                        "liquidity": current_liquidity,
-                                        "promoted_from_epoch": signal["current_epoch_number"],
-                                        "epoch_pass_rate": epoch_pass_rate
+                                    completed_epoch = {
+                                        "epoch_number": signal["current_epoch_number"],
+                                        "checks": signal["current_epoch_checks"],
+                                        "passes": signal["current_epoch_passes"],
+                                        "pass_rate": epoch_pass_rate,
+                                        "completed_at": datetime.utcnow().isoformat() + "Z"
                                     }
+                                    signal["epochs"].append(completed_epoch)
                                     
-                                    await portfolio_manager.add_to_watchlist(chat_id, token_info)
-                                    del portfolio["pending_signals"][mint]
-                                    portfolio_manager.save()
+                                    logger.info(f"✅ [{chat_id}] {signal['symbol']} Epoch {signal['current_epoch_number']} complete: "
+                                              f"{signal['current_epoch_passes']}/{signal['current_epoch_checks']} "
+                                              f"({epoch_pass_rate*100:.1f}% pass rate)")
                                     
-                                    logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']}")
-                                    continue
-                                
-                                if signal["current_epoch_number"] < 10:
-                                    signal["current_epoch_number"] += 1
-                                    signal["current_epoch_start"] = datetime.utcnow().isoformat() + "Z"
-                                    signal["current_epoch_checks"] = 0
-                                    signal["current_epoch_passes"] = 0
-                                    portfolio_manager.save()
+                                    if epoch_pass_rate >= 0.67:
+                                        current_price = float(data["priceUsd"])
+                                        current_liquidity = data.get("liquidity", {}).get("usd", 0)
+                                        
+                                        token_info = {
+                                            "mint": mint,
+                                            "price": current_price,
+                                            "symbol": signal["symbol"],
+                                            "name": signal["name"],
+                                            "liquidity": current_liquidity,
+                                            "promoted_from_epoch": signal["current_epoch_number"],
+                                            "epoch_pass_rate": epoch_pass_rate
+                                        }
+                                        
+                                        await portfolio_manager.add_to_watchlist(chat_id, token_info)
+                                        del portfolio["pending_signals"][mint]
+                                        portfolio_manager.save()
+                                        
+                                        logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']}")
+                                        continue
                                     
-                                    logger.info(f"🔄 [{chat_id}] {signal['symbol']} starting Epoch {signal['current_epoch_number']}")
-                                else:
-                                    del portfolio["pending_signals"][mint]
-                                    portfolio_manager.save()
-                                    
-                                    epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
-                                    logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 10 epochs ({epoch_summary})")
-                        
-                        if total_elapsed_minutes >= signal["max_evaluation_minutes"]:
-                            epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
-                            del portfolio["pending_signals"][mint]
-                            portfolio_manager.save()
-                            logger.info(f"⏰ [{chat_id}] Evaluation timeout for {signal['symbol']} after 30 mins ({epoch_summary})")
+                                    if signal["current_epoch_number"] < 10:
+                                        signal["current_epoch_number"] += 1
+                                        signal["current_epoch_start"] = datetime.utcnow().isoformat() + "Z"
+                                        signal["current_epoch_checks"] = 0
+                                        signal["current_epoch_passes"] = 0
+                                        portfolio_manager.save()
+                                    else:
+                                        del portfolio["pending_signals"][mint]
+                                        portfolio_manager.save()
+                                        
+                                        epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
+                                        logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 10 epochs ({epoch_summary})")
+                            
+                            if total_elapsed_minutes >= signal["max_evaluation_minutes"]:
+                                epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
+                                del portfolio["pending_signals"][mint]
+                                portfolio_manager.save()
+                                logger.info(f"⏰ [{chat_id}] Evaluation timeout for {signal['symbol']} after 30 mins ({epoch_summary})")
                     
-                    # --- RE-ENTRY CANDIDATES ---
+                    # --- RE-ENTRY CANDIDATES - Checked every cycle ---
                     for mint in list(portfolio.get("reentry_candidates", {}).keys()):
                         data = live_data.get(mint)
                         if data:
                             await portfolio_manager.check_reentry_opportunity(app, chat_id, mint, data)
                     
-                    # --- WATCHLIST PROCESSING ---
+                    # --- WATCHLIST PROCESSING - Real-time ---
                     for mint, item in list(portfolio.get("watchlist", {}).items()):
                         if mint in portfolio.get("blacklist", {}):
                             del portfolio["watchlist"][mint]
@@ -1021,7 +1038,6 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         entry_reason = ""
                         
                         if buys_5m >= 100:
-                            
                             if signal_price * 0.65 <= current_price <= signal_price * 0.75:
                                 if ratio_1h >= 1.15:
                                     entry_triggered = True
@@ -1037,17 +1053,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     entry_reason = f"Moderate Dip Entry ({((1 - current_price/signal_price) * 100):.0f}% below signal, {buys_5m} buys/5m)"
                             
                             elif signal_price * 1.05 <= current_price <= signal_price * 1.20:
-                                # Token is up 5% to 20% from its signal price
-                                
-                                # Calculate recent momentum
                                 short_term_momentum = portfolio_manager.calculate_short_term_momentum(item.get("price_history", []), lookback=3)
                                 
                                 if buys_5m >= 150 and ratio_1h >= 1.3 and short_term_momentum > 2.5:
-                                    # We require:
-                                    # 1. Strong 5-min buy pressure (150+ buys)
-                                    # 2. Healthy 1-hour buy/sell ratio (1.3+)
-                                    # 3. Positive short-term momentum (> +2.5%)
-                                    
                                     entry_triggered = True
                                     entry_reason = f"Strong Momentum Entry ({short_term_momentum:+.1f}% mom, {buys_5m} buys/5m)"
                             
@@ -1061,20 +1069,13 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     entry_triggered = True
                                     entry_reason = f"Recovery Entry (bounced from {((1 - item['lowest_price']/signal_price) * 100):.0f}% dip, {buys_5m} buys/5m)"
                         
-                        else:
-                            if int(wait_time * 60) % 60 == 0:
-                                logger.debug(f"⏳ [{chat_id}] Waiting for {item['symbol']}: "
-                                            f"{buys_5m}/100 buys, ${current_price:.6f} "
-                                            f"({((current_price/signal_price - 1) * 100):+.1f}% vs signal), "
-                                            f"{wait_time:.1f}/30 min")
-                        
                         if entry_triggered:
                             logger.info(f"🎯 [{chat_id}] ENTRY TRIGGER: {item['symbol']} | {entry_reason}")
                             await portfolio_manager.execute_buy(
                                 app, chat_id, mint, current_price, current_liquidity, entry_reason
                             )
                     
-                    # --- POSITION MANAGEMENT ---
+                    # --- POSITION MANAGEMENT - Real-time critical ---
                     for mint, pos in list(portfolio.get("positions", {}).items()):
                         data = live_data.get(mint)
                         if not data or not data.get("priceUsd"):
@@ -1084,23 +1085,21 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         current_liquidity = data.get("liquidity", {}).get("usd", 0)
                         avg_buy_price = pos.get("avg_buy_price", pos["entry_price"])
                         
-                        # CORRECTED: Profit % based on avg_buy_price
                         profit_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100 if avg_buy_price > 0 else 0
                         is_low_balance_trade = pos.get("is_low_balance_trade", False)
                         
-                        # --- NEW LOW-BALANCE ACCOUNT (+50% TP) LOGIC ---
+                        # LOW-BALANCE +50% TP
                         if is_low_balance_trade and profit_pct >= 50:
                             logger.info(f"📈 [{chat_id}] Low-balance +50% TP triggered for {pos['symbol']}")
                             await portfolio_manager.execute_full_sell(
                                 app, chat_id, mint, current_price, 
                                 "Take-Profit (+50%)"
                             )
-                            continue # Skip all other logic for this position
+                            continue
 
                         if current_price > pos["peak_price"]:
                             pos["peak_price"] = current_price
                             
-                            # Only send milestones for non-low-balance trades (to avoid spam)
                             if not is_low_balance_trade:
                                 last_milestone = pos.get("last_pnl_milestone", 0)
                                 milestones = [25, 50, 100, 200, 500]
@@ -1109,7 +1108,6 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                     if profit_pct >= milestone and last_milestone < milestone:
                                         pos["last_pnl_milestone"] = milestone
                                         
-                                        # Calculate unrealized P/L using corrected formula
                                         unrealized_pnl = pos["token_amount"] * (current_price - avg_buy_price)
                                         total_pnl = unrealized_pnl + pos.get("locked_profit_usd", 0)
                                         
@@ -1129,7 +1127,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             
                             portfolio_manager.save()
                         
-                        # RUG PULL PROTECTION
+                        # RUG PULL PROTECTION - CRITICAL
                         liq_drop_pct = ((pos["entry_liquidity"] - current_liquidity) / pos["entry_liquidity"]) * 100 if pos["entry_liquidity"] > 0 else 0
                         
                         if liq_drop_pct >= 40:
@@ -1146,7 +1144,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             )
                             continue
                         
-                        # --- PARTIAL PROFIT TAKING (SKIPPED FOR LOW-BALANCE TRADES) ---
+                        # PARTIAL PROFIT TAKING (skip for low-balance trades)
                         if not is_low_balance_trade:
                             remaining = pos["remaining_percentage"]
                             
@@ -1171,7 +1169,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 )
                                 continue
                         
-                        # TIME-BASED EXIT (Applies to all trades)
+                        # TIME-BASED EXIT
                         entry_time = datetime.fromisoformat(pos["entry_time"].rstrip("Z"))
                         hold_minutes = (datetime.utcnow() - entry_time).total_seconds() / 60
                         
@@ -1195,13 +1193,29 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
             except Exception as e:
                 logger.exception(f"❌ TRADE LOOP: Error in monitoring: {e}")
             
-            await asyncio.sleep(1)
+            # OPTIMIZED: Dynamic sleep based on loop execution time
+            loop_duration = asyncio.get_event_loop().time() - loop_start
+            target_cycle = 0.5  # 500ms target cycle time
             
+            if loop_duration < target_cycle:
+                await asyncio.sleep(target_cycle - loop_duration)
+            else:
+                # Loop took longer than target, yield control briefly
+                await asyncio.sleep(0.01)
+            
+
 async def signal_detection_loop(app: Application, user_manager: UserManager, 
                                portfolio_manager: PortfolioManager):
-    """Enhanced signal detection - adds to pending_signals for evaluation."""
-    logger.info("🔍 SIGNAL LOOP: Enhanced detection starting.")
-    await asyncio.sleep(5)
+    """
+    OPTIMIZED: Signal detection with appropriate intervals.
+    
+    New signals don't require millisecond precision, so we check every 10s
+    instead of 15s for better responsiveness while avoiding API spam.
+    """
+    logger.info("🔍 SIGNAL LOOP: Enhanced detection starting (10s cycle)")
+    
+    # Reduced startup delay from 5s to 2s
+    await asyncio.sleep(2.0)
     
     processed_signals = set()
     
@@ -1209,20 +1223,21 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
         while True:
             try:
                 if not OVERLAP_FILE.exists():
-                    await asyncio.sleep(15)
+                    await asyncio.sleep(10.0)  # Check file existence every 10s
                     continue
 
                 overlap_data = joblib.load(OVERLAP_FILE)
                 trading_users = user_manager.get_trading_users()
 
                 if not trading_users:
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(15.0)  # Longer wait when no active users
                     continue
                     
                 for token_id, history in overlap_data.items():
                     if not history or token_id in processed_signals:
                         continue
                     
+                    # Quick blacklist check
                     blacklisted_by_any = False
                     for user_id in trading_users:
                         portfolio = portfolio_manager.get_portfolio(user_id)
@@ -1237,6 +1252,7 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                     grade = latest.get("grade", "NONE")
                     
                     if grade in VALID_GRADES:
+                        # Fetch DexScreener data for validation
                         dex_data = await fetch_dexscreener_data(session, token_id)
                         if not dex_data:
                             continue
@@ -1245,6 +1261,7 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                         market_cap = dex_data.get("marketCap", 0)
                         fdv = dex_data.get("fdv", 0)
                         
+                        # Quick validation
                         if liquidity < 25000 or (market_cap < 30000 and fdv < 50000):
                             continue
                         
@@ -1258,12 +1275,17 @@ async def signal_detection_loop(app: Application, user_manager: UserManager,
                             "liquidity": liquidity
                         }
                         
+                        # Add to all trading users
                         for user_id in trading_users:
                             await portfolio_manager.add_to_pending_signals(user_id, token_info)
                         
                         processed_signals.add(token_id)
+                        
+                        # Small delay after processing each new signal to avoid API throttling
+                        await asyncio.sleep(0.1)
 
             except Exception as e:
                 logger.exception(f"❌ SIGNAL LOOP: Error in detection: {e}")
             
-            await asyncio.sleep(15)
+            # OPTIMIZED: Check for new signals every 10 seconds instead of 15
+            await asyncio.sleep(10.0)
