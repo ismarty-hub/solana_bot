@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 trade_manager.py - Enhanced paper trading with CORRECTED P/L calculations
+AND Low-Balance (Sub-$200) Strategy
 """
 
 import logging
@@ -115,6 +116,11 @@ class PortfolioManager:
                 if "original_token_amount" not in pos:
                     pos["original_token_amount"] = pos.get("token_amount", 0)
                     migrated = True
+                
+                # NEW: Track low-balance strategy
+                if "is_low_balance_trade" not in pos:
+                    pos["is_low_balance_trade"] = False # Default for old trades
+                    migrated = True
             
             # Migrate watchlist objects
             for mint, item in portfolio.get("watchlist", {}).items():
@@ -204,11 +210,7 @@ class PortfolioManager:
         Calculate total unrealized P/L for all open positions.
         
         CORRECTED FORMULA:
-        Unrealized P/L = token_balance * avg_buy_price - token_balance * current_price
-        Or simplified: token_balance * (avg_buy_price - current_price)
-        
-        Note: The formula gives NEGATIVE value for profit (price went up from buy price)
-        So we negate it to show profit as positive.
+        Unrealized P/L = token_balance * (current_price - avg_buy_price)
         """
         portfolio = self.get_portfolio(chat_id)
         positions = portfolio.get("positions", {})
@@ -237,7 +239,6 @@ class PortfolioManager:
             current_price = live_prices.get(mint, pos.get("entry_price", 0))
             
             # CORRECTED: Unrealized P/L = token_balance * (current_price - avg_buy_price)
-            # This makes profit positive when current > buy
             unrealized_pnl = token_balance * (current_price - avg_buy_price)
             
             # Cost basis = what we paid for remaining tokens
@@ -447,17 +448,27 @@ class PortfolioManager:
 
         capital = portfolio["capital_usd"]
         
-        if capital >= 5000:
-            position_pct = 0.08
-        elif capital >= 2000:
-            position_pct = 0.10
-        else:
-            position_pct = 0.12
+        # --- NEW LOW-BALANCE STRATEGY ---
+        is_low_balance_trade = capital < 200.0
         
-        investment_usd = min(capital * position_pct, 150)
+        if is_low_balance_trade:
+            # Allocate 30% of total capital
+            investment_usd = capital * 0.30
+            logger.info(f"[{chat_id}] Low-balance strategy active. Investing 30% (${investment_usd:.2f})")
+        else:
+            # Original tiered strategy
+            if capital >= 5000:
+                position_pct = 0.08
+            elif capital >= 2000:
+                position_pct = 0.10
+            else:
+                position_pct = 0.12
+            
+            investment_usd = min(capital * position_pct, 150)
+        # --- END OF STRATEGY BLOCK ---
         
         if capital < investment_usd:
-            logger.warning(f"[{chat_id}] Insufficient capital to buy {watch_item['symbol']}")
+            logger.warning(f"[{chat_id}] Insufficient capital to buy {watch_item['symbol']} (Need ${investment_usd:.2f}, Have ${capital:.2f})")
             del portfolio["watchlist"][mint]
             self.save()
             return
@@ -487,8 +498,8 @@ class PortfolioManager:
             "symbol": watch_item["symbol"],
             "name": watch_item["name"],
             "entry_price": current_price,
-            "avg_buy_price": current_price,  # NEW: Track average buy price
-            "original_token_amount": token_amount,  # NEW: Track original amount
+            "avg_buy_price": current_price,
+            "original_token_amount": token_amount,
             "entry_time": datetime.utcnow().isoformat() + "Z",
             "entry_liquidity": current_liquidity,
             "signal_price": watch_item["signal_price"],
@@ -500,21 +511,21 @@ class PortfolioManager:
             "partial_exits": [],
             "remaining_percentage": 100.0,
             "locked_profit_usd": 0.0,
-            "last_pnl_milestone": 0
+            "last_pnl_milestone": 0,
+            "is_low_balance_trade": is_low_balance_trade # Flag for exit logic
         }
         del portfolio["watchlist"][mint]
         self.save()
 
-        price_vs_signal = ((current_price - watch_item["signal_price"]) / watch_item["signal_price"]) * 100
-
-        msg = (f"✅ <b>PAPER TRADE: BUY</b>\n\n"
-               f"<b>Token:</b> {watch_item['name']} (${watch_item['symbol']})\n"
-               f"<b>Entry Reason:</b> {entry_reason}\n"
-               f"<b>Price:</b> ${current_price:.6f}\n"
-               f"<b>vs Signal:</b> {price_vs_signal:+.1f}%\n"
-               f"<b>Investment:</b> ${investment_usd:.2f}\n"
-               f"<b>Token Amount:</b> {token_amount:,.2f}\n"
-               f"<b>Liquidity:</b> ${current_liquidity:,.0f}\n")
+        # --- NEW NOTIFICATION FORMAT ---
+        msg = (f"🟢 <b>TRADE UPDATE</b>\n\n"
+               f"<b>Token:</b> {watch_item['name']}\n"
+               f"<b>Action:</b> BUY ({entry_reason})\n"
+               f"<b>Amount Used:</b> ${investment_usd:.2f}\n"
+               f"<b>Tokens Bought:</b> {token_amount:,.0f}\n"
+               f"<b>Entry Price:</b> ${current_price:.6f}\n\n"
+               f"<b>P/L:</b> $0.00 (+0.0%)\n"
+               f"<b>Available Capital:</b> ${portfolio['capital_usd']:,.2f}")
 
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
@@ -542,7 +553,6 @@ class PortfolioManager:
         partial_pnl = (current_price - avg_buy_price) * tokens_to_sell
         
         sell_value_usd = tokens_to_sell * current_price
-        cost_basis_sold = tokens_to_sell * avg_buy_price
         
         portfolio["capital_usd"] += sell_value_usd
         position["token_amount"] -= tokens_to_sell
@@ -561,18 +571,19 @@ class PortfolioManager:
         
         self.save()
 
+        # --- NEW NOTIFICATION FORMAT ---
         pnl_symbol = "🟢" if partial_pnl >= 0 else "🔴"
         pnl_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100
         
-        msg = (f"{pnl_symbol} <b>PARTIAL SELL: {sell_percentage:.0f}%</b>\n\n"
-               f"<b>Token:</b> {position['symbol']}\n"
-               f"<b>Reason:</b> {reason}\n"
-               f"<b>Tokens Sold:</b> {tokens_to_sell:,.2f}\n"
-               f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
-               f"<b>Sell Price:</b> ${current_price:.6f}\n"
-               f"<b>Realized P/L:</b> ${partial_pnl:+,.2f} ({pnl_pct:+.1f}%)\n"
-               f"<b>Remaining:</b> {position['remaining_percentage']:.0f}%\n\n"
-               f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>")
+        msg = (f"{pnl_symbol} <b>TRADE UPDATE</b>\n\n"
+               f"<b>Token:</b> {position['name']}\n"
+               f"<b>Action:</b> SELL (Partial {sell_percentage:.0f}% - {reason})\n"
+               f"<b>Amount Used:</b> ${position['investment_usd']:.2f}\n"
+               f"<b>Tokens Bought:</b> {position['original_token_amount']:,.0f}\n"
+               f"<b>Entry Price:</b> ${avg_buy_price:.6f}\n"
+               f"<b>Exit Price:</b> ${current_price:.6f}\n\n"
+               f"<b>P/L (This Exit):</b> ${partial_pnl:+,.2f} ({pnl_pct:+.1f}%)\n"
+               f"<b>Available Capital:</b> ${portfolio['capital_usd']:,.2f}")
         
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
@@ -609,7 +620,7 @@ class PortfolioManager:
         total_pnl = position["locked_profit_usd"] + final_pnl
         
         # Calculate percentage based on original investment
-        total_pnl_pct = (total_pnl / position["investment_usd"]) * 100
+        total_pnl_pct = (total_pnl / position["investment_usd"]) * 100 if position["investment_usd"] > 0 else 0
 
         remaining_value = remaining_tokens * current_price
         portfolio["capital_usd"] += remaining_value
@@ -637,12 +648,18 @@ class PortfolioManager:
             "total_pnl_usd": total_pnl,
             "total_pnl_percent": total_pnl_pct,
             "exit_reason": reason,
-            "peak_profit_pct": ((position["peak_price"] - avg_buy_price) / avg_buy_price) * 100
+            "peak_profit_pct": ((position["peak_price"] - avg_buy_price) / avg_buy_price) * 100 if avg_buy_price > 0 else 0
         }
         portfolio["trade_history"].append(trade_log)
         
         should_blacklist = self._should_blacklist_token(trade_log, reason)
+        
+        # --- LOW-BALANCE STRATEGY: NO RE-ENTRY ---
+        is_low_balance_trade = position.get("is_low_balance_trade", False)
         should_watch_reentry = self._should_add_to_reentry(trade_log, reason)
+        if is_low_balance_trade:
+            should_watch_reentry = False # Disable re-entry for low-balance trades
+        # --- END OF BLOCK ---
         
         if should_blacklist:
             portfolio["blacklist"][mint] = {
@@ -669,28 +686,18 @@ class PortfolioManager:
         del portfolio["positions"][mint]
         self.save()
 
+        # --- NEW NOTIFICATION FORMAT ---
         pnl_symbol = "🟢" if total_pnl >= 0 else "🔴"
-        win_rate = (stats["wins"] / stats["total_trades"] * 100) if stats["total_trades"] > 0 else 0
         
-        status_note = ""
-        if should_blacklist:
-            status_note = "\n❌ <i>Token blacklisted</i>"
-        elif should_watch_reentry:
-            status_note = "\n👁️ <i>Watching for re-entry</i>"
-        
-        msg = (f"{pnl_symbol} <b>FULL EXIT</b>\n\n"
-               f"<b>Token:</b> {position['symbol']}\n"
-               f"<b>Reason:</b> {reason}\n"
-               f"<b>Hold Time:</b> {hold_duration.seconds // 60} mins\n"
-               f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
-               f"<b>Exit:</b> ${current_price:.6f}\n"
-               f"<b>Peak:</b> ${position['peak_price']:.6f}\n\n"
-               f"<b>Total P/L:</b> ${total_pnl:+,.2f} ({total_pnl_pct:+.1f}%)\n"
-               f"<b>Locked:</b> ${position['locked_profit_usd']:,.2f}\n"
-               f"<b>Final:</b> ${final_pnl:+,.2f}\n\n"
-               f"<i>Capital: ${portfolio['capital_usd']:,.2f}</i>\n"
-               f"<i>Win Rate: {win_rate:.1f}% ({stats['wins']}/{stats['total_trades']})</i>"
-               f"{status_note}")
+        msg = (f"{pnl_symbol} <b>TRADE UPDATE</b>\n\n"
+               f"<b>Token:</b> {position['name']}\n"
+               f"<b>Action:</b> SELL ({reason})\n"
+               f"<b>Amount Used:</b> ${position['investment_usd']:.2f}\n"
+               f"<b>Tokens Bought:</b> {position['original_token_amount']:,.0f}\n"
+               f"<b>Entry Price:</b> ${avg_buy_price:.6f}\n"
+               f"<b>Exit Price:</b> ${current_price:.6f}\n\n"
+               f"<b>P/L:</b> ${total_pnl:+,.2f} ({total_pnl_pct:+.1f}%)\n"
+               f"<b>Available Capital:</b> ${portfolio['capital_usd']:,.2f}")
         
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
@@ -1064,40 +1071,52 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         avg_buy_price = pos.get("avg_buy_price", pos["entry_price"])
                         
                         # CORRECTED: Profit % based on avg_buy_price
-                        profit_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100
+                        profit_pct = ((current_price - avg_buy_price) / avg_buy_price) * 100 if avg_buy_price > 0 else 0
+                        is_low_balance_trade = pos.get("is_low_balance_trade", False)
                         
+                        # --- NEW LOW-BALANCE ACCOUNT (+50% TP) LOGIC ---
+                        if is_low_balance_trade and profit_pct >= 50:
+                            logger.info(f"📈 [{chat_id}] Low-balance +50% TP triggered for {pos['symbol']}")
+                            await portfolio_manager.execute_full_sell(
+                                app, chat_id, mint, current_price, 
+                                "Take-Profit (+50%)"
+                            )
+                            continue # Skip all other logic for this position
+
                         if current_price > pos["peak_price"]:
                             pos["peak_price"] = current_price
                             
-                            last_milestone = pos.get("last_pnl_milestone", 0)
-                            milestones = [25, 50, 100, 200, 500]
-                            
-                            for milestone in milestones:
-                                if profit_pct >= milestone and last_milestone < milestone:
-                                    pos["last_pnl_milestone"] = milestone
-                                    
-                                    # Calculate unrealized P/L using corrected formula
-                                    unrealized_pnl = pos["token_amount"] * (current_price - avg_buy_price)
-                                    total_pnl = unrealized_pnl + pos.get("locked_profit_usd", 0)
-                                    
-                                    milestone_msg = (f"🚀 <b>MILESTONE: +{milestone}%</b>\n\n"
-                                                   f"<b>Token:</b> {pos['symbol']}\n"
-                                                   f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
-                                                   f"<b>Current:</b> ${current_price:.6f}\n"
-                                                   f"<b>Peak Gain:</b> {profit_pct:+.1f}%\n"
-                                                   f"<b>Total P/L:</b> ${total_pnl:+,.2f}\n\n"
-                                                   f"<i>Keep riding or take profits! 🎯</i>")
-                                    try:
-                                        await app.bot.send_message(chat_id=chat_id, text=milestone_msg, parse_mode="HTML")
-                                        logger.info(f"🎉 [{chat_id}] {pos['symbol']} hit +{milestone}% milestone")
-                                    except Exception as e:
-                                        logger.error(f"Failed to send milestone notification: {e}")
-                                    break
+                            # Only send milestones for non-low-balance trades (to avoid spam)
+                            if not is_low_balance_trade:
+                                last_milestone = pos.get("last_pnl_milestone", 0)
+                                milestones = [25, 50, 100, 200, 500]
+                                
+                                for milestone in milestones:
+                                    if profit_pct >= milestone and last_milestone < milestone:
+                                        pos["last_pnl_milestone"] = milestone
+                                        
+                                        # Calculate unrealized P/L using corrected formula
+                                        unrealized_pnl = pos["token_amount"] * (current_price - avg_buy_price)
+                                        total_pnl = unrealized_pnl + pos.get("locked_profit_usd", 0)
+                                        
+                                        milestone_msg = (f"🚀 <b>MILESTONE: +{milestone}%</b>\n\n"
+                                                       f"<b>Token:</b> {pos['symbol']}\n"
+                                                       f"<b>Avg Buy:</b> ${avg_buy_price:.6f}\n"
+                                                       f"<b>Current:</b> ${current_price:.6f}\n"
+                                                       f"<b>Peak Gain:</b> {profit_pct:+.1f}%\n"
+                                                       f"<b>Total P/L:</b> ${total_pnl:+,.2f}\n\n"
+                                                       f"<i>Keep riding or take profits! 🎯</i>")
+                                        try:
+                                            await app.bot.send_message(chat_id=chat_id, text=milestone_msg, parse_mode="HTML")
+                                            logger.info(f"🎉 [{chat_id}] {pos['symbol']} hit +{milestone}% milestone")
+                                        except Exception as e:
+                                            logger.error(f"Failed to send milestone notification: {e}")
+                                        break
                             
                             portfolio_manager.save()
                         
                         # RUG PULL PROTECTION
-                        liq_drop_pct = ((pos["entry_liquidity"] - current_liquidity) / pos["entry_liquidity"]) * 100
+                        liq_drop_pct = ((pos["entry_liquidity"] - current_liquidity) / pos["entry_liquidity"]) * 100 if pos["entry_liquidity"] > 0 else 0
                         
                         if liq_drop_pct >= 40:
                             await portfolio_manager.execute_full_sell(
@@ -1113,31 +1132,32 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             )
                             continue
                         
-                        # PARTIAL PROFIT TAKING
-                        remaining = pos["remaining_percentage"]
+                        # --- PARTIAL PROFIT TAKING (SKIPPED FOR LOW-BALANCE TRADES) ---
+                        if not is_low_balance_trade:
+                            remaining = pos["remaining_percentage"]
+                            
+                            if profit_pct >= 30 and remaining == 100:
+                                await portfolio_manager.execute_partial_sell(
+                                    app, chat_id, mint, current_price, 40.0, 
+                                    "Take-Profit Level 1 (+30%)"
+                                )
+                                continue
+                            
+                            if profit_pct >= 50 and remaining == 60:
+                                await portfolio_manager.execute_partial_sell(
+                                    app, chat_id, mint, current_price, 30.0, 
+                                    "Take-Profit Level 2 (+50%)"
+                                )
+                                continue
+                            
+                            if profit_pct >= 100 and remaining == 30:
+                                await portfolio_manager.execute_partial_sell(
+                                    app, chat_id, mint, current_price, 20.0, 
+                                    "Take-Profit Level 3 (+100%)"
+                                )
+                                continue
                         
-                        if profit_pct >= 30 and remaining == 100:
-                            await portfolio_manager.execute_partial_sell(
-                                app, chat_id, mint, current_price, 40.0, 
-                                "Take-Profit Level 1 (+30%)"
-                            )
-                            continue
-                        
-                        if profit_pct >= 50 and remaining == 60:
-                            await portfolio_manager.execute_partial_sell(
-                                app, chat_id, mint, current_price, 30.0, 
-                                "Take-Profit Level 2 (+50%)"
-                            )
-                            continue
-                        
-                        if profit_pct >= 100 and remaining == 30:
-                            await portfolio_manager.execute_partial_sell(
-                                app, chat_id, mint, current_price, 20.0, 
-                                "Take-Profit Level 3 (+100%)"
-                            )
-                            continue
-                        
-                        # TIME-BASED EXIT
+                        # TIME-BASED EXIT (Applies to all trades)
                         entry_time = datetime.fromisoformat(pos["entry_time"].rstrip("Z"))
                         hold_minutes = (datetime.utcnow() - entry_time).total_seconds() / 60
                         
