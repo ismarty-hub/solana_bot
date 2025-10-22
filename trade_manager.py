@@ -797,6 +797,15 @@ class PortfolioManager:
             del portfolio["reentry_candidates"][mint]
             self.save()
 
+    def get_overlap_results(self, mint: str) -> Optional[List[Dict[str, Any]]]:
+        """Fetch the overlap results for a given mint from the overlap_results.pkl file."""
+        try:
+            overlap_results = joblib.load(OVERLAP_FILE)
+            return overlap_results.get(mint)
+        except Exception as e:
+            logger.error(f"Failed to load overlap results for {mint}: {e}")
+            return None
+
 
 async def fetch_dexscreener_data(session: aiohttp.ClientSession, token_mint: str) -> Optional[Dict[str, Any]]:
     """Fetch best pair data from DexScreener with minimal delay."""
