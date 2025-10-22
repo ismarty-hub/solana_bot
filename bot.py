@@ -5,10 +5,9 @@ bot.py - Main entry point for the modular Telegram bot
 
 import logging
 import asyncio
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults, MessageHandler, filters
 from telegram import Update
 from telegram.ext import ContextTypes
-
 
 from config import BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE, PORTFOLIOS_FILE
 from config import USE_SUPABASE, OVERLAP_FILE, BUCKET_NAME
@@ -27,7 +26,7 @@ from alerts.admin_commands import (
     admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
     debug_system_cmd, force_download_cmd,
     addgroup_cmd, removegroup_cmd, listgroups_cmd,  
-    is_admin_update
+    is_admin_update, notify_new_group
 )
 from alerts.monitoring import (
     background_loop, monthly_expiry_notifier,
@@ -86,7 +85,6 @@ async def watchlist_wrapper(update, context):
 
 async def resetcapital_wrapper(update, context): 
     await resetcapital_cmd(update, context, user_manager, portfolio_manager)
-
 
 # ----------------------
 # Startup hook
@@ -238,6 +236,15 @@ async def main():
     
     # Register callback query handler for inline buttons
     app.add_handler(CallbackQueryHandler(button_wrapper))
+    app.add_handler(
+        MessageHandler(
+            filters.StatusUpdate.NEW_CHAT_MEMBERS & filters.ChatType.GROUPS,
+            notify_new_group
+        )
+    )
+
+    # Register callback query handler for inline buttons
+    app.add_handler(CallbackQueryHandler(button_wrapper))
     
     logger.info("✅ All command handlers registered (including new trading commands).")
     
@@ -250,7 +257,7 @@ async def main():
         await asyncio.Event().wait() # Keep running indefinitely
         logger.info("🛑 Shutting down bot...")
         await app.updater.stop()
-        await app.stop()
+        await app.stop()    
 
 if __name__ == "__main__":
     # Basic logging setup

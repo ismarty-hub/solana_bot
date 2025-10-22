@@ -295,6 +295,56 @@ async def debug_system_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
 # NEW: GROUP MANAGEMENT COMMANDS
 # ----------------------
 
+async def notify_new_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Sends a notification to the admin when the bot is added to a new group.
+    """
+    if not ADMIN_USER_ID:
+        logging.warning("ADMIN_USER_ID is not configured. Cannot send new group notification.")
+        return
+
+    # Check if the update is from a group chat
+    if not update.effective_chat.type in ["group", "supergroup"]:
+        return
+
+    chat = update.effective_chat
+    bot_user = await context.bot.get_me()
+
+    # Check if the bot itself is among the new members
+    is_bot_added = False
+    if update.message and update.message.new_chat_members:
+        for member in update.message.new_chat_members:
+            if member.id == bot_user.id:
+                is_bot_added = True
+                break
+    
+    if not is_bot_added:
+        return
+
+    group_name = chat.title
+    group_id_str = str(chat.id)
+    
+    # Escape HTML special characters in the group name
+    group_name_escaped = group_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    message_text = (
+        "🆕 <b>Bot Added to New Group</b>\n\n"
+        f"• Name: <b>{group_name_escaped}</b>\n"
+        f"• ID: <code>{group_id_str}</code>\n\n"
+        f"Use /addgroup {group_id_str} to enable mint broadcasts."
+    )
+
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_USER_ID, 
+            text=message_text, 
+            parse_mode='HTML',
+            disable_web_page_preview=True
+        )
+        logging.info(f"✅ Notified admin about new group: {group_name} ({group_id_str})")
+    except Exception as e:
+        logging.error(f"❌ Failed to notify admin about new group {group_id_str}: {e}")
+
 async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command: Add a group to receive mint broadcasts."""
     if not is_admin_update(update):
