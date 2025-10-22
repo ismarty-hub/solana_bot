@@ -404,15 +404,27 @@ class PortfolioManager:
         if mint in portfolio["positions"] or mint in portfolio["watchlist"]:
             return
 
+        # Fetch signal_price from overlap_results.pkl
+        history = self.get_overlap_results(mint)
+        if not history or not isinstance(history[-1], dict):
+            logger.warning(f"No valid history found for {mint} in overlap_results.pkl")
+            return
+
+        latest_entry = history[-1]
+        signal_price = latest_entry.get("dexscreener", {}).get("current_price_usd")
+        if signal_price is None:
+            logger.warning(f"No signal price found for {mint} in overlap_results.pkl")
+            return
+
         portfolio["watchlist"][mint] = {
-            "signal_price": token_info['price'],
+            "signal_price": signal_price,
             "signal_time": datetime.utcnow().isoformat() + "Z",
             "watchlist_added_time": datetime.utcnow().isoformat() + "Z",
             "symbol": token_info['symbol'],
             "name": token_info['name'],
             "signal_liquidity": token_info.get('liquidity', 0),
-            "highest_price": token_info['price'],
-            "lowest_price": token_info['price'],
+            "highest_price": signal_price,
+            "lowest_price": signal_price,
             "entry_attempts": 0,
             "promoted_from_epoch": token_info.get('promoted_from_epoch', 0),
             "epoch_pass_rate": token_info.get('epoch_pass_rate', 0),
@@ -420,7 +432,7 @@ class PortfolioManager:
             "price_history": []
         }
         self.save()
-        logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${token_info['price']:.6f}")
+        logger.info(f"👀 [{chat_id}] Added {token_info['symbol']} to watchlist at ${signal_price:.6f}")
 
     def calculate_short_term_momentum(self, price_history: List[float], lookback: int = 3) -> float:
         """Calculate SHORT-TERM momentum from recent price movements."""
@@ -839,13 +851,13 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
     
     Key optimizations:
     - Main loop: 0.5s (fast response to price changes)
-    - Epoch checks: Every 15s (batch validation)
+    - Epoch checks: Every 5s (batch validation)
     - P/L updates: Every 5min (300 iterations)
     - Minimal API delays: Concurrent fetching
     """
     logger.info("🔄 TRADE LOOP: Real-time monitoring starting (0.5s cycle)")
     
-    # Reduced startup delay from 10s to 2s
+    # Reduced startup 2s
     await asyncio.sleep(2.0)
     
     pnl_update_counter = 0
@@ -983,7 +995,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                         portfolio_manager.save()
                                         
                                         epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
-                                        logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 10 epochs ({epoch_summary})")
+                                        logger.info(f"❌ [{chat_id}] Dropped {signal['symbol']} after 30 epochs ({epoch_summary})")
                             
                             if total_elapsed_minutes >= signal["max_evaluation_minutes"]:
                                 epoch_summary = ", ".join([f"E{e['epoch_number']}:{e['pass_rate']*100:.0f}%" for e in signal["epochs"]])
