@@ -892,9 +892,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                 if should_send_periodic_pnl:
                     pnl_update_counter = 0
                 
-                # Epoch checks every 15 seconds (30 * 0.5s = 15s)
+                # Epoch checks every 5 seconds
                 epoch_check_counter += 1
-                should_check_epochs = (epoch_check_counter >= 30)
+                should_check_epochs = (epoch_check_counter >= 12)
                 if should_check_epochs:
                     epoch_check_counter = 0
 
@@ -907,7 +907,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         if pnl_data["position_count"] > 0:
                             await portfolio_manager.send_pnl_update(app, chat_id, pnl_data, "5-min update")
                     
-                    # --- PENDING SIGNALS EVALUATION (EPOCH-BASED) - Every 15s ---
+                    # --- PENDING SIGNALS EVALUATION (EPOCH-BASED) - Every 5s ---
                     if should_check_epochs:
                         for mint in list(portfolio.get("pending_signals", {}).keys()):
                             signal = portfolio["pending_signals"][mint]
@@ -922,7 +922,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                             last_check = datetime.fromisoformat(signal["last_check_time"].rstrip("Z"))
                             time_since_check = (datetime.utcnow() - last_check).total_seconds()
                             
-                            if time_since_check >= 15:
+                            if time_since_check >= 5:
                                 signal["last_check_time"] = datetime.utcnow().isoformat() + "Z"
                                 
                                 epoch_start = datetime.fromisoformat(signal["current_epoch_start"].rstrip("Z"))
@@ -935,7 +935,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                 
                                 signal["current_epoch_checks"] += 1
                                 
-                                if epoch_elapsed >= 3.0:
+                                if epoch_elapsed >= 1.0:
                                     epoch_pass_rate = signal["current_epoch_passes"] / signal["current_epoch_checks"] if signal["current_epoch_checks"] > 0 else 0
                                     
                                     completed_epoch = {
@@ -972,7 +972,7 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                                         logger.info(f"⭐ [{chat_id}] Promoted {signal['symbol']} to watchlist from Epoch {signal['current_epoch_number']}")
                                         continue
                                     
-                                    if signal["current_epoch_number"] < 10:
+                                    if signal["current_epoch_number"] < 30:
                                         signal["current_epoch_number"] += 1
                                         signal["current_epoch_start"] = datetime.utcnow().isoformat() + "Z"
                                         signal["current_epoch_checks"] = 0
