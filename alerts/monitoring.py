@@ -376,7 +376,7 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 # Flag to force an alert if a GATED NEW token's data just became complete
                 should_send_gated_alert = False 
 
-                # --- START NEW LOGIC: GATED ALERT AND EXPONENTIAL SILENT RETRY ---
+                # --- GATED ALERT AND EXPONENTIAL SILENT RETRY ---
                 if not is_new_token and state.get("data_complete") is False:
                     last_retry = state.get("last_market_data_retry_at")
                     retry_count = state.get("market_data_retry_count", 1) # Default to 1 if missing
@@ -404,7 +404,7 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         new_mc, new_fdv, new_lqd = fetch_marketcap_and_fdv(token_id)
                         
                         # Check for completeness
-                        is_now_complete = (new_mc is not None and new_fdv is not None and new_lqd is not None)
+                        is_now_complete = (new_mc is not None and new_lqd is not None)
                         
                         # --- Update state regardless of success/failure ---
                         alerts_state[token_id]["last_market_data_retry_at"] = current_time.isoformat() + "Z"
