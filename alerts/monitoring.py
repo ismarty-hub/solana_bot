@@ -350,12 +350,12 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 is_new_token = (last_grade is None)
                 is_grade_change = (not is_new_token and grade != last_grade)
                 
-                # --- MODIFIED: Initial State Saving (to Gate Alerts and Track Retries) ---
+                # --- Initial State Saving (to Gate Alerts and Track Retries) ---
                 if is_new_token:
                     mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
                     
-                    # Determine if data is complete (MUST have MC AND FDV AND Liquidity)
-                    data_complete = (mc is not None and fdv is not None and lqd is not None)
+                    # Determine if data is complete (MUST have MC AND Liquidity)
+                    data_complete = (mc is not None and lqd is not None)
                     
                     alerts_state[token_id] = {
                         "last_grade": grade, 
