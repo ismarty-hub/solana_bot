@@ -196,7 +196,7 @@ async def send_alert_to_subscribers(
     mint = token_data.get("token_metadata", {}).get("mint") or token_data.get("token") or ""
     buttons = []
     if mint:
-        buttons.append(InlineKeyboardButton("🔗 Bonkbot", url=f"httpsT://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint}"))
+        buttons.append(InlineKeyboardButton("🔗 Bonkbot", url=f"https://t.me/bonkbot_bot?start=ref_68ulj_ca_{mint}"))
         buttons.append(InlineKeyboardButton("🔗 Trojan", url=f"https://t.me/paris_trojanbot?start=r-ismarty1-{mint}"))
     keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
@@ -323,8 +323,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
     
     signal_queue = {}
 
-    # --- NEW: Define Backoff Constant ---
-    INITIAL_RETRY_INTERVAL_SECS = 1 # 1 second initial retry
+    # Exponential backoff starting interval
+    INITIAL_RETRY_INTERVAL_SECS = 1
 
     while True:
         try:
@@ -336,7 +336,6 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 continue
 
             alerts_sent_this_cycle = 0
-            # --- NEW: Initialize retry state update counter ---
             state_updated_this_cycle = 0
 
             for token_id, token_info in tokens.items():
@@ -365,30 +364,26 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         "first_alert_at": datetime.utcnow().isoformat() + "Z",
                         "broadcasted": False,
                         "data_complete": data_complete, 
-                        # If incomplete, set the first retry attempt time and count
                         "last_market_data_retry_at": None if data_complete else datetime.utcnow().isoformat() + "Z",
-                        "market_data_retry_count": 0 if data_complete else 1 # Initial failure is count 1
+                        "market_data_retry_count": 0 if data_complete else 1
                     }
                     
                     logger.info(f"🆕 New token detected: {token_id[:8]}... | Grade: {grade} | Data Complete: {data_complete}")
                 
                 state = alerts_state.get(token_id, {})
-                # Flag to force an alert if a GATED NEW token's data just became complete
                 should_send_gated_alert = False 
 
                 # --- GATED ALERT AND EXPONENTIAL SILENT RETRY ---
+                # Only retry if token exists (not new) and data is incomplete
                 if not is_new_token and state.get("data_complete") is False:
                     last_retry = state.get("last_market_data_retry_at")
-                    retry_count = state.get("market_data_retry_count", 1) # Default to 1 if missing
+                    retry_count = state.get("market_data_retry_count", 1)
                     current_time = datetime.utcnow()
                     should_retry = True
                     
                     if last_retry:
                         try:
                             last_dt = datetime.fromisoformat(last_retry.rstrip("Z"))
-                            
-                            # Exponential backoff calculation: 1 * 2^(retry_count - 1)
-                            # Example: count=1 -> 1s delay; count=2 -> 2s delay; count=3 -> 4s delay; count=10 -> 512s delay
                             required_delay = INITIAL_RETRY_INTERVAL_SECS * (2 ** (retry_count - 1))
                             time_elapsed = (current_time - last_dt).total_seconds()
                             
@@ -397,40 +392,32 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                                 logger.debug(f"ℹ️ Skipping retry for {token_id[:8]}... Backoff active ({round(time_elapsed)}s elapsed, {required_delay}s required).")
                         except Exception as e:
                             logger.error(f"Error parsing timestamp for backoff: {e}")
-                            # If error, proceed with retry
                     
                     if should_retry:
-                        # Attempt to fetch the market data again
                         new_mc, new_fdv, new_lqd = fetch_marketcap_and_fdv(token_id)
-                        
-                        # Check for completeness
                         is_now_complete = (new_mc is not None and new_lqd is not None)
                         
-                        # --- Update state regardless of success/failure ---
                         alerts_state[token_id]["last_market_data_retry_at"] = current_time.isoformat() + "Z"
 
                         if is_now_complete:
                             logger.info(f"💰 GATED ALERT TRIGGERED: All market data found on retry #{retry_count} for {token_id[:8]}...")
                             
-                            # Update all initial values
                             alerts_state[token_id]["initial_marketcap"] = new_mc
                             alerts_state[token_id]["initial_fdv"] = new_fdv
                             alerts_state[token_id]["initial_liquidity"] = new_lqd
                             alerts_state[token_id]["data_complete"] = True
                             
-                            # Reset retry count/fields on success
-                            del alerts_state[token_id]["market_data_retry_count"] 
+                            if "market_data_retry_count" in alerts_state[token_id]:
+                                del alerts_state[token_id]["market_data_retry_count"]
                             
                             should_send_gated_alert = True
                             state_updated_this_cycle += 1
                         else:
-                            # Increment retry count on failure
                             alerts_state[token_id]["market_data_retry_count"] = retry_count + 1
                             logger.debug(f"ℹ️ Market data still incomplete (Retry #{retry_count + 1}) for {token_id[:8]}... Backoff set.")
-                            state_updated_this_cycle += 1 # Flag save for backoff update
+                            state_updated_this_cycle += 1
 
-                # --- GATED ALERT AND EXPONENTIAL SILENT RETRY ---
-
+                # --- Broadcasting Logic (unchanged) ---
                 should_broadcast = (
                     grade != "NONE" and
                     not state.get("broadcasted", False)
@@ -445,22 +432,31 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     except Exception as e:
                         logger.error(f"❌ Broadcast failed for {mint_address}: {e}")
                 
-                # Gating the Final Alert ---
-                is_alert_required = is_grade_change or (should_send_gated_alert and state.get("data_complete"))
+                # --- FIXED: Alert Logic ---
+                # Send alert on:
+                # 1. Grade change (existing token)
+                # 2. New token with complete data
+                # 3. Gated token whose data just became complete
+                is_alert_required = (
+                    is_grade_change or 
+                    (is_new_token and state.get("data_complete")) or
+                    should_send_gated_alert
+                )
 
                 if is_alert_required:
                     if is_grade_change:
                         logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
-                        
-                        if not is_new_token: # Only update last_grade on a *change*, not a *new* alert
-                            alerts_state[token_id]["last_grade"] = grade
+                        alerts_state[token_id]["last_grade"] = grade
+                    elif is_new_token:
+                        logger.info(f"🔔 Sending alert for new token: {token_id[:8]}... | Grade: {grade}")
+                    else:  # should_send_gated_alert
+                        logger.info(f"🔔 Sending gated alert (data now complete): {token_id[:8]}... | Grade: {grade}")
 
-                    # State was updated in retry logic, or just now for grade change
                     state = alerts_state.get(token_id, {})
                     
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
-                        previous_grade=last_grade if is_grade_change else None, # Only show "was X" on a grade change
+                        previous_grade=last_grade if is_grade_change else None,
                         initial_mc=state.get("initial_marketcap"),
                         initial_fdv=state.get("initial_fdv"), 
                         first_alert_at=state.get("first_alert_at")
@@ -472,6 +468,7 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     
                     alerts_sent_this_cycle += 1
 
+            # Clean up expired signals
             current_time = datetime.utcnow()
             expired_signals = []
             for mint, signal_data in signal_queue.items():
@@ -485,9 +482,9 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
             if expired_signals:
                 logger.debug(f"🧹 Cleaned up {len(expired_signals)} expired signals from queue")
 
-            # --- MODIFIED: Update Save Condition ---
+            # Save state if changes occurred
             if alerts_sent_this_cycle > 0 or state_updated_this_cycle > 0:
-                logger.info(f"💾 Saving alert state after processing {alerts_sent_this_cycle} changes and {state_updated_this_cycle} state updates...")
+                logger.info(f"💾 Saving alert state after processing {alerts_sent_this_cycle} alerts and {state_updated_this_cycle} state updates...")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
 
             await asyncio.sleep(POLL_INTERVAL_SECS)
