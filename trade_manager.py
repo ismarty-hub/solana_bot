@@ -907,9 +907,9 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                 
                 live_prices = {mint: float(data["priceUsd"]) for mint, data in live_data.items() if data.get("priceUsd")}
                 
-                # P/L updates every 5 minutes (300 * 0.5s = 150s, adjusted to 600 * 0.5s = 300s)
+                # P/L updates every 5 minutes (300 * 0.5s = 150s, adjusted to 1500 * 0.5s = 750s)
                 pnl_update_counter += 1
-                should_send_periodic_pnl = (pnl_update_counter >= 600)
+                should_send_periodic_pnl = (pnl_update_counter >= 1500)
                 if should_send_periodic_pnl:
                     pnl_update_counter = 0
                 
@@ -1194,20 +1194,20 @@ async def trade_monitoring_loop(app: Application, user_manager: UserManager,
                         entry_time = datetime.fromisoformat(pos["entry_time"].rstrip("Z"))
                         hold_minutes = (datetime.utcnow() - entry_time).total_seconds() / 60
                         
-                        if hold_minutes >= 120:
+                        if hold_minutes >= 300:
                             buys_5m = data.get("txns", {}).get("m5", {}).get("buys", 0)
                             
                             if buys_5m < 100 or liq_drop_pct >= 20:
                                 await portfolio_manager.execute_full_sell(
                                     app, chat_id, mint, current_price, 
-                                    f"Time Exit (2hr+, low activity, {profit_pct:+.1f}%)"
+                                    f"Time Exit (5hr+, low activity, {profit_pct:+.1f}%)"
                                 )
                                 continue
                         
-                        if hold_minutes >= 240:
+                        if hold_minutes >= 420:
                             await portfolio_manager.execute_full_sell(
                                 app, chat_id, mint, current_price, 
-                                f"Max Hold Time (4hr, {profit_pct:+.1f}%)"
+                                f"Max Hold Time (7hr, {profit_pct:+.1f}%)"
                             )
                             continue
 
