@@ -15,7 +15,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import (
     OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE, PORTFOLIOS_FILE,
-    BUCKET_NAME, USE_SUPABASE, POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES
+    BUCKET_NAME, USE_SUPABASE, POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES,
+    # Import the alpha state file
+    ALPHA_ALERTS_STATE_FILE
 )
 from shared.file_io import safe_load, safe_save
 from shared.utils import fetch_marketcap_and_fdv, truncate_address
@@ -46,7 +48,9 @@ def upload_all_bot_data_to_supabase():
         USER_STATS_FILE, 
         GROUPS_FILE, 
         ALERTS_STATE_FILE, 
-        PORTFOLIOS_FILE
+        PORTFOLIOS_FILE,
+        # Add alpha state file to the upload list
+        ALPHA_ALERTS_STATE_FILE
     ]
     
     uploaded_count = 0
@@ -58,6 +62,9 @@ def upload_all_bot_data_to_supabase():
                 remote_path = None
                 if file == PORTFOLIOS_FILE:
                     remote_path = f"paper_trade/{PORTFOLIOS_FILE.name}"
+                # Add case for alpha state file to set its remote path
+                elif file == ALPHA_ALERTS_STATE_FILE:
+                    remote_path = ALPHA_ALERTS_STATE_FILE.name
                 
                 if upload_file(str(file), bucket=BUCKET_NAME, remote_path=remote_path):
                     uploaded_count += 1
@@ -78,9 +85,20 @@ def download_bot_data_from_supabase():
         logger.debug("Supabase download skipped (disabled or helper missing).")
         return
     
-    for file in [USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE]:
+    # Add alpha state file to the download list
+    files_to_download = [
+        USER_PREFS_FILE, 
+        USER_STATS_FILE, 
+        ALERTS_STATE_FILE, 
+        GROUPS_FILE,
+        ALPHA_ALERTS_STATE_FILE
+    ]
+
+    for file in files_to_download:
         try:
-            download_file(str(file), os.path.basename(file), bucket=BUCKET_NAME)
+            # The remote path is just the basename (e.g., "alerts_state_alpha.json")
+            remote_file_name = os.path.basename(file)
+            download_file(str(file), remote_file_name, bucket=BUCKET_NAME)
         except Exception as e:
             logger.debug(f"Could not download {file} from Supabase: {e}")
 

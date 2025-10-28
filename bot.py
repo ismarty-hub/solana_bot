@@ -189,7 +189,6 @@ async def on_startup(app: Application):
     default_files = {
         USER_PREFS_FILE: {}, ALERTS_STATE_FILE: {}, USER_STATS_FILE: {},
         GROUPS_FILE: {}, PORTFOLIOS_FILE: {},
-        # Add new state file
         ALPHA_ALERTS_STATE_FILE: {}
     }
     # Initialize local files if they don't exist
@@ -200,7 +199,8 @@ async def on_startup(app: Application):
 
     if USE_SUPABASE:
         logger.info("☁️ Supabase enabled - downloading all bot data...")
-        download_bot_data_from_supabase() # This now handles all bot files including portfolios
+        # This function now handles ALL bot files, including portfolios AND alpha state
+        download_bot_data_from_supabase() 
         try:
             # Import all required downloaders
             from supabase_utils import download_overlap_results, download_alpha_overlap_results
@@ -233,7 +233,7 @@ async def on_startup(app: Application):
     asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
     # 2. Monthly expiry notifier
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
-    # 3. Periodic Supabase sync
+    # 3. Periodic Supabase sync (this now handles alpha state upload)
     if USE_SUPABASE:
         asyncio.create_task(periodic_supabase_sync())
     # 4. Paper trading signal detection loop
@@ -242,6 +242,7 @@ async def on_startup(app: Application):
     asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
 
     # 6. --- New Alpha Monitoring Loop ---
+    # This loop no longer handles its own upload/download
     asyncio.create_task(alpha_monitoring_loop(app, user_manager))
     # --- End New Alpha Loop ---
 
