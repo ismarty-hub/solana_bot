@@ -12,6 +12,18 @@ from config import ALL_GRADES
 from alerts.user_manager import UserManager
 from trade_manager import PortfolioManager
 
+# --- New Imports for Alpha Alerts ---
+from pathlib import Path
+from config import DATA_DIR
+from shared.file_io import safe_load
+# Import the new refresh formatter
+from .formatters import format_alpha_refresh, _get_http_session, _close_http_session
+
+# Define new state file path
+ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
+# --- End New Imports ---
+
+
 def get_mode_status_text(user_prefs: dict) -> str:
     """Generates a status line for user's current modes."""
     modes = user_prefs.get("modes", [])
@@ -57,6 +69,42 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
         f"<b>Alert Grades:</b> {', '.join(user_prefs.get('grades', ['Not Set']))}"
     )
     await update.message.reply_html(welcome_msg, reply_markup=reply_markup)
+
+# --- ALPHA ALERTS COMMANDS ---
+
+async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /alpha_subscribe command to opt-in to high-priority alpha alerts."""
+    chat_id = str(update.effective_chat.id)
+    
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+        
+    # Set the user preference for alpha_alerts to True
+    user_manager.update_user_prefs(chat_id, {"alpha_alerts": True})
+    
+    await update.message.reply_html(
+        "🚀 <b>Alpha Alerts Subscribed!</b>\n\n"
+        "You will now receive high-priority Alpha Alerts. Use /myalerts to confirm your setting."
+    )
+
+async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /alpha_unsubscribe command to opt-out of alpha alerts."""
+    chat_id = str(update.effective_chat.id)
+    
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+        
+    # Set the user preference for alpha_alerts to False
+    user_manager.update_user_prefs(chat_id, {"alpha_alerts": False})
+    
+    await update.message.reply_html(
+        "😴 <b>Alpha Alerts Unsubscribed!</b>\n\n"
+        "You will no longer receive high-priority Alpha Alerts. Use /myalerts to confirm your setting."
+    )
+
+# --- END ALPHA ALERTS COMMANDS ---
 
 async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /setalerts command with improved UX."""
@@ -122,13 +170,20 @@ async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     last_alert = stats.get("last_alert_at")
     last_alert_str = "Never" if not last_alert else f"<i>{last_alert[:10]}</i>"
 
+    # --- New: Check Alpha Alert Status ---
+    alpha_status = "✅ Subscribed" if prefs.get("alpha_alerts", False) else "❌ Not Subscribed"
+    # --- End New ---
+    
     msg = (
         f"📊 <b>Your Settings</b>\n\n"
         f"<b>Active Modes:</b> {get_mode_status_text(prefs)}\n"
         f"<b>Subscribed Grades:</b> {', '.join(prefs.get('grades', ALL_GRADES))}\n"
+        f"<b>🚀 Alpha Alerts:</b> {alpha_status}\n\n"
         f"<b>Total alerts received:</b> {total_alerts}\n"
         f"<b>Last alert:</b> {last_alert_str}\n\n"
-        f"Use /start to change your mode or /setalerts to change alert grades."
+        f"Use /start to change your mode.\n"
+        f"Use /setalerts to change alert grades.\n"
+        f"Use /alpha_subscribe or /alpha_unsubscribe to manage alpha alerts."
     )
     await update.message.reply_html(msg)
 
@@ -147,6 +202,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /myalerts - View your current settings & stats\n"
         "• /setalerts - Set which grade alerts you receive\n"
         "• /stop - Unsubscribe from everything\n\n"
+        "<b>--- 🔥 Alpha Alerts ---</b>\n"
+        "• /alpha_subscribe - Opt-in to high-priority alpha alerts\n"
+        "• /alpha_unsubscribe - Opt-out of alpha alerts\n\n"
         "<b>--- Paper Trading ---</b>\n"
         "• /papertrade [capital] - Set trading capital and enable paper trading\n"
         "  Example: <code>/papertrade 1000</code>\n"
@@ -736,15 +794,67 @@ async def testalert_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = format_alert_html(token_data, "NEW")
     await update.message.reply_html(f"🔔 Test Alert\n\n{message}")
 
+
+# --- MODIFIED: button_handler ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle inline keyboard button callbacks."""
     query = update.callback_query
-    await query.answer() # Acknowledge the click immediately
+    
+    # Acknowledge the click immediately
+    # For refresh, show a loading text
+    if query.data.startswith("refresh_alpha:"):
+        await query.answer("Refreshing data...")
+    else:
+        await query.answer() 
     
     chat_id = str(query.from_user.id)
     data = query.data
 
-    # --- New: Handle CA Analysis Button in Groups ---
+    # --- New: Handle Alpha Refresh Button ---
+    if data.startswith("refresh_alpha:"):
+        try:
+            mint = data.split(":", 1)[1]
+            
+            # Load the initial state
+            alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
+            initial_state = alerts_state.get(mint)
+            
+            if not initial_state:
+                await query.edit_message_text(
+                    "Error: Initial data not found for this token. It may be too old.",
+                    reply_markup=None
+                )
+                return
+            
+            # Call the refresh formatter
+            message = await format_alpha_refresh(mint, initial_state)
+            
+            # Re-create the refresh button
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
+            ])
+            
+            # Check if message is different before editing
+            if query.message.text != message:
+                await query.edit_message_text(
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                    disable_web_page_preview=True
+                )
+            else:
+                # If message is identical, just answer the query
+                await query.answer("Data is already up to date.")
+                
+        except Exception as e:
+            if "message is not modified" in str(e).lower():
+                await query.answer("Data is already up to date.")
+            else:
+                logging.error(f"Failed to refresh alpha alert: {e}")
+                await query.answer("Error during refresh.", show_alert=True)
+        return # Stop processing
+
+    # --- Handle CA Analysis Button in Groups ---
     if data.startswith("analyze_"):
         # This button is intended for groups.
         # query.message.chat.type can be 'group', 'supergroup', or 'private'

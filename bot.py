@@ -9,30 +9,52 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defa
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, GROUPS_FILE, PORTFOLIOS_FILE
-from config import USE_SUPABASE, OVERLAP_FILE, BUCKET_NAME
+# --- Updated Config Imports ---
+from config import (
+    BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, 
+    ALERTS_STATE_FILE, GROUPS_FILE, PORTFOLIOS_FILE,
+    USE_SUPABASE, OVERLAP_FILE, BUCKET_NAME,
+    # Add new config file name
+    ALPHA_ALERTS_STATE_FILE
+)
+# --- End Updated Config Imports ---
 
 from shared.file_io import safe_load, safe_save
 from alerts.user_manager import UserManager
 from trade_manager import PortfolioManager, trade_monitoring_loop, signal_detection_loop
 
+# --- Updated Command Imports ---
 from alerts.commands import (
     start_cmd, setalerts_cmd, myalerts_cmd, stop_cmd,
     help_cmd, stats_cmd, testalert_cmd, button_handler,
-    papertrade_cmd, portfolio_cmd, pnl_cmd, history_cmd,  # Enhanced trade commands
-    performance_cmd, watchlist_cmd, resetcapital_cmd  # New trade commands
+    papertrade_cmd, portfolio_cmd, pnl_cmd, history_cmd,
+    performance_cmd, watchlist_cmd, resetcapital_cmd,
+    # Add new alpha commands
+    alpha_subscribe_cmd, alpha_unsubscribe_cmd
 )
+# --- End Updated Command Imports ---
+
 from alerts.admin_commands import (
     admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
     debug_system_cmd, force_download_cmd,
     addgroup_cmd, removegroup_cmd, listgroups_cmd,  
     is_admin_update, notify_new_group
 )
+
+# --- Updated Monitoring Imports ---
 from alerts.monitoring import (
     background_loop, monthly_expiry_notifier,
     download_bot_data_from_supabase, 
-    periodic_supabase_sync  # ✅ --- FIX: Import renamed task ---
+    periodic_supabase_sync
 )
+# Add new alpha monitoring loop
+from alerts.alpha_monitoring import alpha_monitoring_loop, ALPHA_OVERLAP_FILE
+# --- End Updated Monitoring Imports ---
+
+# --- New Import for closing session ---
+from alerts.formatters import _close_http_session
+# --- End New Import ---
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +85,14 @@ async def button_wrapper(update, context): await button_handler(update, context,
 async def addgroup_wrapper(update, context): await addgroup_cmd(update, context)
 async def removegroup_wrapper(update, context): await removegroup_cmd(update, context)
 async def listgroups_wrapper(update, context): await listgroups_cmd(update, context)
+
+# --- New Alpha Command Wrappers ---
+async def alpha_subscribe_wrapper(update, context): 
+    await alpha_subscribe_cmd(update, context, user_manager)
+
+async def alpha_unsubscribe_wrapper(update, context): 
+    await alpha_unsubscribe_cmd(update, context, user_manager)
+# --- End New Alpha Command Wrappers ---
 
 # Trading command wrappers
 async def papertrade_wrapper(update, context): 
@@ -113,6 +143,9 @@ async def on_startup(app: Application):
             BotCommand("watchlist", "Tokens being watched"),
             BotCommand("resetcapital", "Reset capital (e.g. /resetcapital 5000)"),
             BotCommand("stats", "View usage statistics"),
+            # Add new alpha commands to the list
+            BotCommand("alpha_subscribe", "Subscribe to Alpha Alerts"),
+            BotCommand("alpha_unsubscribe", "Unsubscribe from Alpha Alerts"),
         ]
         
         # Set commands for all users
@@ -155,7 +188,9 @@ async def on_startup(app: Application):
     # Define default files and their initial content
     default_files = {
         USER_PREFS_FILE: {}, ALERTS_STATE_FILE: {}, USER_STATS_FILE: {},
-        GROUPS_FILE: {}, PORTFOLIOS_FILE: {}
+        GROUPS_FILE: {}, PORTFOLIOS_FILE: {},
+        # Add new state file
+        ALPHA_ALERTS_STATE_FILE: {}
     }
     # Initialize local files if they don't exist
     for file_path, default_content in default_files.items():
@@ -167,12 +202,22 @@ async def on_startup(app: Application):
         logger.info("☁️ Supabase enabled - downloading all bot data...")
         download_bot_data_from_supabase() # This now handles all bot files including portfolios
         try:
-            from supabase_utils import download_overlap_results
+            # Import all required downloaders
+            from supabase_utils import download_overlap_results, download_alpha_overlap_results
+
             logger.info("⬇️ Downloading overlap_results.pkl from Supabase...")
             if download_overlap_results(str(OVERLAP_FILE), bucket=BUCKET_NAME):
                 logger.info("✅ Downloaded overlap_results.pkl")
             else:
                  logger.error("❌ overlap_results.pkl not found after download!")
+
+            # Download alpha results
+            logger.info("⬇️ Downloading overlap_results_alpha.pkl from Supabase...")
+            if download_alpha_overlap_results(str(ALPHA_OVERLAP_FILE), bucket=BUCKET_NAME):
+                logger.info("✅ Downloaded overlap_results_alpha.pkl")
+            else:
+                 logger.warning("ℹ️ overlap_results_alpha.pkl not found (may be new bot)")
+
         except Exception as e:
             logger.error(f"❌ Startup overlap download failed: {e}")
 
@@ -195,6 +240,10 @@ async def on_startup(app: Application):
     asyncio.create_task(signal_detection_loop(app, user_manager, portfolio_manager))
     # 5. Paper trading high-frequency monitoring loop
     asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
+
+    # 6. --- New Alpha Monitoring Loop ---
+    asyncio.create_task(alpha_monitoring_loop(app, user_manager))
+    # --- End New Alpha Loop ---
 
     logger.info("🚀 Bot startup complete.")
 
@@ -222,6 +271,11 @@ async def main():
     app.add_handler(CommandHandler("performance", performance_wrapper))
     app.add_handler(CommandHandler("watchlist", watchlist_wrapper))
     app.add_handler(CommandHandler("resetcapital", resetcapital_wrapper))
+
+    # --- Register New Alpha Commands ---
+    app.add_handler(CommandHandler("alpha_subscribe", alpha_subscribe_wrapper))
+    app.add_handler(CommandHandler("alpha_unsubscribe", alpha_unsubscribe_wrapper))
+    # --- End New Alpha Commands ---
     
     # Register admin commands
     app.add_handler(CommandHandler("admin", admin_stats_wrapper))
@@ -243,21 +297,32 @@ async def main():
         )
     )
 
-    # Register callback query handler for inline buttons
-    app.add_handler(CallbackQueryHandler(button_wrapper))
+    # Register callback query handler for inline buttons (This was a duplicate in your file)
+    # app.add_handler(CallbackQueryHandler(button_wrapper))
     
-    logger.info("✅ All command handlers registered (including new trading commands).")
+    logger.info("✅ All command handlers registered (including new alpha commands).")
     
     # Run application with startup logic
-    async with app:
-        await on_startup(app)
-        logger.info("🔌 Starting bot polling...")
-        await app.start()
-        await app.updater.start_polling()
-        await asyncio.Event().wait() # Keep running indefinitely
+    try:
+        async with app:
+            await on_startup(app)
+            logger.info("🔌 Starting bot polling...")
+            await app.start()
+            await app.updater.start_polling()
+            await asyncio.Event().wait() # Keep running indefinitely
+
+    except Exception as e:
+        logger.exception(f"Bot failed to run: {e}")
+    
+    finally:
+        # --- New: Graceful Shutdown ---
         logger.info("🛑 Shutting down bot...")
-        await app.updater.stop()
-        await app.stop()    
+        await _close_http_session() # Close the aiohttp session
+        if app.updater:
+            await app.updater.stop()
+        await app.stop()
+        logger.info("👋 Bot shut down successfully.")
+        # --- End New Shutdown Logic ---
 
 if __name__ == "__main__":
     # Basic logging setup
@@ -265,6 +330,10 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    # Silence noisy loggers
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
