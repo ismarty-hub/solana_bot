@@ -336,13 +336,9 @@ def download_overlap_results(save_path: str, bucket: str = BUCKET_NAME) -> bool:
     """Download overlap_results.pkl specifically."""
     return download_file(save_path, OVERLAP_FILE_NAME, bucket)
 
-
-# --- ADDED THIS FUNCTION ---
 def download_alpha_overlap_results(save_path: str, bucket: str = BUCKET_NAME) -> bool:
     """Download overlap_results_alpha.pkl specifically."""
     return download_file(save_path, OVERLAP_ALPHA_FILE_NAME, bucket)
-# --- END OF ADDED FUNCTION ---
-
 
 # -------------------
 # Dune Cache Helpers

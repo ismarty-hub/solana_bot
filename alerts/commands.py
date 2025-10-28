@@ -12,16 +12,15 @@ from config import ALL_GRADES
 from alerts.user_manager import UserManager
 from trade_manager import PortfolioManager
 
-# --- New Imports for Alpha Alerts ---
+# --- Imports for Alpha Alerts ---
 from pathlib import Path
 from config import DATA_DIR
 from shared.file_io import safe_load
-# Import the new refresh formatter
+# Import the refresh formatter
 from .formatters import format_alpha_refresh, _get_http_session, _close_http_session
 
-# Define new state file path
+# Define state file path
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
-# --- End New Imports ---
 
 
 def get_mode_status_text(user_prefs: dict) -> str:
@@ -810,7 +809,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     chat_id = str(query.from_user.id)
     data = query.data
 
-    # --- New: Handle Alpha Refresh Button ---
+    # --- Handle Alpha Refresh Button ---
     if data.startswith("refresh_alpha:"):
         try:
             mint = data.split(":", 1)[1]
@@ -826,25 +825,82 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 )
                 return
             
-            # Call the refresh formatter
-            message = await format_alpha_refresh(mint, initial_state)
+            # --- NEW: Reply vs. Edit Logic ---
+            # Check if the message we're acting on is a refresh message
+            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
             
-            # Re-create the refresh button
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-            ])
-            
-            # Check if message is different before editing
-            if query.message.text != message:
+            if is_refresh_message:
+                # --- EDIT LOGIC (for subsequent clicks) ---
+                
+                # 1. Show loading state by editing
+                symbol = initial_state.get("symbol", "N/A")
+                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>
+
+<i>Please wait, fetching live data...</i> 
+
+--- <b>Market Cap</b> ---
+<b>Now:</b> <i>Loading...</i>
+<b>Initial:</b> <i>Loading...</i>
+<b>Change:</b> <i>Loading...</i>
+
+--- <b>Liquidity</b> ---
+<b>Now:</b> <i>Loading...</i>
+<b>Initial:</b> <i>Loading...</i>
+<b>Change:</b> <i>Loading...</i>
+
+<a href="https://dexscreener.com/solana/{mint}">View on DexScreener</a>
+"""
+                loading_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
+                ])
+                
+                try:
+                    # Only edit if message is not already "loading"
+                    if query.message.text != loading_message:
+                        await query.edit_message_text(
+                            text=loading_message,
+                            parse_mode="HTML",
+                            reply_markup=loading_keyboard,
+                            disable_web_page_preview=True
+                        )
+                except Exception as e:
+                    if "message is not modified" in str(e).lower():
+                        await query.answer("Already refreshing...")
+                        return # Already in loading state, stop
+                    raise # Re-raise other errors
+                
+                # 2. Get final data
+                message = await format_alpha_refresh(mint, initial_state)
+                
+                final_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
+                ])
+
+                # 3. Edit to final data
                 await query.edit_message_text(
                     text=message,
                     parse_mode="HTML",
-                    reply_markup=keyboard,
+                    reply_markup=final_keyboard,
                     disable_web_page_preview=True
                 )
+            
             else:
-                # If message is identical, just answer the query
-                await query.answer("Data is already up to date.")
+                # --- REPLY LOGIC (for first click on original alert) ---
+                
+                # 1. Get final data
+                message = await format_alpha_refresh(mint, initial_state)
+                
+                final_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
+                ])
+                
+                # 2. Send as a new reply to the original alert
+                await query.message.reply_html(
+                    text=message,
+                    reply_markup=final_keyboard,
+                    disable_web_page_preview=True
+                )
+            # --- END NEW LOGIC ---
                 
         except Exception as e:
             if "message is not modified" in str(e).lower():

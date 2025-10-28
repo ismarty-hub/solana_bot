@@ -298,12 +298,12 @@ async def format_alpha_alert(
         )
         lp_mc_ratio_str = _get_lp_mc_ratio(liquidity_usd, market_cap)
         rugcheck_assessment = _get_rugcheck_assessment(score_normalised)
-        
+         
         risk_lines = []
         for i, risk in enumerate(risks[:5]): # Show top 5 risks
             r_level = risk.get('level', 'info')
             emoji = "❌" if r_level == 'danger' else "⚠️" if r_level == 'warn' else "ℹ️"
-            risk_lines.append(f"  {emoji} {risk.get('name')}")
+            risk_lines.append(f"  {emoji} {risk.get('description')}")
         if len(risks) > 5:
             risk_lines.append(f"  ...and {len(risks) - 5} more risks")
             
@@ -328,11 +328,9 @@ async def format_alpha_alert(
 --- 📊 <b>Volume & Holders</b> ---
 <b>Buy/Sell (24h):</b> {_format_pct(buy_pct)} / {_format_pct(sell_pct)}
 <b>Total Holders:</b> {holder_count:,}
-<b>Top 3 Holders:</b> {_format_pct(top3_pct)}
-<b>Top 10 Holders:</b> {_format_pct(top10_pct)}
 
 --- 🛡️ <b>Safety Check</b> ---
-<b>RugCheck Score:</b> {rugcheck_assessment}
+<b>Score:</b> {rugcheck_assessment}
 <b>LP Locked:</b> {_format_pct(lp_locked_pct)}
 <b>Mint Authority:</b> {'RENOUNCED ✅' if not mint_authority else 'ACTIVE ❌'}
 <b>Freeze Authority:</b> {'RENOUNCED ✅' if not freeze_authority else 'ACTIVE ❌'}
@@ -341,7 +339,7 @@ async def format_alpha_alert(
 {risk_str}
 
 --- 🔗 <b>Links</b> ---
-<a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a> | <a href="https://rugcheck.xyz/tokens/{mint}">RugCheck</a>
+<a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>
 """
         
         # 7. Create initial state for storage

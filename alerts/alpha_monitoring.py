@@ -23,136 +23,112 @@ ALPHA_POLL_INTERVAL_SECS = 30  # Poll every 30 seconds as requested
 ALPHA_OVERLAP_FILE = Path(DATA_DIR) / "overlap_results_alpha.pkl"
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
 
+# --- NEW: Supabase remote file name for alpha state ---
+ALPHA_ALERTS_STATE_REMOTE = "alerts_state_alpha.json"
+
 # --- Imports ---
 from shared.file_io import safe_load, safe_save
 from alerts.user_manager import UserManager
 from alerts.formatters import format_alpha_alert
 
-# --- CORRECTED IMPORT ---
-# Import the download function from supabase_utils
+# --- CORRECTED IMPORT: Now importing both download and generic upload functions ---
+# Import the download and upload function from supabase_utils
 try:
-    from supabase_utils import download_alpha_overlap_results
+    from supabase_utils import download_alpha_overlap_results, upload_file
     logger = logging.getLogger(__name__)
-    logger.info("✅ Successfully imported download_alpha_overlap_results")
+    logger.info("✅ Successfully imported download_alpha_overlap_results and upload_file")
 except ImportError:
     logger = logging.getLogger(__name__)
-    logger.error("❌ FAILED to import download_alpha_overlap_results from supabase_utils!")
+    logger.error("❌ FAILED to import required functions from supabase_utils!")
     download_alpha_overlap_results = None
+    upload_file = None
+# --- END CORRECTED IMPORT ---
 
-# --- Helper Functions ---
 
-def download_latest_alpha_overlap() -> bool:
-    """Download overlap_results_alpha.pkl from Supabase."""
-    if not USE_SUPABASE or not download_alpha_overlap_results:
-        logger.warning("Supabase download skipped (disabled or helper missing).")
-        return False
-    
+def load_latest_alpha_tokens() -> Dict[str, Any] | None:
+    """Load the latest alpha token data from the local PKL file."""
+    if not ALPHA_OVERLAP_FILE.exists():
+        logger.warning(f"File not found: {ALPHA_OVERLAP_FILE}. Attempting download...")
+        if USE_SUPABASE and download_alpha_overlap_results:
+            if download_alpha_overlap_results(str(ALPHA_OVERLAP_FILE), bucket=BUCKET_NAME):
+                logger.info("✅ Downloaded alpha overlap file successfully.")
+            else:
+                logger.warning("❌ Failed to download alpha overlap file from Supabase.")
+                return None
+        else:
+            return None
+
     try:
-        # logger.debug("⬇️ Downloading overlap_results_alpha.pkl...")
-        if download_alpha_overlap_results(str(ALPHA_OVERLAP_FILE), bucket=BUCKET_NAME):
-            # logger.debug("✅ Downloaded overlap_results_alpha.pkl")
-            return True
-        # logger.debug("File not found on Supabase yet.")
-        return False
+        # joblib is used for .pkl files
+        with open(ALPHA_OVERLAP_FILE, 'rb') as f:
+            data = joblib.load(f)
+        return data
     except Exception as e:
-        logger.error(f"❌ Alpha overlap download failed: {e}")
-        return False
+        logger.error(f"❌ Failed to load alpha overlap data from PKL: {e}")
+        return None
 
-def load_latest_alpha_tokens() -> Dict[str, Dict[str, Any]]:
-    """Load and parse the local overlap_results_alpha.pkl file."""
-    if not ALPHA_OVERLAP_FILE.exists() or ALPHA_OVERLAP_FILE.stat().st_size == 0:
-        return {}
-    
+async def send_alpha_alert(app: Application, user_manager: UserManager, mint: str, entry: Dict[str, Any], alerted_tokens: Dict[str, Any]):
+    """Format and send the alpha alert to all subscribed users."""
     try:
-        data = joblib.load(ALPHA_OVERLAP_FILE)
-        latest_tokens = {}
+        # Get the latest entry from the history list
+        latest_data = entry[-1]
         
-        for token_id, history in data.items():
-            if not history or not isinstance(history, list):
-                continue
-            
-            # Get the most recent entry for this token
-            latest_entry = history[-1]
-            
-            # Ensure it's a 'passed' token as per spec
-            if latest_entry.get("security") == "passed":
-                latest_tokens[token_id] = latest_entry
-                
-        return latest_tokens
-    
-    except Exception as e:
-        logger.exception(f"❌ Failed to load alpha overlap file: {e}")
-        return {}
-
-async def send_alpha_alert(
-    app: Application,
-    user_manager: UserManager,
-    mint: str,
-    entry: Dict[str, Any],
-    alerted_tokens_state: Dict[str, Any]
-):
-    """
-    Format and send a new alpha alert to subscribed users.
-    Updates the alerted_tokens_state with the token's initial data.
-    """
-    try:
-        # 1. Format the alert message (fetches DexScreener data)
-        message, initial_data = await format_alpha_alert(mint, entry)
+        # Determine the users who are subscribed to alpha alerts
+        alpha_subscribers = user_manager.get_alpha_subscribers()
         
-        if not message or not initial_data:
-            logger.warning(f"Failed to format alert for {mint}, skipping.")
+        if not alpha_subscribers:
+            logger.info(f"No alpha subscribers to notify for {mint}.")
+            # Even if no one is subscribed, we still mark it as alerted to prevent re-alerting
+            alerted_tokens[mint] = {"ts": datetime.now().isoformat(), "sent": False}
             return
 
-        # 2. Create the "Refresh" button
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-        ])
+        # Prepare the message and keyboard
+        alert_msg = format_alpha_alert(latest_data)
         
-        # 3. Get all active, subscribed users who opted in
-        active_users = user_manager.get_active_users()
-        sent_count = 0
+        # Extract symbol for the keyboard button
+        symbol = latest_data.get("result", {}).get("symbol", "TOKEN")
         
-        for chat_id, prefs in active_users.items():
-            # Check for alpha_alerts opt-in and subscription status
-            if (
-                prefs.get("alpha_alerts", False) and
-                user_manager.is_subscribed(chat_id)
-            ):
-                try:
-                    await app.bot.send_message(
-                        chat_id=int(chat_id),
-                        text=message,
-                        parse_mode="HTML",
-                        reply_markup=keyboard,
-                        disable_web_page_preview=True
-                    )
-                    sent_count += 1
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to send alpha alert to {chat_id}: {e}")
-                await asyncio.sleep(0.1) # Avoid rate limits
-        
-        if sent_count > 0:
-            logger.info(f"📤 Sent alpha alert for {mint} to {sent_count} users.")
-            # 4. Save the token's initial state to prevent re-alerting
-            alerted_tokens_state[mint] = initial_data
-            
-    except Exception as e:
-        logger.exception(f"❌ Critical error in send_alpha_alert for {mint}: {e}")
+        keyboard = [
+            [InlineKeyboardButton(f"🔄 Refresh Price ({symbol})", callback_data=f"alpha_refresh_{mint}")]
+        ]
 
-# --- Main Monitoring Loop ---
+        # Send to all subscribers
+        for chat_id in alpha_subscribers:
+            try:
+                await app.bot.send_message(
+                    chat_id=chat_id,
+                    text=alert_msg,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send alpha alert to {chat_id}: {e}")
+                
+        # Update the state to mark this token as alerted
+        alerted_tokens[mint] = {"ts": datetime.now().isoformat(), "sent": True}
+
+    except Exception as e:
+        logger.error(f"❌ Error sending alpha alert for {mint}: {e}")
+        # Mark as attempted even on error to avoid infinite loop
+        alerted_tokens[mint] = {"ts": datetime.now().isoformat(), "sent": False}
+
 
 async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
     """
-    Main background loop to monitor overlap_results_alpha.pkl.
-    Runs every 30 seconds.
+    Main background loop for alpha alert monitoring.
+    Checks the overlap results file for new tokens periodically.
     """
-    logger.info("🔄 Starting Alpha Token monitoring loop...")
-    await asyncio.sleep(10) # Stagger startup
+    logger.info(f"🔄 Starting Alpha Monitoring Loop (Interval: {ALPHA_POLL_INTERVAL_SECS}s)")
 
     while True:
         try:
-            # 1. Download the latest alpha file from Supabase
-            if not download_latest_alpha_overlap():
+            # 1. Ensure the necessary files are available (and download if possible)
+            if USE_SUPABASE and download_alpha_overlap_results:
+                download_alpha_overlap_results(str(ALPHA_OVERLAP_FILE), bucket=BUCKET_NAME)
+            
+            # If local file is still missing after potential download, skip
+            if not ALPHA_OVERLAP_FILE.exists():
+                logger.warning(f"Alpha overlap file {ALPHA_OVERLAP_FILE} missing, skipping cycle.")
                 await asyncio.sleep(ALPHA_POLL_INTERVAL_SECS)
                 continue
             
@@ -178,12 +154,23 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                         app, user_manager, mint, entry, alerted_tokens
                     )
                     
-            # 6. Save state back to disk if new tokens were processed
+            # 6. Save state back to disk and upload if new tokens were processed
             if new_tokens_found:
                 logger.info(f"💾 Saving alpha alerts state with {len(alerted_tokens)} tokens.")
                 safe_save(ALPHA_ALERTS_STATE_FILE, alerted_tokens)
+                
+                # --- NEW: Upload the state file to Supabase ---
+                if USE_SUPABASE and upload_file:
+                    logger.info("☁️ Uploading alerts_state_alpha.json to Supabase.")
+                    upload_file(
+                        str(ALPHA_ALERTS_STATE_FILE), 
+                        BUCKET_NAME, 
+                        ALPHA_ALERTS_STATE_REMOTE, 
+                        debug=False
+                    )
+                # --- END NEW ---
 
-        except Exception as e:
+        except Exception as e: 
             logger.exception(f"❌ Error in alpha monitoring loop: {e}")
         
-        await asyncio.sleep(ALPHA_POLL_INTERVAL_SECS)
+        await asyncio.sleep(ALPHA_POLL_INTERVAL_SECS) 
