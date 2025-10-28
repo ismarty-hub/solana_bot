@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-alerts/user_manager.py - User management and preferences
+alerts/user_manager.py - User management and preferences (PROPERLY FIXED)
+
+Key fix: get_alpha_subscribers() now has verbose logging to debug the issue
 """
 
 import logging
@@ -10,6 +12,8 @@ from typing import Dict, Any, List
 
 from shared.file_io import safe_load, safe_save
 from config import ALL_GRADES, ADMIN_USER_ID, USE_SUPABASE
+
+logger = logging.getLogger(__name__)
 
 
 class UserManager:
@@ -21,38 +25,89 @@ class UserManager:
 
     @staticmethod
     def now_iso():
-        """Return current UTC time in ISO format."""
+        """Return current UTC time in ISO format (Z-suffixed)."""
         return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
+    def _persist_prefs(self, prefs: Dict[str, Any]):
+        """Helper to save prefs with logging."""
+        try:
+            safe_save(self.prefs_file, prefs)
+        except Exception:
+            logger.exception("Failed to persist prefs")
+
+    def _normalize_user_record(self, chat_id: str, user: Dict[str, Any], prefs: Dict[str, Any]) -> None:
+        """
+        Normalize legacy user records in-place.
+        """
+        modified = False
+
+        # Ensure modes exists and is a list
+        if "modes" not in user or not isinstance(user.get("modes"), list):
+            user["modes"] = user.get("modes") or ["alerts"]
+            modified = True
+
+        # Legacy fix: if alpha was placed in modes, migrate it to the boolean flag
+        if "alpha_alerts" in user.get("modes", []):
+            logger.info(f"🔧 Migrating legacy alpha_alerts from modes for user {chat_id}")
+            try:
+                user["modes"] = [m for m in user.get("modes", []) if m != "alpha_alerts"]
+                if not user["modes"]:
+                    user["modes"] = ["alerts"]
+                user["alpha_alerts"] = True
+                modified = True
+            except Exception:
+                logger.exception("Failed to migrate alpha_alerts from modes")
+
+        # Ensure alpha_alerts boolean exists
+        if "alpha_alerts" not in user:
+            user["alpha_alerts"] = False
+            modified = True
+
+        # Ensure 'subscribed' key exists
+        if "subscribed" not in user:
+            user["subscribed"] = False
+            modified = True
+
+        # Ensure 'active' key exists
+        if "active" not in user:
+            user["active"] = user.get("active", False)
+            modified = True
+
+        if modified:
+            prefs[chat_id] = user
+            self._persist_prefs(prefs)
+
     def get_user_prefs(self, chat_id: str) -> Dict[str, Any]:
-        """Get user preferences, creating default entry if not found."""
+        """Get user preferences, creating a default entry if not found."""
         prefs = safe_load(self.prefs_file, {})
         user = prefs.get(chat_id)
 
         if user:
-            # Ensure 'modes' key exists for backward compatibility, defaulting to both
-            if "modes" not in user or not user["modes"]:
-                user["modes"] = ["alerts", "papertrade"] if user.get("active") else ["alerts"]
-                self.update_user_prefs(chat_id, {"modes": user["modes"]})
-            return user
+            try:
+                self._normalize_user_record(chat_id, user, prefs)
+            except Exception:
+                logger.exception(f"Error normalizing prefs for {chat_id}")
+            return prefs.get(chat_id)
 
         # Create default user entry
+        now = self.now_iso()
         prefs[chat_id] = {
             "grades": [],
-            "created_at": self.now_iso(),
-            "updated_at": self.now_iso(),
+            "created_at": now,
+            "updated_at": now,
             "active": False,
-            "subscribed": None,
+            "subscribed": False,
             "total_alerts_received": 0,
             "last_alert_at": None,
             "expires_at": None,
-            "modes": ["alerts"]  # Default mode for new users
+            "modes": ["alerts"],
+            "alpha_alerts": False
         }
-        safe_save(self.prefs_file, prefs)
+        self._persist_prefs(prefs)
         return prefs[chat_id]
 
     def update_user_prefs(self, chat_id: str, updates: Dict[str, Any]) -> bool:
-        """Update user preferences."""
+        """Update user preferences and persist safely."""
         try:
             prefs = safe_load(self.prefs_file, {})
 
@@ -62,58 +117,129 @@ class UserManager:
                     "created_at": self.now_iso(),
                     "active": True,
                     "total_alerts_received": 0,
-                    "modes": ["alerts"]
+                    "modes": ["alerts"],
+                    "alpha_alerts": False,
+                    "subscribed": False
                 }
+
+            # Avoid accidentally placing alpha_alerts inside modes
+            if "modes" in updates and isinstance(updates.get("modes"), list):
+                cleaned_modes = [m for m in updates["modes"] if m != "alpha_alerts"]
+                updates["modes"] = cleaned_modes or ["alerts"]
 
             prefs[chat_id].update(updates)
             prefs[chat_id]["updated_at"] = self.now_iso()
-            safe_save(self.prefs_file, prefs)
+            self._persist_prefs(prefs)
+
+            logger.info(f"📝 Updated prefs for {chat_id}: {updates}")
+
             return True
 
         except Exception as e:
-            logging.exception(f"Failed to update user prefs for {chat_id}: {e}")
+            logger.exception(f"Failed to update user prefs for {chat_id}: {e}")
             return False
 
     def set_modes(self, chat_id: str, modes: List[str]) -> bool:
-        """
-        Sets a user's active modes (e.g., ['alerts', 'papertrade']).
-        Ensures at least one mode is active, defaulting to 'alerts'.
-        """
+        """Sets a user's active modes."""
         valid_modes = {"alerts", "papertrade"}
-        # Ensure modes are valid and there are no duplicates
         cleaned_modes = sorted(list(set(m for m in modes if m in valid_modes)))
-        
-        # If the list is empty after cleaning (e.g., invalid input), default to alerts
+
         if not cleaned_modes:
             cleaned_modes = ["alerts"]
-            
+
         return self.update_user_prefs(chat_id, {"modes": cleaned_modes})
 
+    def get_alpha_subscribers(self) -> List[str]:
+        """
+        Get a list of chat_ids for users who are:
+        1. Active
+        2. Have valid subscription (using is_subscribed which checks expiry)
+        3. Have alpha_alerts preference set to True
+        
+        WITH VERBOSE DEBUGGING
+        """
+        prefs = safe_load(self.prefs_file, {})
+        alpha_subscribers: List[str] = []
+
+        logger.info(f"🔍 Checking alpha subscribers from {len(prefs)} total users...")
+        logger.info(f"📋 Full prefs data: {prefs}")  # Log everything
+
+        for chat_id, user in prefs.items():
+            logger.info(f"🔍 Examining user {chat_id}")
+            logger.info(f"📋 User data: {user}")
+            
+            # Normalize legacy records on-the-fly
+            try:
+                if "alpha_alerts" not in user and "modes" in user and "alpha_alerts" in user.get("modes", []):
+                    logger.info(f"🔧 Auto-migrating alpha_alerts for user {chat_id}")
+                    user["alpha_alerts"] = True
+                    user["modes"] = [m for m in user.get("modes", []) if m != "alpha_alerts"]
+                    prefs[chat_id] = user
+                    self._persist_prefs(prefs)
+            except Exception:
+                logger.exception(f"Failed to auto-migrate alpha_alerts for {chat_id}")
+
+            # Check all required conditions with verbose logging
+            is_active = user.get("active", False)
+            logger.info(f"  ✓ is_active: {is_active}")
+            
+            has_alpha_pref = user.get("alpha_alerts", False)
+            logger.info(f"  ✓ has_alpha_pref: {has_alpha_pref}")
+            
+            # Check subscription with detailed logging
+            is_subscribed = self.is_subscribed(chat_id)
+            logger.info(f"  ✓ is_subscribed: {is_subscribed}")
+
+            # Final decision
+            if is_active and has_alpha_pref and is_subscribed:
+                alpha_subscribers.append(chat_id)
+                logger.info(f"✅ ADDED {chat_id} to alpha subscribers")
+            else:
+                # Log why user was excluded
+                reasons = []
+                if not is_active:
+                    reasons.append("NOT ACTIVE")
+                if not has_alpha_pref:
+                    reasons.append("alpha_alerts=False")
+                if not is_subscribed:
+                    reasons.append("NOT SUBSCRIBED/EXPIRED")
+                logger.warning(f"❌ User {chat_id} EXCLUDED: {', '.join(reasons)}")
+
+        # Log final results
+        if not alpha_subscribers:
+            logger.warning("⚠️ get_alpha_subscribers found 0 users.")
+        else:
+            logger.info(
+                f"✅ get_alpha_subscribers found {len(alpha_subscribers)} users: {', '.join(alpha_subscribers)}"
+            )
+
+        return alpha_subscribers
+
     def enable_papertrade_mode(self, chat_id: str) -> bool:
-        """Adds 'papertrade' to a user's modes without removing others."""
+        """Adds 'papertrade' to a user's modes."""
         user_prefs = self.get_user_prefs(chat_id)
         modes = set(user_prefs.get("modes", ["alerts"]))
         modes.add("papertrade")
         return self.set_modes(chat_id, list(modes))
 
     def disable_papertrade_mode(self, chat_id: str) -> bool:
-        """Removes 'papertrade' from a user's modes, ensuring 'alerts' remains if it's the only one."""
+        """Removes 'papertrade' from a user's modes."""
         user_prefs = self.get_user_prefs(chat_id)
         modes = set(user_prefs.get("modes", ["alerts"]))
         modes.discard("papertrade")
         return self.set_modes(chat_id, list(modes))
 
     def get_trading_users(self) -> List[str]:
-        """Get a list of chat_ids for users with papertrade mode enabled."""
+        """Get users with papertrade mode enabled."""
         prefs = safe_load(self.prefs_file, {})
         trading_users = []
         for chat_id, user in prefs.items():
             if user.get("active") and "papertrade" in user.get("modes", []):
                 trading_users.append(chat_id)
         return trading_users
-        
+
     def get_alerting_users(self) -> Dict[str, Any]:
-        """Get a dictionary of users with alerts mode enabled."""
+        """Get users with alerts mode enabled."""
         prefs = safe_load(self.prefs_file, {})
         alerting_users = {}
         for chat_id, user in prefs.items():
@@ -122,11 +248,11 @@ class UserManager:
         return alerting_users
 
     def deactivate_user(self, chat_id: str) -> bool:
-        """Deactivate a user and clear their modes."""
+        """Deactivate a user."""
         return self.update_user_prefs(chat_id, {
             "active": False,
             "deactivated_at": self.now_iso(),
-            "modes": [] # Clear modes on stop
+            "modes": []
         })
 
     def activate_user(self, chat_id: str) -> bool:
@@ -173,7 +299,7 @@ class UserManager:
             safe_save(self.stats_file, stats)
 
         except Exception as e:
-            logging.exception(f"Failed to update stats for {chat_id}: {e}")
+            logger.exception(f"Failed to update stats for {chat_id}: {e}")
 
     def get_all_stats(self) -> Dict[str, Any]:
         """Get platform-wide statistics."""
@@ -199,17 +325,22 @@ class UserManager:
         }
 
     def mark_notified(self, chat_id: str):
-        """Mark that an expired user has been notified this month."""
+        """Mark that an expired user has been notified."""
         prefs = safe_load(self.prefs_file, {})
         if chat_id in prefs:
             prefs[chat_id]["last_notified"] = self.now_iso()
-            safe_save(self.prefs_file, prefs)
+            self._persist_prefs(prefs)
 
             if USE_SUPABASE:
-                # ✅ --- FIX: Call the new, correct upload function ---
-                from alerts.monitoring import upload_all_bot_data_to_supabase
-                upload_all_bot_data_to_supabase()
-                # ✅ --- END FIX ---
+                try:
+                    from alerts.monitoring import upload_all_bot_data_to_supabase
+                    upload_all_bot_data_to_supabase()
+                except Exception:
+                    try:
+                        from supabase_utils import upload_all_bot_data_to_supabase
+                        upload_all_bot_data_to_supabase()
+                    except Exception:
+                        logger.exception("Failed to upload to Supabase in mark_notified")
 
     def add_user_with_expiry(self, chat_id: str, days_valid: int) -> str:
         """Add or update a user with subscription expiry."""
@@ -226,82 +357,103 @@ class UserManager:
                     "grades": ALL_GRADES.copy(),
                     "created_at": now,
                     "total_alerts_received": 0,
-                    "modes": ["alerts", "papertrade"] # Default to both for new subscribers
+                    "modes": ["alerts", "papertrade"]
                 }
 
-            # Update user data
             prefs[chat_id].update({
                 "updated_at": now,
                 "expires_at": expiry_date,
                 "active": True,
                 "subscribed": True,
-                "modes": ["alerts", "papertrade"]
+                "alpha_alerts": False
             })
 
-            safe_save(self.prefs_file, prefs)
-            logging.info(f"✅ Saved user {chat_id} with subscribed=True, expires_at={expiry_date}")
+            self._persist_prefs(prefs)
+            logger.info(f"✅ Saved user {chat_id} with subscribed=True, expires_at={expiry_date}")
 
             verify_prefs = safe_load(self.prefs_file, {})
             verify_user = verify_prefs.get(chat_id, {})
-            logging.info(f"🔍 Verification - User {chat_id}: subscribed={verify_user.get('subscribed')}, active={verify_user.get('active')}")
+            logger.info(f"🔍 Verification - User {chat_id}: subscribed={verify_user.get('subscribed')}, active={verify_user.get('active')}")
 
             if USE_SUPABASE:
-                # ✅ --- FIX: Call the new, correct upload function ---
-                from alerts.monitoring import upload_all_bot_data_to_supabase
-                upload_all_bot_data_to_supabase()
-                # ✅ --- END FIX ---
+                try:
+                    from alerts.monitoring import upload_all_bot_data_to_supabase
+                    upload_all_bot_data_to_supabase()
+                except Exception:
+                    try:
+                        from supabase_utils import upload_all_bot_data_to_supabase
+                        upload_all_bot_data_to_supabase()
+                    except Exception:
+                        logger.exception("Failed to upload to Supabase in add_user_with_expiry")
 
             return expiry_date
 
         except Exception as e:
-            logging.exception(f"❌ Error in add_user_with_expiry for {chat_id}: {e}")
+            logger.exception(f"❌ Error in add_user_with_expiry for {chat_id}: {e}")
             raise
 
     def is_subscription_expired(self, chat_id: str) -> bool:
-        """Check if a user's subscription has expired (admin never expires)."""
-        if ADMIN_USER_ID and str(chat_id) == ADMIN_USER_ID:
+        """Check if a user's subscription has expired."""
+        logger.info(f"🔍 Checking expiry for {chat_id}")
+        
+        if ADMIN_USER_ID and str(chat_id) == str(ADMIN_USER_ID):
+            logger.info(f"  ✓ User {chat_id} is ADMIN - never expires")
             return False
 
         prefs = safe_load(self.prefs_file, {})
-        user = prefs.get(chat_id)
+        user = prefs.get(str(chat_id))
 
         if not user:
+            logger.warning(f"  ❌ User {chat_id} not found in prefs")
             return True
 
         expires_at = user.get("expires_at")
+        logger.info(f"  ℹ️ expires_at: {expires_at}")
+        
         if not expires_at:
+            logger.info(f"  ✓ No expiry set - treating as valid")
             return False
 
         try:
             expiry_date = datetime.fromisoformat(expires_at.rstrip("Z"))
-            return datetime.utcnow() > expiry_date
+            now = datetime.utcnow()
+            is_expired = now > expiry_date
+            logger.info(f"  ℹ️ Expiry: {expiry_date}, Now: {now}, Expired: {is_expired}")
+            return is_expired
         except Exception as e:
-            logging.warning(f"⚠️ Could not parse expiry for {chat_id}: {e}")
+            logger.warning(f"  ⚠️ Could not parse expiry for {chat_id}: {e}")
             return False
 
     def is_subscribed(self, chat_id: str) -> bool:
-        """Check if a user has a valid subscription."""
-        if ADMIN_USER_ID and str(chat_id) == ADMIN_USER_ID:
+        """Check if a user has a valid subscription - WITH VERBOSE LOGGING."""
+        logger.info(f"🔍 is_subscribed() called for {chat_id}")
+        
+        if ADMIN_USER_ID and str(chat_id) == str(ADMIN_USER_ID):
+            logger.info(f"  ✅ User {chat_id} is ADMIN - auto-subscribed")
             return True
 
         prefs = safe_load(self.prefs_file, {})
         user = prefs.get(str(chat_id))
 
         if not user:
-            logging.debug(f"User {chat_id} not found in preferences")
+            logger.warning(f"  ❌ User {chat_id} NOT FOUND in preferences")
             return False
 
-        if user.get("subscribed") is None:
-            logging.debug(f"User {chat_id} subscription status not set")
+        subscribed_flag = user.get("subscribed")
+        logger.info(f"  ℹ️ subscribed flag: {subscribed_flag}")
+        
+        if subscribed_flag is None:
+            logger.warning(f"  ❌ User {chat_id} subscription status NOT SET")
             return False
 
-        if not user.get("subscribed", False):
-            logging.debug(f"User {chat_id} not subscribed")
+        if not subscribed_flag:
+            logger.warning(f"  ❌ User {chat_id} subscribed=False")
             return False
 
-        if self.is_subscription_expired(str(chat_id)):
-            logging.debug(f"User {chat_id} subscription expired")
+        is_expired = self.is_subscription_expired(str(chat_id))
+        if is_expired:
+            logger.warning(f"  ❌ User {chat_id} subscription EXPIRED")
             return False
 
-        logging.debug(f"User {chat_id} subscription valid")
+        logger.info(f"  ✅ User {chat_id} has VALID subscription")
         return True

@@ -75,17 +75,154 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Handle /alpha_subscribe command to opt-in to high-priority alpha alerts."""
     chat_id = str(update.effective_chat.id)
     
+    # Check subscription status
     if not user_manager.is_subscribed(chat_id):
         await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
         return
-        
-    # Set the user preference for alpha_alerts to True
-    user_manager.update_user_prefs(chat_id, {"alpha_alerts": True})
     
-    await update.message.reply_html(
-        "🚀 <b>Alpha Alerts Subscribed!</b>\n\n"
-        "You will now receive high-priority Alpha Alerts. Use /myalerts to confirm your setting."
+    # Get current preferences to check current state
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    already_subscribed = user_prefs.get("alpha_alerts", False)
+    
+    if already_subscribed:
+        await update.message.reply_html(
+            "ℹ️ <b>Already Subscribed!</b>\n\n"
+            "You are already receiving Alpha Alerts.\n"
+            "Use /myalerts to view your settings."
+        )
+        return
+    
+    # Set the user preference for alpha_alerts to True
+    success = user_manager.update_user_prefs(chat_id, {"alpha_alerts": True})
+    
+    if success:
+        # Verify the update
+        verify_prefs = user_manager.get_user_prefs(chat_id)
+        is_now_enabled = verify_prefs.get("alpha_alerts", False)
+        
+        if is_now_enabled:
+            logging.info(f"✅ User {chat_id} successfully subscribed to alpha alerts")
+            await update.message.reply_html(
+                "🚀 <b>Alpha Alerts Activated!</b>\n\n"
+                "✅ You will now receive high-priority Alpha Alerts for tokens with:\n"
+                "• Strong wallet overlap signals\n"
+                "• Concentrated holder patterns\n"
+                "• Critical timing indicators\n\n"
+                "<b>📊 What to expect:</b>\n"
+                "You'll get instant notifications when our system detects premium opportunities.\n\n"
+                "<i>Use /myalerts to confirm your settings</i>"
+            )
+        else:
+            logging.error(f"❌ User {chat_id} update succeeded but verification failed")
+            await update.message.reply_html(
+                "⚠️ <b>Update Issue</b>\n\n"
+                "The subscription was saved but couldn't be verified. Please try again or contact support."
+            )
+    else:
+        logging.error(f"❌ Failed to update alpha_alerts for user {chat_id}")
+        await update.message.reply_html(
+            "❌ <b>Failed to Subscribe</b>\n\n"
+            "There was an error updating your preferences. Please try again in a moment."
+        )
+
+
+async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /alpha_unsubscribe command to opt-out of alpha alerts."""
+    chat_id = str(update.effective_chat.id)
+    
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+    
+    # Get current preferences to check current state
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    currently_subscribed = user_prefs.get("alpha_alerts", False)
+    
+    if not currently_subscribed:
+        await update.message.reply_html(
+            "ℹ️ <b>Not Subscribed</b>\n\n"
+            "You are not currently receiving Alpha Alerts.\n"
+            "Use /alpha_subscribe to enable them."
+        )
+        return
+    
+    # Set the user preference for alpha_alerts to False
+    success = user_manager.update_user_prefs(chat_id, {"alpha_alerts": False})
+    
+    if success:
+        # Verify the update
+        verify_prefs = user_manager.get_user_prefs(chat_id)
+        is_now_disabled = not verify_prefs.get("alpha_alerts", False)
+        
+        if is_now_disabled:
+            logging.info(f"✅ User {chat_id} successfully unsubscribed from alpha alerts")
+            await update.message.reply_html(
+                "😴 <b>Alpha Alerts Disabled</b>\n\n"
+                "✅ You will no longer receive high-priority Alpha Alerts.\n\n"
+                "<i>You can re-enable them anytime with /alpha_subscribe</i>\n"
+                "<i>Use /myalerts to confirm your settings</i>"
+            )
+        else:
+            logging.error(f"❌ User {chat_id} update succeeded but verification failed")
+            await update.message.reply_html(
+                "⚠️ <b>Update Issue</b>\n\n"
+                "The unsubscribe was saved but couldn't be verified. Please try again or contact support."
+            )
+    else:
+        logging.error(f"❌ Failed to update alpha_alerts for user {chat_id}")
+        await update.message.reply_html(
+            "❌ <b>Failed to Unsubscribe</b>\n\n"
+            "There was an error updating your preferences. Please try again in a moment."
+        )
+
+
+async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /myalerts command, now shows alpha alert status clearly."""
+    chat_id = str(update.effective_chat.id)
+    
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+    
+    prefs = user_manager.get_user_prefs(chat_id)
+    stats = user_manager.get_user_stats(chat_id)
+
+    total_alerts = stats.get("alerts_received", 0)
+    last_alert = stats.get("last_alert_at")
+    last_alert_str = "Never" if not last_alert else f"<i>{last_alert[:10]}</i>"
+
+    # Check Alpha Alert Status
+    alpha_enabled = prefs.get("alpha_alerts", False)
+    alpha_status = "✅ <b>Enabled</b>" if alpha_enabled else "❌ <b>Disabled</b>"
+    
+    # Get mode status
+    from commands import get_mode_status_text  # Import if in separate file
+    modes_status = get_mode_status_text(prefs)
+    
+    msg = (
+        f"📊 <b>Your Alert Settings</b>\n\n"
+        f"<b>Active Modes:</b> {modes_status}\n"
+        f"<b>Subscribed Grades:</b> {', '.join(prefs.get('grades', ['Not Set']))}\n\n"
+        f"<b>🚀 Alpha Alerts:</b> {alpha_status}\n"
     )
+    
+    if alpha_enabled:
+        msg += f"<i>   You'll receive high-priority alpha signals</i>\n"
+    else:
+        msg += f"<i>   Use /alpha_subscribe to enable</i>\n"
+    
+    msg += (
+        f"\n<b>📈 Statistics:</b>\n"
+        f"<b>Total alerts received:</b> {total_alerts}\n"
+        f"<b>Last alert:</b> {last_alert_str}\n\n"
+        f"<b>💡 Quick Commands:</b>\n"
+        f"• /start - Change mode\n"
+        f"• /setalerts - Change grades\n"
+        f"• /alpha_subscribe - Enable alpha alerts\n"
+        f"• /alpha_unsubscribe - Disable alpha alerts"
+    )
+    
+    await update.message.reply_html(msg)
 
 async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /alpha_unsubscribe command to opt-out of alpha alerts."""
