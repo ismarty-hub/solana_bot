@@ -8,6 +8,7 @@ Features:
 - NO DUPLICATE ALERTS on bot restart (checks 'sent' flag)
 - Persistent state tracking across deployments (Now handled by monitoring.py)
 - ✅ FIXED: Only alerts on FIRST DETECTION, never re-alerts on redeploy
+- ✅ FIXED: Loads state ONCE to prevent re-alerts if file download fails
 """
 
 import asyncio
@@ -241,6 +242,14 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
     except Exception as e:
         logger.exception(f"❌ Error checking initial subscribers: {e}")
 
+    # ---
+    # ✅ FIX: Load state ONCE before the loop starts.
+    # This keeps the state in memory, preventing re-alerts even if the
+    # initial file load was empty or failed.
+    # ---
+    alerted_tokens = safe_load(ALPHA_ALERTS_STATE_FILE, {})
+    logger.info(f"📂 Loaded alpha alert state: {len(alerted_tokens)} tokens tracked")
+
     while True:
         try:
             # Download latest data from Supabase
@@ -261,9 +270,11 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 await asyncio.sleep(ALPHA_POLL_INTERVAL_SECS)
                 continue
 
-            # Load persistent state (which was downloaded on startup)
-            alerted_tokens = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-            logger.debug(f"📂 Loaded state for {len(alerted_tokens)} previously tracked tokens")
+            # ---
+            # ❌ BUGGY LINE REMOVED: Do not load state inside the loop
+            # alerted_tokens = safe_load(ALPHA_ALERTS_STATE_FILE, {})
+            # ---
+            logger.debug(f"Checking {len(latest_tokens)} tokens against {len(alerted_tokens)} tracked tokens...")
 
             new_tokens_found = False
             alerts_sent_this_cycle = 0
@@ -301,7 +312,7 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                         success = await send_alpha_alert(app, user_manager, mint, entry, alerted_tokens)
                         if success:
                             alerts_sent_this_cycle += 1
-                        new_tokens_found = True
+                        new_tokens_found = True # A change was made, so we should save
                     else:
                         # Alert was already sent successfully - skip
                         logger.debug(f"⏭️ SKIP {mint[:8]}... (alert already sent at {existing_state.get('ts')})")
