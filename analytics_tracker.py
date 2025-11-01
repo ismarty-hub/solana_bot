@@ -38,7 +38,7 @@ SIGNAL_DOWNLOAD_INTERVAL = 180  # Download signals every 3 minutes (in seconds)
 PRICE_CHECK_INTERVAL_NEW = 5    # 5 seconds for tokens <= 12 hours old
 PRICE_CHECK_INTERVAL_OLD = 240  # 4 minutes for tokens > 12 hours old
 TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
-TRACKING_DURATION_OLD = 336     # Track old tokens for 14 days (336 hours)
+TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days (168 hours) - CHANGED FROM 336
 
 # Retry Logic
 RETRY_TIMEOUT = 60              # Retry price fetching for 1 minute (in seconds)
@@ -678,8 +678,19 @@ async def update_active_token_prices():
                 if price is not None:
                     logger.info(f"Price recovery successful for {mint}!")
                     update_token_price(token_data, price)
+                else:
+                    # This will increment failure count or finalize
+                    handle_price_failure(token_data, error_type)
+
+    # --- 3. Handle tokens in retry mode ---
+    if tokens_to_retry:
+        logger.info(f"Retrying {len(tokens_to_retry)} tokens in retry window...")
+        for mint, token_data in tokens_to_retry.items():
+            price, error_type = await fetch_current_price(mint)
+            if price is not None:
+                logger.info(f"Retry successful for {mint}!")
+                update_token_price(token_data, price)
             else:
-                # This will increment failure count or finalize
                 handle_price_failure(token_data, error_type)
 
 # --- Analytics Generation ---
@@ -827,10 +838,10 @@ def generate_summary_stats(signal_type: str):
             tokens_for_period = all_time_tokens
         else:
             # Filter all_time tokens for the specific period
-            # We filter based on ENTRY TIME
+            # Filter based on COMPLETION TIME (tracking_completed_at)
             tokens_for_period = [
                 t for t in all_time_tokens 
-                if parse_ts(t["entry_time"]) >= start_date
+                if t.get("tracking_completed_at") and parse_ts(t["tracking_completed_at"]) >= start_date
             ]
             
         summary_data["timeframes"][period] = calculate_timeframe_stats(tokens_for_period)
@@ -1040,6 +1051,3 @@ if __name__ == "__main__":
         if http_session and not http_session.closed:
             asyncio.run(http_session.close())
         logger.info("Tracker stopped.")
-
-
-
