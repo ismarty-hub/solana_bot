@@ -7,6 +7,7 @@ Features:
 - Saves initial_state correctly for refresh functionality
 - NO DUPLICATE ALERTS on bot restart (checks 'sent' flag)
 - Persistent state tracking across deployments (Now handled by monitoring.py)
+- ✅ FIXED: Only alerts on FIRST DETECTION, never re-alerts on redeploy
 """
 
 import asyncio
@@ -30,10 +31,6 @@ logger = logging.getLogger(__name__)
 ALPHA_POLL_INTERVAL_SECS = 30
 ALPHA_OVERLAP_FILE = Path(DATA_DIR) / "overlap_results_alpha.pkl"
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
-# REMOVED: ALPHA_ALERTS_STATE_REMOTE (now handled by monitoring.py)
-
-# --- Track if we've downloaded state on startup ---
-# REMOVED: _state_downloaded_on_startup (now handled by bot.py on_startup)
 
 # --- Imports ---
 from shared.file_io import safe_load, safe_save
@@ -41,16 +38,11 @@ from alerts.user_manager import UserManager
 from alerts.formatters import _format_alpha_alert_async
 
 try:
-    # Only import what's needed for this file
     from supabase_utils import download_alpha_overlap_results
     logger.info("✅ Successfully imported download_alpha_overlap_results")
 except Exception:
     logger.exception("❌ FAILED to import required functions from supabase_utils!")
     download_alpha_overlap_results = None
-    # REMOVED: upload_file and download_file imports
-
-
-# REMOVED: download_alpha_state_from_supabase (now handled by monitoring.py)
 
 
 def load_latest_alpha_tokens() -> Dict[str, Any] | None:
@@ -97,7 +89,7 @@ async def send_alpha_alert(
     try:
         latest_data = entry[-1] if isinstance(entry, list) else entry
 
-        logger.info("🔍 Checking for alpha subscribers...")
+        logger.info("📋 Checking for alpha subscribers...")
         alpha_subscribers = user_manager.get_alpha_subscribers()
         logger.info(f"📊 Alpha subscribers check complete: {len(alpha_subscribers)} users")
 
@@ -140,7 +132,7 @@ async def send_alpha_alert(
             alert_msg = str(alert_msg)
 
         # Log a snippet to verify format
-        logger.info(f"📝 Message preview (first 200 chars): {alert_msg[:200]}")
+        logger.info(f"📄 Message preview (first 200 chars): {alert_msg[:200]}")
 
         symbol = alert_meta.get("symbol", "TOKEN") if alert_meta else "TOKEN"
         keyboard = [[InlineKeyboardButton(f"🔄 Refresh Price ({symbol})", callback_data=f"refresh_alpha:{mint}")]]
@@ -175,7 +167,7 @@ async def send_alpha_alert(
                             start = max(0, off - 40)
                             end = min(len(alert_msg), off + 40)
                             snippet = alert_msg[start:end]
-                            logger.warning(f"🔍 Parsing error near offset {off}: ...{snippet}...")
+                            logger.warning(f"📍 Parsing error near offset {off}: ...{snippet}...")
                         except Exception:
                             logger.debug("Could not extract snippet around offset")
 
@@ -233,14 +225,13 @@ async def send_alpha_alert(
 
 
 async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
-    """Main background loop for alpha alert monitoring with duplicate prevention."""
-    # global _state_downloaded_on_startup # No longer needed
+    """
+    Main background loop for alpha alert monitoring with duplicate prevention.
     
+    ✅ FIXED: Now properly tracks tokens on first detection WITHOUT sending alerts
+    until they meet criteria, preventing re-alerts on redeploy.
+    """
     logger.info(f"🔄 Starting Alpha Monitoring Loop (Interval: {ALPHA_POLL_INTERVAL_SECS}s)")
-
-    # ✅ CRITICAL: Download is now handled by bot.py on_startup
-    # REMOVED: Internal download logic
-    # if USE_SUPABASE and not _state_downloaded_on_startup: ...
 
     try:
         initial_subs = user_manager.get_alpha_subscribers()
@@ -280,12 +271,24 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
             for mint, entry in latest_tokens.items():
                 # Check if token exists in state
                 if mint not in alerted_tokens:
-                    # ✅ NEW TOKEN - Never seen before
-                    logger.info(f"🆕 NEW Alpha Token Detected: {mint}")
+                    # ✅ NEW TOKEN - Mark as tracked WITHOUT sending alert yet
+                    # This prevents re-alerts on redeploy when state is restored
+                    logger.info(f"🆕 NEW Alpha Token Detected (marking as tracked): {mint}")
+                    
+                    # Initialize state WITHOUT sending alert
+                    alerted_tokens[mint] = {
+                        "ts": datetime.now().isoformat(),
+                        "sent": False,  # Mark as not sent yet
+                        "first_seen": datetime.now().isoformat(),
+                        "reason": "first_detection_tracked"
+                    }
+                    new_tokens_found = True
+                    
+                    # Now attempt to send the alert
+                    logger.info(f"📢 Attempting to send first alert for {mint}...")
                     success = await send_alpha_alert(app, user_manager, mint, entry, alerted_tokens)
                     if success:
                         alerts_sent_this_cycle += 1
-                    new_tokens_found = True
                     
                 else:
                     # ✅ EXISTING TOKEN - Check if alert was previously sent
@@ -307,9 +310,6 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
             if new_tokens_found:
                 logger.info(f"💾 Saving alpha alerts state: {len(alerted_tokens)} tokens, {alerts_sent_this_cycle} sent this cycle")
                 safe_save(ALPHA_ALERTS_STATE_FILE, alerted_tokens)
-
-                # REMOVED: Internal upload logic
-                # The periodic sync in monitoring.py will handle uploading this file.
                 
             else:
                 logger.debug("No new alpha tokens this cycle")

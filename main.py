@@ -2,8 +2,8 @@
 """
 main.py - FastAPI entrypoint for Render deployment.
 It imports and runs the Telegram bot (from bot.py) in a background thread,
-and exposes HTTP endpoints for uptime pings and additional integrations
-(merged in from api.py).
+runs the analytics tracker continuously, and exposes HTTP endpoints for 
+uptime pings and additional integrations (merged in from api.py).
 """
 
 import logging
@@ -29,6 +29,9 @@ from alpha import run_pipeline
 # Import the bot module
 import bot
 
+# Import analytics tracker
+import analytics_tracker
+
 # ----------------------
 # Logging Setup
 # ----------------------
@@ -53,26 +56,31 @@ JOB_STATUS_DIR.mkdir(exist_ok=True)
 # In-memory map of job futures
 JOB_FUTURES: Dict[str, Any] = {}
 
-# Global variable to store the bot task
+# Global variables to store background tasks
 bot_task = None
+analytics_task = None
 
 # ----------------------
 # Lifespan context manager for startup/shutdown
 # ----------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage bot lifecycle with proper startup and shutdown."""
-    global bot_task
+    """Manage bot and analytics tracker lifecycle with proper startup and shutdown."""
+    global bot_task, analytics_task
 
     # Startup
     logger.info("🚀 Starting Telegram bot...")
-    # run bot.main() in background; it's expected to be async
     bot_task = asyncio.create_task(bot.main())
+    
+    logger.info("🚀 Starting Analytics Tracker...")
+    analytics_task = asyncio.create_task(analytics_tracker.main_loop())
 
     yield  # FastAPI runs here
 
     # Shutdown
-    logger.info("🛑 Shutting down Telegram bot...")
+    logger.info("🛑 Shutting down services...")
+    
+    # Shutdown bot
     if bot_task and not bot_task.done():
         bot_task.cancel()
         try:
@@ -81,16 +89,31 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Bot task cancelled successfully")
         except Exception as e:
             logger.error(f"Error during bot shutdown: {e}")
+    
+    # Shutdown analytics tracker
+    if analytics_task and not analytics_task.done():
+        analytics_task.cancel()
+        try:
+            await analytics_task
+        except asyncio.CancelledError:
+            logger.info("✅ Analytics tracker cancelled successfully")
+        except Exception as e:
+            logger.error(f"Error during analytics tracker shutdown: {e}")
+    
+    # Cleanup HTTP session from analytics tracker
+    if analytics_tracker.http_session and not analytics_tracker.http_session.closed:
+        await analytics_tracker.http_session.close()
+        logger.info("✅ Analytics tracker HTTP session closed")
 
 
 # ----------------------
 # FastAPI app setup
 # ----------------------
 app = FastAPI(
-    title="Solana Bot Service (with Trader ROI API)",
+    title="Solana Bot Service (with Trader ROI API & Analytics)",
     version="1.0.0",
     lifespan=lifespan,
-    description="Combined service running the Telegram bot and ROI analysis endpoints."
+    description="Combined service running the Telegram bot, analytics tracker, and ROI analysis endpoints."
 )
 
 # ----------------------
@@ -98,7 +121,7 @@ app = FastAPI(
 # ----------------------
 @app.api_route("/", methods=["GET", "HEAD"])
 async def root():
-    return {"message": "Solana Bot Service is running!"}
+    return {"message": "Solana Bot Service with Analytics is running!"}
 
 
 @app.head("/health")
@@ -106,15 +129,56 @@ async def root():
 async def health_check():
     """Endpoint for uptime monitoring tools like RobotPinger or UptimeRobot."""
     bot_status = "running" if bot_task and not bot_task.done() else "stopped"
+    analytics_status = "running" if analytics_task and not analytics_task.done() else "stopped"
+    
     # Basic job stats
     running_jobs = sum(1 for f in JOB_FUTURES.values() if not f.done()) if JOB_FUTURES else 0
+    
+    # Analytics tracker stats
+    active_tokens = len(analytics_tracker.active_tracking) if hasattr(analytics_tracker, 'active_tracking') else 0
+    
     return {
         "status": "ok",
-        "service": "Solana Bot + Trader ROI API",
+        "service": "Solana Bot + Trader ROI API + Analytics Tracker",
         "bot_status": bot_status,
+        "analytics_status": analytics_status,
         "running_jobs": running_jobs,
-        "details": "Bot and API running smoothly"
+        "active_tracking_tokens": active_tokens,
+        "details": "All services running smoothly"
     }
+
+
+@app.get("/analytics/status")
+async def analytics_status():
+    """Get detailed status of the analytics tracker."""
+    try:
+        active_tokens = analytics_tracker.active_tracking if hasattr(analytics_tracker, 'active_tracking') else {}
+        
+        # Group by signal type
+        discovery_count = sum(1 for t in active_tokens.values() if t.get("signal_type") == "discovery")
+        alpha_count = sum(1 for t in active_tokens.values() if t.get("signal_type") == "alpha")
+        
+        # Count by status
+        active_count = sum(1 for t in active_tokens.values() if t.get("status") == "active")
+        win_count = sum(1 for t in active_tokens.values() if t.get("status") == "win")
+        
+        return {
+            "status": "running" if analytics_task and not analytics_task.done() else "stopped",
+            "total_active_tokens": len(active_tokens),
+            "by_signal_type": {
+                "discovery": discovery_count,
+                "alpha": alpha_count
+            },
+            "by_status": {
+                "active": active_count,
+                "wins": win_count
+            },
+            "tokens": list(active_tokens.keys())[:10]  # Show first 10 tokens
+        }
+    except Exception as e:
+        logger.error(f"Error getting analytics status: {e}")
+        return {"status": "error", "message": str(e)}
+
 
 # ----------------------
 # Supabase upload helper (from api.py)
