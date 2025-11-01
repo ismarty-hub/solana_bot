@@ -34,11 +34,11 @@ import copy
 # --- Configuration Variables ---
 
 # Polling & Tracking
-SIGNAL_DOWNLOAD_INTERVAL = 180  # Download signals every 3 minutes (in seconds)
+SIGNAL_DOWNLOAD_INTERVAL = 60  # Download signals every 1 minutes (in seconds)
 PRICE_CHECK_INTERVAL_NEW = 5    # 5 seconds for tokens <= 12 hours old
 PRICE_CHECK_INTERVAL_OLD = 240  # 4 minutes for tokens > 12 hours old
 TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
-TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days (168 hours) - CHANGED FROM 336
+TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days (168 hours) 
 
 # Retry Logic
 RETRY_TIMEOUT = 60              # Retry price fetching for 1 minute (in seconds)
