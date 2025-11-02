@@ -14,7 +14,8 @@ This script:
 5.  Tracks prices asynchronously (Jupiter -> Dexscreener) at intervals
     based on token age (5s for new, 4min for old).
 6.  Calculates ROI, ATH, and win/loss status (win >= 50% ROI).
-7.  Handles API failures with a 1-minute retry window.
+7.  Handles API failures with retry. Fatal errors (e.g., price=0)
+    finalize tracking. Network errors are retried until tracking duration ends.
 8.  Generates and uploads daily, summary (1d, 7d, 30d, all-time),
     and overall analytics to Supabase.
 9.  Resumes tracking from 'active_tracking.json' on restart.
@@ -41,7 +42,7 @@ TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
 TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days (168 hours) 
 
 # Retry Logic
-RETRY_TIMEOUT = 60              # Retry price fetching for 1 minute (in seconds)
+RETRY_TIMEOUT = 60              # (DEPRECATED) Retry price fetching for 1 minute (in seconds)
 RETRY_INTERVAL = 5              # Check every 5 seconds during retry
 
 # Supabase
@@ -393,8 +394,16 @@ async def fetch_current_price(mint: str) -> tuple[float | None, str]:
 
 # --- Core Tracking Logic ---
 
+# =================================================================
+# ===                  CORRECTED FUNCTION BELOW                 ===
+# =================================================================
+
 def handle_price_failure(token_data: dict, error_type: str):
-    """Handle a failed price fetch attempt."""
+    """
+    Handle a failed price fetch attempt.
+    Fatal errors finalize tracking.
+    Retryable errors are logged and will be retried by the main loop.
+    """
     now = get_now()
     mint = token_data["mint"]
     
@@ -408,20 +417,19 @@ def handle_price_failure(token_data: dict, error_type: str):
     token_data["consecutive_failures"] += 1
     
     if token_data["retry_start_time"] is None:
-        # Start the 1-minute retry window
+        # Start the retry "state"
         token_data["retry_start_time"] = to_iso(now)
-        logger.warning(f"Price fetch failed for {mint}. Starting 1-min retry window.")
+        logger.warning(f"Price fetch failed for {mint}. Entering retry state. Will retry every {RETRY_INTERVAL}s.")
     
-    retry_start = parse_ts(token_data["retry_start_time"])
+    # Update last_price_check to align with RETRY_INTERVAL
+    # This ensures the main loop retries it after 5s
+    token_data["last_price_check"] = to_iso(now)
     
-    if (now - retry_start).total_seconds() > RETRY_TIMEOUT:
-        # Retry window exhausted. Mark as loss and stop.
-        logger.error(f"Retry timeout for {mint}. Stopping tracking.")
-        token_data["status"] = "loss" if not token_data["hit_50_percent"] else "win"
-        finalize_token_tracking(mint, token_data)
-    else:
-        # Still within retry window. Will try again in RETRY_INTERVAL.
-        pass
+    # We NO LONGER finalize based on RETRY_TIMEOUT.
+    # The token will continue to be retried by the main loop
+    # until its tracking_end_time is reached.
+    logger.warning(f"Retryable error for {mint}. Fail count: {token_data['consecutive_failures']}. Will retry.")
+
 
 def update_token_price(token_data: dict, price: float):
     """Update a token's data with a new price."""
@@ -469,8 +477,15 @@ def finalize_token_tracking(mint: str, token_data: dict):
         token_data["status"] = "loss" # Never hit 50%
     
     token_data["tracking_completed_at"] = to_iso(get_now())
-    token_data["final_price"] = token_data["last_successful_price"]
-    token_data["final_roi"] = calculate_roi(token_data["entry_price"], token_data["final_price"])
+    
+    # Use last_successful_price as final_price
+    # If no successful price was ever found *after entry*, use entry price
+    final_price = token_data.get("last_successful_price", token_data["entry_price"])
+    if final_price is None:
+        final_price = 0.0 # Should not happen, but as a fallback
+        
+    token_data["final_price"] = final_price
+    token_data["final_roi"] = calculate_roi(token_data["entry_price"], final_price)
     
     # 1. Add to daily file
     entry_date_str = parse_ts(token_data["entry_time"]).strftime('%Y-%m-%d')
@@ -610,6 +625,10 @@ async def process_signals(signal_data: dict, signal_type: str):
     logger.info(f"Found {new_tokens_found} new tokens for {signal_type}.")
 
 
+# =================================================================
+# ===                  CORRECTED FUNCTION BELOW                 ===
+# =================================================================
+
 async def update_active_token_prices():
     """
     Check all active tokens, batch fetch prices for those needing
@@ -626,24 +645,29 @@ async def update_active_token_prices():
         # Check if tracking period ended
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
         if now > tracking_end_time:
+            logger.info(f"Tracking duration ended for {mint}.")
             finalize_token_tracking(mint, token_data)
             continue
 
         # Check if in retry-fail state
         if token_data["retry_start_time"] is not None:
-            retry_start = parse_ts(token_data["retry_start_time"])
-            if (now - retry_start).total_seconds() < RETRY_TIMEOUT:
-                # Still in retry window. Check on RETRY_INTERVAL
-                last_check = parse_ts(token_data["last_price_check"])
-                if (now - last_check).total_seconds() >= RETRY_INTERVAL:
-                    tokens_to_retry[mint] = token_data
-                continue # Skip normal check
-            else:
-                # Retry window expired, finalize
-                logger.error(f"Retry timeout for {mint} (detected in main loop). Stopping tracking.")
-                token_data["status"] = "loss" if not token_data["hit_50_percent"] else "win"
-                finalize_token_tracking(mint, token_data)
-                continue
+            # Token is in a retry state.
+            
+            # --- THIS BLOCK IS REMOVED ---
+            # We no longer finalize based on RETRY_TIMEOUT
+            # retry_start = parse_ts(token_data["retry_start_time"])
+            # if (now - retry_start).total_seconds() > RETRY_TIMEOUT:
+            #    logger.error(f"Retry timeout for {mint} (detected in main loop). Stopping tracking.")
+            #    token_data["status"] = "loss" if not token_data["hit_50_percent"] else "win"
+            #    finalize_token_tracking(mint, token_data)
+            #    continue
+            # --- END REMOVED BLOCK ---
+            
+            # We are in a retry state. Check on RETRY_INTERVAL
+            last_check = parse_ts(token_data["last_price_check"])
+            if (now - last_check).total_seconds() >= RETRY_INTERVAL:
+                tokens_to_retry[mint] = token_data
+            continue # Skip normal check
 
         # Check for normal price update
         last_check = parse_ts(token_data["last_price_check"])
@@ -691,9 +715,15 @@ async def update_active_token_prices():
                 logger.info(f"Retry successful for {mint}!")
                 update_token_price(token_data, price)
             else:
+                # This will log the retryable error or finalize on fatal
                 handle_price_failure(token_data, error_type)
 
+
 # --- Analytics Generation ---
+
+# =================================================================
+# ===                  CORRECTED FUNCTION BELOW                 ===
+# =================================================================
 
 def generate_daily_file(date_str: str, signal_type: str, completed_token: dict = None):
     """
@@ -725,27 +755,37 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
         else:
             logger.warning(f"Token {completed_token['mint']} already in daily file {remote_path}")
 
-    # 3. Recalculate daily summary
+    # 3. Recalculate daily summary (using consistent logic)
     tokens = daily_data.get("tokens", [])
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     
-    total_valid = len(wins) + len(losses)
-    total_ath_roi = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi = sum(t.get("final_roi", 0) for t in tokens)
+    # In a daily file, all tokens are finalized, so total_valid == len(tokens)
+    total_valid = len(tokens) 
+    
+    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
+    total_final_roi_all = sum(t.get("final_roi", 0) for t in tokens)
+    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
     
     daily_data["daily_summary"] = {
-        "total_tokens": len(tokens), # This includes 'excluded' if they ever get here
+        "total_tokens": total_valid,
         "wins": len(wins),
         "losses": len(losses),
-        "excluded": 0, # We are not tracking excluded tokens
+        "excluded": 0, # By definition of being in this file
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        "total_ath": total_ath_roi,
-        "average_ath": total_ath_roi / len(tokens) if tokens else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
-        "overall_roi": total_final_roi / len(tokens) if tokens else 0,
+        
+        "total_ath_all": total_ath_roi_all,
+        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
+        
+        "total_ath_wins": total_ath_roi_wins,
+        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
+        
+        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0), # Max ATH from *all*
+        
+        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
+        
         "win_loss_ratio": len(wins) / len(losses) if len(losses) > 0 else (len(wins) if len(wins) > 0 else 0),
-        "average_time_to_ath_minutes": sum(t.get("time_to_ath_minutes", 0) for t in tokens) / len(tokens) if tokens else 0,
+        "average_time_to_ath_minutes": sum(t.get("time_to_ath_minutes", 0) for t in tokens) / total_valid if total_valid else 0,
         "average_time_to_50_percent_minutes": sum(t.get("time_to_50_percent_minutes", 0) for t in wins) / len(wins) if wins else 0,
     }
 
@@ -782,38 +822,53 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     """Calculate the summary stats block for a list of tokens."""
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
-    # Excluded are tokens where entry price was not found, they are never tracked or saved.
-    excluded = [t for t in tokens if t.get("status") == "excluded"] 
+    # Excluded are tokens that never made it to tracking (e.g., no entry price)
+    # or tokens that are not yet finalized. We only count finalized tokens.
+    
+    valid_tokens = wins + losses
+    total_valid = len(valid_tokens)
+    
+    # We must account for tokens that might be passed in but aren't 'win' or 'loss'
+    # (e.g. if 'active' tokens were accidentally passed in)
+    excluded = [t for t in tokens if t.get("status") not in ["win", "loss"]] 
 
-    total_valid = len(wins) + len(losses)
-    total_ath_roi = sum(t.get("ath_roi", 0) for t in wins) # Only sum ATH from wins
-    total_final_roi = sum(t.get("final_roi", 0) for t in tokens)
+    # --- NEW, MORE ROBUST LOGIC ---
+    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in valid_tokens)
+    total_final_roi_all = sum(t.get("final_roi", 0) for t in valid_tokens)
+    
+    # Specific metric: total ATH from *wins*
+    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
     top_tokens = sorted(
-        wins, 
+        valid_tokens, # Sort all valid tokens, not just wins
         key=lambda x: x.get("ath_roi", 0), 
         reverse=True
     )
 
     return {
-        "total_tokens": total_valid, # Only count valid (non-excluded)
+        "total_tokens": total_valid,
         "wins": len(wins),
         "losses": len(losses),
         "excluded": len(excluded),
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        "total_ath": total_ath_roi,
-        "average_ath": total_ath_roi / len(wins) if len(wins) > 0 else 0, # Avg ATH of *wins*
-        "max_roi": max((t.get("ath_roi", 0) for t in wins), default=0),
-        "overall_roi": total_final_roi / total_valid if total_valid > 0 else 0, # Avg *final* ROI of all
-        "win_loss_ratio": len(wins) / len(losses) if len(losses) > 0 else (len(wins) if len(wins) > 0 else 0),
-        "average_time_to_ath_minutes": sum(t.get("time_to_ath_minutes", 0) for t in tokens) / total_valid if total_valid else 0,
-        "average_time_to_50_percent_minutes": sum(t.get("time_to_50_percent_minutes", 0) for t in wins) / len(wins) if wins else 0,
-        "top_tokens": top_tokens
-    }
+        
+        "total_ath_all": total_ath_roi_all, # Total ATH from all valid tokens
+        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0, # Avg ATH of all
+        
+        "total_ath_wins": total_ath_roi_wins, # Total ATH from *wins only*
+        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0, # Avg ATH of *wins only*
 
-# =================================================================
-# ===                  CORRECTED FUNCTION BELOW                 ===
-# =================================================================
+        "max_roi": max((t.get("ath_roi", 0) for t in valid_tokens), default=0), # Max ATH from *all*
+        
+        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0, # Avg *final* ROI of all
+        
+        "win_loss_ratio": len(wins) / len(losses) if len(losses) > 0 else (len(wins) if len(wins) > 0 else 0),
+        
+        "average_time_to_ath_minutes": sum(t.get("time_to_ath_minutes", 0) for t in valid_tokens) / total_valid if total_valid else 0,
+        "average_time_to_50_percent_minutes": sum(t.get("time_to_50_percent_minutes", 0) for t in wins) / len(wins) if wins else 0,
+        
+        "top_tokens": top_tokens[:10] # Limit to top 10
+    }
 
 def generate_summary_stats(signal_type: str):
     """Generate and upload summary stats for a single signal type."""
@@ -821,7 +876,7 @@ def generate_summary_stats(signal_type: str):
     now = get_now()
     
     # 1. Define the "all_time" start date
-    all_time_start_date = datetime(2025, 11, 1, tzinfo=timezone.utc)
+    all_time_start_date = datetime(2024, 11, 1, tzinfo=timezone.utc)
     
     # 2. Load ALL completed tokens *before* the loop
     all_time_tokens = load_tokens_in_range(signal_type, all_time_start_date, now)
@@ -861,7 +916,7 @@ def generate_summary_stats(signal_type: str):
         upload_file_to_supabase(local_path, remote_path)
 
 # =================================================================
-# ===                  END OF CORRECTED FUNCTION                ===
+# ===                  CORRECTED FUNCTION BELOW                 ===
 # =================================================================
 
 def generate_overall_analytics():
@@ -894,35 +949,48 @@ def generate_overall_analytics():
         total_tokens = disc["total_tokens"] + alph["total_tokens"]
         total_wins = disc["wins"] + alph["wins"]
         total_losses = disc["losses"] + alph["losses"]
-        total_valid = total_wins + total_losses
+        total_valid = total_tokens # Should be the same
         
-        # Weighted average for overall ROI
-        overall_roi = 0
-        if total_tokens > 0:
-            overall_roi = ((disc["overall_roi"] * disc["total_tokens"]) + 
-                           (alph["overall_roi"] * alph["total_tokens"])) / total_tokens
+        # Weighted average for average_final_roi
+        average_final_roi = 0
+        if total_valid > 0:
+            average_final_roi = ((disc["average_final_roi"] * disc["total_tokens"]) + 
+                               (alph["average_final_roi"] * alph["total_tokens"])) / total_valid
                            
-        # Weighted average for average ATH
-        avg_ath = 0
+        # Weighted average for average_ath_all
+        average_ath_all = 0
+        if total_valid > 0:
+            average_ath_all = ((disc["average_ath_all"] * disc["total_tokens"]) +
+                               (alph["average_ath_all"] * alph["total_tokens"])) / total_valid
+
+        # Weighted average for average_ath_wins
+        average_ath_wins = 0
         if total_wins > 0:
-            avg_ath = (disc["total_ath"] + alph["total_ath"]) / total_wins
+            # (total_ath_wins_disc + total_ath_wins_alph) / (total_wins_disc + total_wins_alph)
+            average_ath_wins = (disc["total_ath_wins"] + alph["total_ath_wins"]) / total_wins
 
         overall["timeframes"][period] = {
-            "total_tokens": total_tokens,
+            "total_tokens": total_valid,
             "wins": total_wins,
             "losses": total_losses,
             "excluded": disc["excluded"] + alph["excluded"],
             "success_rate": (total_wins / total_valid * 100) if total_valid > 0 else 0,
-            "total_ath": disc["total_ath"] + alph["total_ath"],
-            "average_ath": avg_ath,
+            
+            "total_ath_all": disc["total_ath_all"] + alph["total_ath_all"],
+            "average_ath_all": average_ath_all,
+            
+            "total_ath_wins": disc["total_ath_wins"] + alph["total_ath_wins"],
+            "average_ath_wins": average_ath_wins,
+            
             "max_roi": max(disc["max_roi"], alph["max_roi"]),
-            "overall_roi": overall_roi,
+            "average_final_roi": average_final_roi,
+            
             "win_loss_ratio": total_wins / total_losses if total_losses > 0 else (total_wins if total_wins > 0 else 0),
             "top_tokens": sorted(
                 disc["top_tokens"] + alph["top_tokens"], 
                 key=lambda x: x.get("ath_roi", 0), 
                 reverse=True
-            )
+            )[:10] # Limit to top 10
         }
 
     # Save and upload

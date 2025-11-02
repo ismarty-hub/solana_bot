@@ -1877,3 +1877,7 @@ AttributeError: 'NoneType' object has no attribute 'send'
 2025-11-01 10:11:14,473 - __main__ - INFO - Using temp directory: /tmp/analytics_tracker
 2025-11-01 10:11:14,473 - __main__ - CRITICAL - Missing SUPABASE_URL or SUPABASE_KEY env variables.
 2025-11-01 10:11:14,479 - __main__ - INFO - Tracker stopped.
+2025-11-03 00:13:19,023 - __main__ - INFO - Initializing Analytics Tracker...
+2025-11-03 00:13:19,023 - __main__ - INFO - Using temp directory: /tmp/analytics_tracker
+2025-11-03 00:13:19,023 - __main__ - CRITICAL - Missing SUPABASE_URL or SUPABASE_KEY env variables.
+2025-11-03 00:13:19,023 - __main__ - INFO - Tracker stopped.
