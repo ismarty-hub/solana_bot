@@ -811,16 +811,27 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
         "top_tokens": top_tokens
     }
 
+# =================================================================
+# ===                  CORRECTED FUNCTION BELOW                 ===
+# =================================================================
+
 def generate_summary_stats(signal_type: str):
     """Generate and upload summary stats for a single signal type."""
     logger.info(f"Generating summary stats for {signal_type}...")
     now = get_now()
     
+    # 1. Define the "all_time" start date
+    all_time_start_date = datetime(2025, 11, 1, tzinfo=timezone.utc)
+    
+    # 2. Load ALL completed tokens *before* the loop
+    all_time_tokens = load_tokens_in_range(signal_type, all_time_start_date, now)
+    
+    # 3. Define all timeframes
     timeframes = {
         "1_day": now - timedelta(days=1),
         "7_days": now - timedelta(days=7),
         "1_month": now - timedelta(days=30),
-        "all_time": datetime(2025, 11, 1, tzinfo=timezone.utc)
+        "all_time": all_time_start_date
     }
     
     summary_data = {
@@ -829,15 +840,12 @@ def generate_summary_stats(signal_type: str):
         "timeframes": {}
     }
     
-    all_time_tokens = []
-    
     for period, start_date in timeframes.items():
         if period == "all_time":
-            # Load all tokens from all daily files
-            all_time_tokens = load_tokens_in_range(signal_type, start_date, now)
+            # For "all_time", just use the full list we already loaded
             tokens_for_period = all_time_tokens
         else:
-            # Filter all_time tokens for the specific period
+            # For other periods, filter the *pre-loaded* all_time_tokens list
             # Filter based on COMPLETION TIME (tracking_completed_at)
             tokens_for_period = [
                 t for t in all_time_tokens 
@@ -851,6 +859,10 @@ def generate_summary_stats(signal_type: str):
     local_path = save_json(summary_data, remote_path)
     if local_path:
         upload_file_to_supabase(local_path, remote_path)
+
+# =================================================================
+# ===                  END OF CORRECTED FUNCTION                ===
+# =================================================================
 
 def generate_overall_analytics():
     """Combine discovery and alpha stats for overall summary."""
