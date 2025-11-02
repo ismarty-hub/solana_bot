@@ -51,7 +51,7 @@ TEMP_DIR = "/tmp/analytics_tracker"  # For temporary file storage
 # Analytics
 STATS_UPDATE_INTERVAL = 3600    # Update summary stats every 1 hour (in seconds)
 ACTIVE_UPLOAD_INTERVAL = 300    # Upload active_tracking.json every 5 mins (in seconds)
-WIN_ROI_THRESHOLD = 50.0        # ROI percentage to mark as a "win"
+WIN_ROI_THRESHOLD = 45.0        # ROI percentage to mark as a "win"
 
 # API Timeouts
 JUPITER_TIMEOUT = 5
