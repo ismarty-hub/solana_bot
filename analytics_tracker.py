@@ -88,6 +88,24 @@ def get_supabase_client() -> Client:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     return supabase
 
+def list_files_in_supabase_folder(folder_path: str) -> list[str]:
+    """List all files in a Supabase Storage folder."""
+    try:
+        client = get_supabase_client()
+        result = client.storage.from_(BUCKET_NAME).list(folder_path)
+        
+        if not result:
+            logger.info(f"No files found in {folder_path}")
+            return []
+        
+        # Extract file names
+        files = [item['name'] for item in result if item.get('name')]
+        logger.info(f"Found {len(files)} files in {folder_path}")
+        return files
+    except Exception as e:
+        logger.error(f"Error listing files in {folder_path}: {e}")
+        return []
+
 def download_file_from_supabase(remote_path: str, local_path: str) -> bool:
     """Download file from Supabase Storage."""
     try:
@@ -100,7 +118,7 @@ def download_file_from_supabase(remote_path: str, local_path: str) -> bool:
         return True
     except Exception as e:
         if "404" in str(e) or "not found" in str(e):
-            logger.warning(f"File not found on Supabase: {remote_path} (This is normal if starting fresh)")
+            logger.debug(f"File not found: {remote_path}")
         else:
             logger.error(f"Download failed for {remote_path}: {e}")
         return False
@@ -710,15 +728,39 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
     if saved_path:
         upload_file_to_supabase(saved_path, remote_path)
 
-def load_tokens_in_range(signal_type: str, start_date: datetime, end_date: datetime) -> list[dict]:
-    """Load all completed tokens from daily files within a date range."""
+def get_available_daily_files(signal_type: str) -> list[str]:
+    """
+    Get list of available daily JSON files from Supabase for a signal type.
+    Returns list of date strings (YYYY-MM-DD).
+    """
+    folder_path = f"analytics/{signal_type}/daily"
+    files = list_files_in_supabase_folder(folder_path)
+    
+    # Extract dates from filenames (e.g., "2025-11-03.json" -> "2025-11-03")
+    dates = []
+    for filename in files:
+        if filename.endswith('.json'):
+            date_str = filename.replace('.json', '')
+            # Validate date format
+            try:
+                datetime.strptime(date_str, '%Y-%m-%d')
+                dates.append(date_str)
+            except ValueError:
+                logger.warning(f"Invalid date filename: {filename}")
+                continue
+    
+    return sorted(dates)
+
+def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -> list[dict]:
+    """
+    Load all completed tokens from specified daily files.
+    """
     all_tokens = []
-    current_date = start_date
-    while current_date <= end_date:
-        date_str = current_date.strftime('%Y-%m-%d')
+    
+    for date_str in date_list:
+        remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
         
         # Try loading from local cache first
-        remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
         daily_data = load_json(remote_path)
         
         # If not in cache, try downloading
@@ -729,10 +771,29 @@ def load_tokens_in_range(signal_type: str, start_date: datetime, end_date: datet
         
         if daily_data and isinstance(daily_data.get("tokens"), list):
             all_tokens.extend(daily_data["tokens"])
-            
-        current_date += timedelta(days=1)
-        
+            logger.debug(f"Loaded {len(daily_data['tokens'])} tokens from {date_str}")
+    
+    logger.info(f"Loaded {len(all_tokens)} total tokens from {len(date_list)} daily files for {signal_type}")
     return all_tokens
+
+def filter_tokens_by_completion_time(tokens: list[dict], start_date: datetime, end_date: datetime = None) -> list[dict]:
+    """
+    Filter tokens by their tracking_completed_at timestamp.
+    """
+    if end_date is None:
+        end_date = get_now()
+    
+    filtered = []
+    for token in tokens:
+        completed_at = token.get("tracking_completed_at")
+        if not completed_at:
+            continue
+        
+        completed_dt = parse_ts(completed_at)
+        if start_date <= completed_dt <= end_date:
+            filtered.append(token)
+    
+    return filtered
 
 def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     """Calculate the summary stats block for a list of tokens."""
@@ -784,37 +845,50 @@ def generate_summary_stats(signal_type: str):
     logger.info(f"Generating summary stats for {signal_type}...")
     now = get_now()
     
-    # 1. Define the "all_time" start date
-    all_time_start_date = datetime(2024, 11, 1, tzinfo=timezone.utc)
+    # 1. Get list of all available daily files from Supabase
+    available_dates = get_available_daily_files(signal_type)
     
-    # 2. Load ALL completed tokens
-    all_time_tokens = load_tokens_in_range(signal_type, all_time_start_date, now)
+    if not available_dates:
+        logger.warning(f"No daily files found for {signal_type}. Skipping summary stats.")
+        return
     
-    # 3. Define all timeframes
+    logger.info(f"Found {len(available_dates)} daily files for {signal_type}: {available_dates[0]} to {available_dates[-1]}")
+    
+    # 2. Load ALL tokens from available daily files
+    all_tokens = load_tokens_from_daily_files(signal_type, available_dates)
+    
+    if not all_tokens:
+        logger.warning(f"No tokens loaded for {signal_type}. Skipping summary stats.")
+        return
+    
+    # 3. Define timeframes
     timeframes = {
         "1_day": now - timedelta(days=1),
         "7_days": now - timedelta(days=7),
         "1_month": now - timedelta(days=30),
-        "all_time": all_time_start_date
+        "all_time": parse_ts(f"{available_dates[0]}T00:00:00Z")  # Earliest available date
     }
     
     summary_data = {
         "signal_type": signal_type,
         "last_updated": to_iso(now),
+        "available_date_range": {
+            "start": available_dates[0],
+            "end": available_dates[-1]
+        },
         "timeframes": {}
     }
     
     for period, start_date in timeframes.items():
         if period == "all_time":
-            tokens_for_period = all_time_tokens
+            # Use all tokens for all_time
+            tokens_for_period = all_tokens
         else:
-            # Filter based on COMPLETION TIME
-            tokens_for_period = [
-                t for t in all_time_tokens 
-                if t.get("tracking_completed_at") and parse_ts(t["tracking_completed_at"]) >= start_date
-            ]
+            # Filter by completion time
+            tokens_for_period = filter_tokens_by_completion_time(all_tokens, start_date, now)
             
         summary_data["timeframes"][period] = calculate_timeframe_stats(tokens_for_period)
+        logger.info(f"{signal_type} - {period}: {len(tokens_for_period)} tokens")
         
     # Save and upload
     remote_path = f"analytics/{signal_type}/summary_stats.json"
