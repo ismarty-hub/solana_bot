@@ -14,8 +14,9 @@ This script:
 5.  Tracks prices asynchronously (Jupiter -> Dexscreener) at intervals
     based on token age (5s for new, 4min for old).
 6.  Calculates ROI, ATH, and win/loss status (win >= 50% ROI).
-7.  Handles API failures with retry. Fatal errors (e.g., price=0)
-    finalize tracking. Network errors are retried until tracking duration ends.
+7.  Handles API failures with retry. Network errors are retried until 
+    tracking duration ends. Tokens are ONLY finalized when tracking 
+    duration completes.
 8.  Generates and uploads daily, summary (1d, 7d, 30d, all-time),
     and overall analytics to Supabase.
 9.  Resumes tracking from 'active_tracking.json' on restart.
@@ -42,7 +43,6 @@ TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
 TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days (168 hours) 
 
 # Retry Logic
-RETRY_TIMEOUT = 60              # (DEPRECATED) Retry price fetching for 1 minute (in seconds)
 RETRY_INTERVAL = 5              # Check every 5 seconds during retry
 
 # Supabase
@@ -226,7 +226,6 @@ async def fetch_token_age(mint: str) -> tuple[float | None, int | None]:
                 logger.warning(f"No pairs found on Dexscreener for {mint}")
                 return None, None
             
-            # --- NEW ROBUST LOGIC ---
             # Collect all found creation timestamps (in milliseconds)
             timestamps_ms = []
             for pair in pairs:
@@ -254,12 +253,11 @@ async def fetch_token_age(mint: str) -> tuple[float | None, int | None]:
             
             # Convert to seconds for calculation
             earliest_seconds = earliest_ms / 1000.0
-            # --- END NEW LOGIC ---
             
             age_seconds = time.time() - earliest_seconds
             age_hours = age_seconds / 3600
             
-            return age_hours, int(earliest_seconds) # Return timestamp in seconds
+            return age_hours, int(earliest_seconds)
 
     except Exception as e:
         logger.error(f"Error fetching token age for {mint}: {e}")
@@ -322,7 +320,6 @@ async def get_entry_price(mint: str, signal_data: dict) -> float | None:
     """Get entry price using priority: JSON -> Jupiter -> Dexscreener."""
     
     # 1. Try to get from signal data
-    # Handle both 'alpha' and 'discovery' structures
     price = None
     if "result" in signal_data and isinstance(signal_data.get("result"), dict):
         price = signal_data["result"].get("dexscreener", {}).get("current_price_usd")
@@ -348,72 +345,42 @@ async def get_entry_price(mint: str, signal_data: dict) -> float | None:
     logger.error(f"Failed to get any entry price for {mint}")
     return None
 
-async def fetch_current_price(mint: str) -> tuple[float | None, str]:
+async def fetch_current_price(mint: str) -> float | None:
     """
     Fetch current price with priority: Jupiter -> Dexscreener.
-    Returns (price, error_type). error_type is 'retryable' or 'fatal'.
+    Returns price or None. All errors are treated as retryable.
     """
     
     # 1. Try Jupiter
     try:
         prices = await fetch_price_jupiter([mint])
         if mint in prices and prices[mint] > 0:
-            return prices[mint], "none"
+            return prices[mint]
     except Exception as e:
         logger.warning(f"Jupiter fetch error for {mint}: {e}. Trying Dexscreener.")
-        # Treat Jupiter error as retryable for now
-        pass
 
     # 2. Try Dexscreener
     try:
         price = await fetch_price_dexscreener(mint)
         if price is not None and price > 0:
-            return price, "none"
-        
-        # If price is 0 or None, it's a fatal error (token likely rugged)
-        if price == 0:
-            logger.warning(f"Fatal price error for {mint}: Price is 0.")
-            return None, "fatal"
-        
-        # If price is None (e.g., 404, no pairs), it's also fatal
-        logger.warning(f"Fatal price error for {mint}: No price data on Dexscreener.")
-        return None, "fatal"
-        
-    except aiohttp.ClientError as e:
-        # Network errors are retryable
-        logger.warning(f"Retryable network error for {mint} on Dexscreener: {e}")
-        return None, "retryable"
+            return price
     except Exception as e:
-        # Other errors (like JSON decode) could be retryable
-        logger.warning(f"Retryable error for {mint} on Dexscreener: {e}")
-        return None, "retryable"
+        logger.warning(f"Dexscreener fetch error for {mint}: {e}")
 
-    # Fallback, should be unreachable
-    return None, "fatal"
+    # All errors are retryable - we'll keep trying until tracking duration ends
+    return None
 
 
 # --- Core Tracking Logic ---
 
-# =================================================================
-# ===                  CORRECTED FUNCTION BELOW                 ===
-# =================================================================
-
-def handle_price_failure(token_data: dict, error_type: str):
+def handle_price_failure(token_data: dict):
     """
     Handle a failed price fetch attempt.
-    Fatal errors finalize tracking.
-    Retryable errors are logged and will be retried by the main loop.
+    ALL errors are retryable - we only finalize when tracking duration ends.
     """
     now = get_now()
     mint = token_data["mint"]
     
-    if error_type == "fatal":
-        logger.error(f"Fatal error for {mint}. Stopping tracking.")
-        token_data["status"] = "loss" if not token_data["hit_50_percent"] else "win"
-        finalize_token_tracking(mint, token_data)
-        return
-
-    # --- Handle Retryable Error ---
     token_data["consecutive_failures"] += 1
     
     if token_data["retry_start_time"] is None:
@@ -422,13 +389,9 @@ def handle_price_failure(token_data: dict, error_type: str):
         logger.warning(f"Price fetch failed for {mint}. Entering retry state. Will retry every {RETRY_INTERVAL}s.")
     
     # Update last_price_check to align with RETRY_INTERVAL
-    # This ensures the main loop retries it after 5s
     token_data["last_price_check"] = to_iso(now)
     
-    # We NO LONGER finalize based on RETRY_TIMEOUT.
-    # The token will continue to be retried by the main loop
-    # until its tracking_end_time is reached.
-    logger.warning(f"Retryable error for {mint}. Fail count: {token_data['consecutive_failures']}. Will retry.")
+    logger.warning(f"Retryable error for {mint}. Fail count: {token_data['consecutive_failures']}. Will continue retrying until tracking duration ends.")
 
 
 def update_token_price(token_data: dict, price: float):
@@ -461,13 +424,6 @@ def update_token_price(token_data: dict, price: float):
         token_data["status"] = "win"
         logger.info(f"WIN: {token_data['symbol']} ({token_data['mint'][:6]}...) hit {current_roi:.2f}% ROI!")
 
-    # Append to price history (optional, can be memory-intensive)
-    # token_data["price_history"].append({
-    #     "time": to_iso(now),
-    #     "price": price,
-    #     "roi": current_roi
-    # })
-
 def finalize_token_tracking(mint: str, token_data: dict):
     """Move a token from active_tracking to its daily file."""
     logger.info(f"Tracking complete for {mint}. Final status: {token_data['status']}")
@@ -479,10 +435,9 @@ def finalize_token_tracking(mint: str, token_data: dict):
     token_data["tracking_completed_at"] = to_iso(get_now())
     
     # Use last_successful_price as final_price
-    # If no successful price was ever found *after entry*, use entry price
     final_price = token_data.get("last_successful_price", token_data["entry_price"])
     if final_price is None:
-        final_price = 0.0 # Should not happen, but as a fallback
+        final_price = 0.0
         
     token_data["final_price"] = final_price
     token_data["final_roi"] = calculate_roi(token_data["entry_price"], final_price)
@@ -505,7 +460,6 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     entry_price = await get_entry_price(mint, signal_data)
     if entry_price is None:
         logger.warning(f"Excluding {mint}: No entry price found.")
-        # We don't add this to active_tracking, so it's auto-excluded
         return
 
     # 2. Get Token Age
@@ -531,9 +485,9 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         name = meta.get("name", "N/A")
     else:
         # Discovery structure
-        meta = signal_data.get("token_metadata") # This path might vary
+        meta = signal_data.get("token_metadata")
         if not meta:
-             meta = signal_data.get("token") # Another common path
+             meta = signal_data.get("token")
         if isinstance(meta, dict):
             symbol = meta.get("symbol", "N/A")
             name = meta.get("name", "N/A")
@@ -594,7 +548,6 @@ async def process_signals(signal_data: dict, signal_type: str):
     sorted_tokens = []
     for mint, history in signal_data.items():
         if isinstance(history, list) and history:
-            # Use the *first* (earliest) entry's timestamp
             first_entry = history[0]
             ts_str = safe_get_timestamp(first_entry)
             if ts_str:
@@ -605,29 +558,12 @@ async def process_signals(signal_data: dict, signal_type: str):
     
     new_tokens_found = 0
     for mint, first_entry, ts in sorted_tokens:
-        # Deduplication: Check if already in active_tracking
         if mint not in active_tracking:
-            # Check if this token is already in a daily file (completed)
-            # This check is imperfect but prevents re-tracking
-            # A more robust check would involve loading all daily files
-            
-            # Simple check: Is it in active tracking?
-            # We assume if it's not active, it's new or completed
-            # The prompt implies deduplication is against *active* tokens
-            # and new signals
-            
-            # Re-check active_tracking, as a previous signal in *this*
-            # batch might have added it.
-            if mint not in active_tracking:
-                new_tokens_found += 1
-                await add_new_token_to_tracking(mint, signal_type, first_entry)
+            new_tokens_found += 1
+            await add_new_token_to_tracking(mint, signal_type, first_entry)
 
     logger.info(f"Found {new_tokens_found} new tokens for {signal_type}.")
 
-
-# =================================================================
-# ===                  CORRECTED FUNCTION BELOW                 ===
-# =================================================================
 
 async def update_active_token_prices():
     """
@@ -635,39 +571,26 @@ async def update_active_token_prices():
     an update, and update their state.
     """
     now = get_now()
-    tokens_to_check = {} # mint -> token_data
-    tokens_to_retry = {} # mint -> token_data
+    tokens_to_check = {}
+    tokens_to_retry = {}
     
     # --- 1. Identify tokens to update ---
-    # Use list() to avoid issues modifying dict during iteration
     for mint, token_data in list(active_tracking.items()):
         
-        # Check if tracking period ended
+        # Check if tracking period ended - ONLY reason to finalize
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
-        if now > tracking_end_time:
-            logger.info(f"Tracking duration ended for {mint}.")
+        if now >= tracking_end_time:
+            logger.info(f"Tracking duration ended for {mint}. Finalizing...")
             finalize_token_tracking(mint, token_data)
             continue
 
-        # Check if in retry-fail state
+        # Check if in retry state
         if token_data["retry_start_time"] is not None:
-            # Token is in a retry state.
-            
-            # --- THIS BLOCK IS REMOVED ---
-            # We no longer finalize based on RETRY_TIMEOUT
-            # retry_start = parse_ts(token_data["retry_start_time"])
-            # if (now - retry_start).total_seconds() > RETRY_TIMEOUT:
-            #    logger.error(f"Retry timeout for {mint} (detected in main loop). Stopping tracking.")
-            #    token_data["status"] = "loss" if not token_data["hit_50_percent"] else "win"
-            #    finalize_token_tracking(mint, token_data)
-            #    continue
-            # --- END REMOVED BLOCK ---
-            
-            # We are in a retry state. Check on RETRY_INTERVAL
+            # Token is in a retry state - check on RETRY_INTERVAL
             last_check = parse_ts(token_data["last_price_check"])
             if (now - last_check).total_seconds() >= RETRY_INTERVAL:
                 tokens_to_retry[mint] = token_data
-            continue # Skip normal check
+            continue
 
         # Check for normal price update
         last_check = parse_ts(token_data["last_price_check"])
@@ -698,32 +621,26 @@ async def update_active_token_prices():
         if failed_mints:
             logger.info(f"Jupiter failed for {len(failed_mints)} tokens. Trying Dexscreener...")
             for mint, token_data in failed_mints:
-                price, error_type = await fetch_current_price(mint) # This already tries Jup -> Dex
+                price = await fetch_current_price(mint)
                 if price is not None:
                     logger.info(f"Price recovery successful for {mint}!")
                     update_token_price(token_data, price)
                 else:
-                    # This will increment failure count or finalize
-                    handle_price_failure(token_data, error_type)
+                    handle_price_failure(token_data)
 
     # --- 3. Handle tokens in retry mode ---
     if tokens_to_retry:
-        logger.info(f"Retrying {len(tokens_to_retry)} tokens in retry window...")
+        logger.info(f"Retrying {len(tokens_to_retry)} tokens in retry state...")
         for mint, token_data in tokens_to_retry.items():
-            price, error_type = await fetch_current_price(mint)
+            price = await fetch_current_price(mint)
             if price is not None:
                 logger.info(f"Retry successful for {mint}!")
                 update_token_price(token_data, price)
             else:
-                # This will log the retryable error or finalize on fatal
-                handle_price_failure(token_data, error_type)
+                handle_price_failure(token_data)
 
 
 # --- Analytics Generation ---
-
-# =================================================================
-# ===                  CORRECTED FUNCTION BELOW                 ===
-# =================================================================
 
 def generate_daily_file(date_str: str, signal_type: str, completed_token: dict = None):
     """
@@ -755,12 +672,11 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
         else:
             logger.warning(f"Token {completed_token['mint']} already in daily file {remote_path}")
 
-    # 3. Recalculate daily summary (using consistent logic)
+    # 3. Recalculate daily summary
     tokens = daily_data.get("tokens", [])
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     
-    # In a daily file, all tokens are finalized, so total_valid == len(tokens)
     total_valid = len(tokens) 
     
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
@@ -771,7 +687,7 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
         "total_tokens": total_valid,
         "wins": len(wins),
         "losses": len(losses),
-        "excluded": 0, # By definition of being in this file
+        "excluded": 0,
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
         
         "total_ath_all": total_ath_roi_all,
@@ -780,7 +696,7 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
         "total_ath_wins": total_ath_roi_wins,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0), # Max ATH from *all*
+        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
         
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         
@@ -822,25 +738,18 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     """Calculate the summary stats block for a list of tokens."""
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
-    # Excluded are tokens that never made it to tracking (e.g., no entry price)
-    # or tokens that are not yet finalized. We only count finalized tokens.
     
     valid_tokens = wins + losses
     total_valid = len(valid_tokens)
     
-    # We must account for tokens that might be passed in but aren't 'win' or 'loss'
-    # (e.g. if 'active' tokens were accidentally passed in)
     excluded = [t for t in tokens if t.get("status") not in ["win", "loss"]] 
 
-    # --- NEW, MORE ROBUST LOGIC ---
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in valid_tokens)
     total_final_roi_all = sum(t.get("final_roi", 0) for t in valid_tokens)
-    
-    # Specific metric: total ATH from *wins*
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
     top_tokens = sorted(
-        valid_tokens, # Sort all valid tokens, not just wins
+        valid_tokens,
         key=lambda x: x.get("ath_roi", 0), 
         reverse=True
     )
@@ -852,22 +761,22 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
         "excluded": len(excluded),
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
         
-        "total_ath_all": total_ath_roi_all, # Total ATH from all valid tokens
-        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0, # Avg ATH of all
+        "total_ath_all": total_ath_roi_all,
+        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         
-        "total_ath_wins": total_ath_roi_wins, # Total ATH from *wins only*
-        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0, # Avg ATH of *wins only*
+        "total_ath_wins": total_ath_roi_wins,
+        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
 
-        "max_roi": max((t.get("ath_roi", 0) for t in valid_tokens), default=0), # Max ATH from *all*
+        "max_roi": max((t.get("ath_roi", 0) for t in valid_tokens), default=0),
         
-        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0, # Avg *final* ROI of all
+        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         
         "win_loss_ratio": len(wins) / len(losses) if len(losses) > 0 else (len(wins) if len(wins) > 0 else 0),
         
         "average_time_to_ath_minutes": sum(t.get("time_to_ath_minutes", 0) for t in valid_tokens) / total_valid if total_valid else 0,
         "average_time_to_50_percent_minutes": sum(t.get("time_to_50_percent_minutes", 0) for t in wins) / len(wins) if wins else 0,
         
-        "top_tokens": top_tokens[:10] # Limit to top 10
+        "top_tokens": top_tokens[:10]
     }
 
 def generate_summary_stats(signal_type: str):
@@ -878,7 +787,7 @@ def generate_summary_stats(signal_type: str):
     # 1. Define the "all_time" start date
     all_time_start_date = datetime(2024, 11, 1, tzinfo=timezone.utc)
     
-    # 2. Load ALL completed tokens *before* the loop
+    # 2. Load ALL completed tokens
     all_time_tokens = load_tokens_in_range(signal_type, all_time_start_date, now)
     
     # 3. Define all timeframes
@@ -897,11 +806,9 @@ def generate_summary_stats(signal_type: str):
     
     for period, start_date in timeframes.items():
         if period == "all_time":
-            # For "all_time", just use the full list we already loaded
             tokens_for_period = all_time_tokens
         else:
-            # For other periods, filter the *pre-loaded* all_time_tokens list
-            # Filter based on COMPLETION TIME (tracking_completed_at)
+            # Filter based on COMPLETION TIME
             tokens_for_period = [
                 t for t in all_time_tokens 
                 if t.get("tracking_completed_at") and parse_ts(t["tracking_completed_at"]) >= start_date
@@ -914,10 +821,6 @@ def generate_summary_stats(signal_type: str):
     local_path = save_json(summary_data, remote_path)
     if local_path:
         upload_file_to_supabase(local_path, remote_path)
-
-# =================================================================
-# ===                  CORRECTED FUNCTION BELOW                 ===
-# =================================================================
 
 def generate_overall_analytics():
     """Combine discovery and alpha stats for overall summary."""
@@ -949,7 +852,7 @@ def generate_overall_analytics():
         total_tokens = disc["total_tokens"] + alph["total_tokens"]
         total_wins = disc["wins"] + alph["wins"]
         total_losses = disc["losses"] + alph["losses"]
-        total_valid = total_tokens # Should be the same
+        total_valid = total_tokens
         
         # Weighted average for average_final_roi
         average_final_roi = 0
@@ -966,7 +869,6 @@ def generate_overall_analytics():
         # Weighted average for average_ath_wins
         average_ath_wins = 0
         if total_wins > 0:
-            # (total_ath_wins_disc + total_ath_wins_alph) / (total_wins_disc + total_wins_alph)
             average_ath_wins = (disc["total_ath_wins"] + alph["total_ath_wins"]) / total_wins
 
         overall["timeframes"][period] = {
@@ -990,7 +892,7 @@ def generate_overall_analytics():
                 disc["top_tokens"] + alph["top_tokens"], 
                 key=lambda x: x.get("ath_roi", 0), 
                 reverse=True
-            )[:10] # Limit to top 10
+            )[:10]
         }
 
     # Save and upload
@@ -1042,8 +944,6 @@ async def initialize():
         logger.info("No existing active_tracking.json, starting fresh.")
         active_tracking = {}
         
-    # Summary stats will be generated on the first run of the main loop.
-    # No need to pre-load all daily files on startup, which causes log spam.
     logger.info("Initialization complete. Stats will be generated in the first loop.")
 
 async def download_and_process_signals():
@@ -1095,7 +995,7 @@ async def main_loop():
         try:
             now = get_now()
             
-            # 1. Download signals every 3 minutes
+            # 1. Download signals every 1 minute
             if (now - last_signal_download).total_seconds() >= SIGNAL_DOWNLOAD_INTERVAL:
                 await download_and_process_signals()
                 last_signal_download = now
