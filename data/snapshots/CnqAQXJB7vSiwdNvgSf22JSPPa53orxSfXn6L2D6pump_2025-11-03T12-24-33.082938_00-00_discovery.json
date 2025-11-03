@@ -1,0 +1,1573 @@
+{
+  "snapshot_id": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T12-24-33.082938_00-00_discovery",
+  "generated_at_utc": "2025-11-03T15:04:34.173135+00:00",
+  "inputs": {
+    "signal_data": {
+      "ts": "2025-11-03T12:24:33.082938+00:00",
+      "result": {
+        "token": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+        "checked_at": "2025-11-03T12:19:24.232966+00:00",
+        "top_holders_checked": 199,
+        "overlap_count": 36,
+        "overlap_percentage": 18.09,
+        "concentration": 0.3,
+        "weighted_concentration": 1.47,
+        "total_winner_wallets": 12128,
+        "overlap_wallets_sample": [
+          "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj",
+          "9oCRXibymSd6DVcWXhRGAT3qvdtvFCZ15ZUoF4JREMWr",
+          "4tLHBPYMmccNKQWtwF1r8PpiSYG3d4gCb6XS8tddZbtm",
+          "98n8gXV7WyMFTSe3VrMnNAT9gsBvcF9iH8BzkNh5JoxS",
+          "G8cg2Qkz6fC5reFqERn18f4Cha5LvxGVN73GSbqs6SGE",
+          "5cgJxGHwtrPVx7Uwv84EPb5PnsK1dbDQ8q193sCDrhff",
+          "Cic62hte1wv9qpFx23u8o7YVhGuuPbBVCzAsCNcifpBu",
+          "5FVvDcAj2RcAV47CYcdt3Ud798u9HyPzksgNSfFpWmi5",
+          "BPHyg5hR3GFfnYBNpVry49TpwwyXSw4ggBXJp2bwUFvt",
+          "DHerZLqSVj8bka1YQzsJSqws8SHJrJHCELJxS7ss4QYa",
+          "ChRebyiWEJ41mwADXMoUPRP1rCqxGY7mjqkMzF1XBk2R",
+          "5bYktEbLhFsnKy2xzCTWY5HGtteFTQ5himWPUBHr4FcF",
+          "GcL6cBNvRBggvYzqMauuHc1b9gaXV6jNupLs85BkgbQU",
+          "Bzvov3X9GyHsiwAvBnHcq91XbtJGkjvBaRMn7w3MExWE",
+          "4ePGoXcPVRhqs8hd1nFQzAWAKsqbV9o1M5gcTT3Nn6go",
+          "J8aE7WscqC9ye2pbmMFfVJ4VUJMGaMjyegTE18tpyNtd",
+          "97ja5kXWcn6DJphq3yTEEXWZJNJN4yn7xQC4ez7y4wnC",
+          "7BNaxx6KdUYrjACNQZ9He26NBFoFxujQMAfNLnArLGH5",
+          "FrC6pc7MKCYyHscxr5X15dwFXiuH1AQLUVgWogEqt6Du",
+          "6etdGQPnxABuawZS7Z8hXVfiSijs9HEazEa7Yh22iUL3"
+        ],
+        "grade": "MEDIUM",
+        "detected_via": "coingecko",
+        "block_time": 1762170288,
+        "token_metadata": {
+          "name": "PlaiPin",
+          "fdv_usd": "558242.4017",
+          "volume_usd": "536.6866259917",
+          "source_dex": "meteora",
+          "price_change_percentage": "-2.417"
+        },
+        "dexscreener": {
+          "current_price_usd": 0.0005991
+        }
+      },
+      "security": "passed",
+      "probation_meta": {
+        "probation": false,
+        "top_n_pct": 11.623185,
+        "top_n": 3,
+        "threshold_pct": 40.0,
+        "explanation": "Top 3 holders own 11.62% of supply; threshold is >40.0%. Probation=False."
+      },
+      "rugcheck": {
+        "top1_holder_pct": 7.789461544635542,
+        "holder_count": 3751,
+        "has_authorities": false,
+        "creator_balance": 0,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": 100.0,
+        "total_liquidity_usd": 101462.20891941647,
+        "lp_lock_details": [
+          {
+            "market_type": "pump_fun_amm",
+            "locked_usd": 101462.20891941647,
+            "total_usd": 101462.20891941647,
+            "locked_pct": 100
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          }
+        ]
+      },
+      "dexscreener": {
+        "current_price_usd": 0.0005991,
+        "market_cap_usd": 599144.0
+      }
+    },
+    "dexscreener_raw": {
+      "schemaVersion": "1.0.0",
+      "pairs": [
+        {
+          "chainId": "solana",
+          "dexId": "pumpswap",
+          "url": "https://dexscreener.com/solana/bbulcybj94j4uq2u4myhmmyzxanhs8isj6wgk6csa5yx",
+          "pairAddress": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002510",
+          "priceUsd": "0.0004418",
+          "txns": {
+            "m5": {
+              "buys": 79,
+              "sells": 119
+            },
+            "h1": {
+              "buys": 1216,
+              "sells": 998
+            },
+            "h6": {
+              "buys": 11788,
+              "sells": 9312
+            },
+            "h24": {
+              "buys": 28878,
+              "sells": 25982
+            }
+          },
+          "volume": {
+            "h24": 7440703.72,
+            "h6": 2685479.55,
+            "h1": 227995.27,
+            "m5": 19416.84
+          },
+          "priceChange": {
+            "m5": 10.3,
+            "h1": -32.18,
+            "h6": -64.25,
+            "h24": 510
+          },
+          "liquidity": {
+            "usd": 84914.3,
+            "base": 95559715,
+            "quote": 242.5677
+          },
+          "fdv": 441868,
+          "marketCap": 441868,
+          "pairCreatedAt": 1762152797000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/dg8tkbf2vnhafq29u1qhbc6kg8ytxfg2jztdpjqavkve",
+          "pairAddress": "Dg8TkBf2vNhaFq29u1QHBc6kg8yTxFg2jzTDPJqAVKve",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002556",
+          "priceUsd": "0.0004494",
+          "txns": {
+            "m5": {
+              "buys": 5,
+              "sells": 0
+            },
+            "h1": {
+              "buys": 79,
+              "sells": 100
+            },
+            "h6": {
+              "buys": 633,
+              "sells": 715
+            },
+            "h24": {
+              "buys": 898,
+              "sells": 1181
+            }
+          },
+          "volume": {
+            "h24": 307164.62,
+            "h6": 177021.23,
+            "h1": 20438.79,
+            "m5": 554.04
+          },
+          "priceChange": {
+            "m5": 14.19,
+            "h1": -30.73,
+            "h6": -60.04,
+            "h24": -37.95
+          },
+          "liquidity": {
+            "usd": 31497.21,
+            "base": 17447800,
+            "quote": 134.5256
+          },
+          "fdv": 449468,
+          "marketCap": 449468,
+          "pairCreatedAt": 1762155035000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/fxuutrzmrrdnkd9ebsxghehq8zug5ltyz782ztdeibdn",
+          "pairAddress": "FxUuTRzmRrDNkd9EbsXgHEHq8ZuG5LtyZ782ztDeiBdn",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002540",
+          "priceUsd": "0.0004467",
+          "txns": {
+            "m5": {
+              "buys": 33,
+              "sells": 9
+            },
+            "h1": {
+              "buys": 177,
+              "sells": 203
+            },
+            "h6": {
+              "buys": 1559,
+              "sells": 1662
+            },
+            "h24": {
+              "buys": 1944,
+              "sells": 2112
+            }
+          },
+          "volume": {
+            "h24": 315048.41,
+            "h6": 209380.05,
+            "h1": 13355.96,
+            "m5": 1658.05
+          },
+          "priceChange": {
+            "m5": 17.18,
+            "h1": -31.09,
+            "h6": -63.74,
+            "h24": -69.11
+          },
+          "liquidity": {
+            "usd": 9315.25,
+            "base": 6122633,
+            "quote": 37.4215
+          },
+          "fdv": 446711,
+          "marketCap": 446711,
+          "pairCreatedAt": 1762158399000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/7mycprcshkdyts4natcus6pt7wbpg6fowntfexueexnv",
+          "pairAddress": "7MYCpRcsHkdyts4NaTcUS6PT7WBpg6fowNtFexuEExNv",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002573",
+          "priceUsd": "0.0004525",
+          "txns": {
+            "m5": {
+              "buys": 15,
+              "sells": 1
+            },
+            "h1": {
+              "buys": 51,
+              "sells": 70
+            },
+            "h6": {
+              "buys": 593,
+              "sells": 638
+            },
+            "h24": {
+              "buys": 748,
+              "sells": 852
+            }
+          },
+          "volume": {
+            "h24": 212092.29,
+            "h6": 160877.37,
+            "h1": 24492.05,
+            "m5": 3756.73
+          },
+          "priceChange": {
+            "m5": 16.99,
+            "h1": -30.23,
+            "h6": -62.05,
+            "h24": -69.59
+          },
+          "liquidity": {
+            "usd": 39307.5,
+            "base": 24068038,
+            "quote": 161.6015
+          },
+          "fdv": 452529,
+          "marketCap": 452529,
+          "pairCreatedAt": 1762158285000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/gn84r2kcmae37ft43s1gb9vu7fmznj6u8nztbxuzd8nv",
+          "pairAddress": "Gn84r2kCMaE37FT43S1gB9vu7fMznJ6U8nZtbXuzD8nV",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002170",
+          "priceUsd": "0.0003825",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 2
+            },
+            "h1": {
+              "buys": 5,
+              "sells": 46
+            },
+            "h6": {
+              "buys": 99,
+              "sells": 224
+            },
+            "h24": {
+              "buys": 205,
+              "sells": 369
+            }
+          },
+          "volume": {
+            "h24": 37641.9,
+            "h6": 14596.87,
+            "h1": 1885.73,
+            "m5": 61.6
+          },
+          "priceChange": {
+            "m5": -3.19,
+            "h1": -41.34,
+            "h6": -70.43,
+            "h24": 92.31
+          },
+          "liquidity": {
+            "usd": 8158.77,
+            "base": 5882174,
+            "quote": 33.5168
+          },
+          "fdv": 382585,
+          "marketCap": 382585,
+          "pairCreatedAt": 1762154460000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/8s8fei5madeytvpbghywmmwj7wd5bkm263engmmgnoyi",
+          "pairAddress": "8s8fei5maDeytVpbGHywMmwJ7wd5BkM263engmMgnoyi",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "name": "USD Coin",
+            "symbol": "USDC"
+          },
+          "priceNative": "0.0007199",
+          "priceUsd": "0.0007199",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h6": {
+              "buys": 21,
+              "sells": 21
+            },
+            "h24": {
+              "buys": 21,
+              "sells": 21
+            }
+          },
+          "volume": {
+            "h24": 3545.01,
+            "h6": 3545.01,
+            "h1": 0,
+            "m5": 0
+          },
+          "priceChange": {
+            "h6": 19.69,
+            "h24": 19.69
+          },
+          "liquidity": {
+            "usd": 9258.13,
+            "base": 3393683,
+            "quote": 6814.7308
+          },
+          "fdv": 719985,
+          "marketCap": 719985,
+          "pairCreatedAt": 1762170288000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/dtkhad1ij6u3pri6ytneqvez557sn8zzp9pztjt5jsss",
+          "pairAddress": "DtkhAd1iJ6u3pri6ytNEQVez557SN8ZzP9PZTJt5jSss",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "name": "USD Coin",
+            "symbol": "USDC"
+          },
+          "priceNative": "0.0006927",
+          "priceUsd": "0.0006927",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h6": {
+              "buys": 4,
+              "sells": 0
+            },
+            "h24": {
+              "buys": 4,
+              "sells": 0
+            }
+          },
+          "volume": {
+            "h24": 1470.87,
+            "h6": 1470.87,
+            "h1": 0,
+            "m5": 0
+          },
+          "priceChange": {
+            "h6": 10.34,
+            "h24": 10.34
+          },
+          "liquidity": {
+            "usd": 2182.33,
+            "base": 30808,
+            "quote": 2160.9888
+          },
+          "fdv": 692747,
+          "marketCap": 692747,
+          "pairCreatedAt": 1762171349000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/38xewkqbnerlcbcmecwgnvgsmwzvoxjbhiehc7odp3vn",
+          "pairAddress": "38xewkQBnErLCBcMeCwGnVGSmwzvoXjbHiEHC7oDP3Vn",
+          "labels": [
+            "DYN2"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000003362",
+          "priceUsd": "0.0005927",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 1
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 22
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 40
+            },
+            "h24": {
+              "buys": 61,
+              "sells": 43
+            }
+          },
+          "volume": {
+            "h24": 45.89,
+            "h6": 15.79,
+            "h1": 8.98,
+            "m5": 0.77
+          },
+          "priceChange": {
+            "m5": -2.22,
+            "h1": -31.19,
+            "h6": -47.46,
+            "h24": 554
+          },
+          "liquidity": {
+            "usd": 84.2,
+            "base": 71676,
+            "quote": 0.2366
+          },
+          "fdv": 592760,
+          "marketCap": 592760,
+          "pairCreatedAt": 1762153304000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/6de6h3d5u9cwdve5gjmmbpsm3hqng1cqt7hft1ej8i2h",
+          "pairAddress": "6de6h3d5U9cwdVE5GJMMBPSm3hqNg1cQt7HfT1Ej8i2H",
+          "labels": [
+            "DLMM"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000006472",
+          "priceUsd": "0.001142",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h6": {
+              "buys": 9,
+              "sells": 26
+            },
+            "h24": {
+              "buys": 14,
+              "sells": 37
+            }
+          },
+          "volume": {
+            "h24": 381.79,
+            "h6": 249.26,
+            "h1": 0,
+            "m5": 0
+          },
+          "priceChange": {
+            "h6": -7.06,
+            "h24": -7.71
+          },
+          "liquidity": {
+            "usd": 88.33,
+            "base": 74933,
+            "quote": 0.01551
+          },
+          "fdv": 1142265,
+          "marketCap": 1142265,
+          "pairCreatedAt": 1762160445000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "meteora",
+          "url": "https://dexscreener.com/solana/9ofjxy8sinesuctueocn976wqoep4jb6pznhxvvwwect",
+          "pairAddress": "9ofjxY8SinESucTueoCN976WqoeP4Jb6PZNHXvvWWeCt",
+          "labels": [
+            "DYN2"
+          ],
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.000002460",
+          "priceUsd": "0.0004332",
+          "txns": {
+            "m5": {
+              "buys": 7,
+              "sells": 3
+            },
+            "h1": {
+              "buys": 43,
+              "sells": 52
+            },
+            "h6": {
+              "buys": 249,
+              "sells": 233
+            },
+            "h24": {
+              "buys": 249,
+              "sells": 233
+            }
+          },
+          "volume": {
+            "h24": 18.71,
+            "h6": 18.71,
+            "h1": 3.32,
+            "m5": 0.4
+          },
+          "priceChange": {
+            "m5": 7.63,
+            "h1": -29.97,
+            "h6": -50.58,
+            "h24": -50.58
+          },
+          "liquidity": {
+            "usd": 7.41,
+            "base": 8413.7376,
+            "quote": 0.02139
+          },
+          "fdv": 433228,
+          "marketCap": 433228,
+          "pairCreatedAt": 1762162366000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        },
+        {
+          "chainId": "solana",
+          "dexId": "pumpfun",
+          "url": "https://dexscreener.com/solana/9zjshtodbykdgnfwaa4p6rbm6khjepwzkoyrwzdctdbf",
+          "pairAddress": "9ZJSHtoDbykDGnfwAA4P6RBm6khJepWZkoyRWzDCTdBf",
+          "baseToken": {
+            "address": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "name": "PlaiPin",
+            "symbol": "PlaiPin"
+          },
+          "quoteToken": {
+            "address": "So11111111111111111111111111111111111111112",
+            "name": "Wrapped SOL",
+            "symbol": "SOL"
+          },
+          "priceNative": "0.0000004108",
+          "priceUsd": "0.00007223",
+          "txns": {
+            "m5": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h1": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h6": {
+              "buys": 0,
+              "sells": 0
+            },
+            "h24": {
+              "buys": 594,
+              "sells": 407
+            }
+          },
+          "volume": {
+            "h24": 107008.84,
+            "h6": 0,
+            "h1": 0,
+            "m5": 0
+          },
+          "priceChange": {
+            "h24": 1120
+          },
+          "fdv": 72236.84,
+          "marketCap": 72236.84,
+          "pairCreatedAt": 1762152394000,
+          "info": {
+            "imageUrl": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump.png?key=523c17",
+            "header": "https://dd.dexscreener.com/ds-data/tokens/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump/header.png?key=523c17",
+            "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump?timestamp=1762182300000",
+            "websites": [],
+            "socials": [
+              {
+                "type": "twitter",
+                "url": "https://x.com/i/communities/1985240883642745105"
+              }
+            ]
+          },
+          "boosts": {
+            "active": 10
+          }
+        }
+      ]
+    },
+    "rugcheck_raw": {
+      "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+      "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "creator": "5b6B5vYDR1nvFRHDFPhDgmEtn7dmvf8xCc7vzMa6gczB",
+      "creatorBalance": 0,
+      "token": {
+        "mintAuthority": null,
+        "supply": 999998492205953,
+        "decimals": 6,
+        "isInitialized": true,
+        "freezeAuthority": null
+      },
+      "token_extensions": null,
+      "tokenMeta": {
+        "name": "PlaiPin",
+        "symbol": "PlaiPin",
+        "uri": "https://metadata.rapidlaunch.io/metadata/b906ceaa-b077-46a2-89f1-1e200f6a3f39.json",
+        "mutable": false,
+        "updateAuthority": "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM"
+      },
+      "topHolders": [
+        {
+          "address": "4RFF1AM4WKwBcWDcxuGp52T2KnAQ3sL5KDV4a7WvNn2K",
+          "amount": 97310615971272,
+          "decimals": 6,
+          "pct": 9.731076269586069,
+          "uiAmount": 97310615.971272,
+          "uiAmountString": "97310615.971272",
+          "owner": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+          "insider": false
+        },
+        {
+          "address": "5EgbRJQCufHaFBSJWcSC1R56PmHByPN9mSdT5Gg32dqA",
+          "amount": 26785946102511,
+          "decimals": 6,
+          "pct": 2.6785986490261973,
+          "uiAmount": 26785946.102511,
+          "uiAmountString": "26785946.102511",
+          "owner": "DEpDnbbVhY7dSugqmhGQwAgwd1N1nEfNCiQoouUURe6j",
+          "insider": false
+        },
+        {
+          "address": "3x34ACZYtuRLYSMHSYrXAA1kvTY4FEQZgCrtgeSGxWT7",
+          "amount": 19451646535200,
+          "decimals": 6,
+          "pct": 1.9451675864321072,
+          "uiAmount": 19451646.5352,
+          "uiAmountString": "19451646.5352",
+          "owner": "7MYCpRcsHkdyts4NaTcUS6PT7WBpg6fowNtFexuEExNv",
+          "insider": false
+        },
+        {
+          "address": "CCyUtoWep8fjAnRnej3FuAGs1Eh89muiVXXQgzbUCc77",
+          "amount": 18408379511260,
+          "decimals": 6,
+          "pct": 1.8408407267346893,
+          "uiAmount": 18408379.51126,
+          "uiAmountString": "18408379.51126",
+          "owner": "98Myq1vSXa2fkFiuWiU5nybw8Z2HLC4NYxwGvaqoiwfb",
+          "insider": false
+        },
+        {
+          "address": "AUuafwSHtSU8QBsXpy3itFSscfmnUakwtd4Qf1VbFuTz",
+          "amount": 17447800998345,
+          "decimals": 6,
+          "pct": 1.7447827306075143,
+          "uiAmount": 17447800.998345,
+          "uiAmountString": "17447800.998345",
+          "owner": "Dg8TkBf2vNhaFq29u1QHBc6kg8yTxFg2jzTDPJqAVKve",
+          "insider": false
+        },
+        {
+          "address": "8v9QEvu9BfRYJXMEhkFTM2i5NhSEW7s92Btczjstgh9v",
+          "amount": 13776158519843,
+          "decimals": 6,
+          "pct": 1.3776179291484125,
+          "uiAmount": 13776158.519843,
+          "uiAmountString": "13776158.519843",
+          "owner": "4hSXPtxZgXFpo6Vxq9yqxNjcBoqWN3VoaPJWonUtupzD",
+          "insider": false
+        },
+        {
+          "address": "EFb5Wuax1JeAj4GSQSjTbsa9AydR4neCJtoHdTecuTcv",
+          "amount": 12079655304588,
+          "decimals": 6,
+          "pct": 1.207967351824782,
+          "uiAmount": 12079655.304588,
+          "uiAmountString": "12079655.304588",
+          "owner": "FbM4BLBQudJzxkncetzhq9sfH1qtDhemxWHuaNm4HyFe",
+          "insider": false
+        },
+        {
+          "address": "8LRNpQUwQuL5BMmoeU8kw6jL4MSHkttxdZTMSW59xfo8",
+          "amount": 11989871421365,
+          "decimals": 6,
+          "pct": 1.1989889499649011,
+          "uiAmount": 11989871.421365,
+          "uiAmountString": "11989871.421365",
+          "owner": "DfMxre4cKmvogbLrPigxmibVTTQDuzjdXojWzjCXXhzj",
+          "insider": false
+        },
+        {
+          "address": "CSWy9YzA9J7DJb9PoiRwktiqt7siMFpCbBUVtBxsffgJ",
+          "amount": 11027824780680,
+          "decimals": 6,
+          "pct": 1.1027841408393626,
+          "uiAmount": 11027824.78068,
+          "uiAmountString": "11027824.78068",
+          "owner": "A323KDDzCmvTCjrkRoyUAPRunFb6XJBAEq636f3W6ZVi",
+          "insider": false
+        },
+        {
+          "address": "GXVR89DFCJgEkAtXWb2Nr37Whs5vz7qWBCyZiiXyvk8f",
+          "amount": 11003291155091,
+          "decimals": 6,
+          "pct": 1.1003307745812918,
+          "uiAmount": 11003291.155091,
+          "uiAmountString": "11003291.155091",
+          "owner": "EFmDSnRbFCHkUz3z9vVMahma725xe8zXoT1ru7ymwAgz",
+          "insider": false
+        },
+        {
+          "address": "76nEGtwUnM3EbxSD9VwkpzPghQRQ6wbgwRAkphFv4H81",
+          "amount": 10106374007573,
+          "decimals": 6,
+          "pct": 1.0106389245926541,
+          "uiAmount": 10106374.007573,
+          "uiAmountString": "10106374.007573",
+          "owner": "jporkCLDqDPDNE4CLqLFmcexX8U7GemBDe2JoMwruMM",
+          "insider": false
+        },
+        {
+          "address": "9ZVcpGaCV5cfxoaHpPMPw1Z7iF8YZFytNLcZMboAE9qU",
+          "amount": 9178738421553,
+          "decimals": 6,
+          "pct": 0.9178752261221019,
+          "uiAmount": 9178738.421553,
+          "uiAmountString": "9178738.421553",
+          "owner": "opsec1MLFCRmp3nNpzg2ywhg6hnLdusnx5szLet9qur",
+          "insider": false
+        },
+        {
+          "address": "9xxEW19LZHorZJNR1Xc5Ve7BD53JsMyPFaSDC3sWzrgX",
+          "amount": 9105709503876,
+          "decimals": 6,
+          "pct": 0.9105723233431284,
+          "uiAmount": 9105709.503876,
+          "uiAmountString": "9105709.503876",
+          "owner": "J8aE7WscqC9ye2pbmMFfVJ4VUJMGaMjyegTE18tpyNtd",
+          "insider": false
+        },
+        {
+          "address": "8ziYoW8fYe1vTUNLeo9DHeux4V3HXMxCJpN92hoon2rh",
+          "amount": 8844073664056,
+          "decimals": 6,
+          "pct": 0.8844086999117728,
+          "uiAmount": 8844073.664056,
+          "uiAmountString": "8844073.664056",
+          "owner": "5cgJxGHwtrPVx7Uwv84EPb5PnsK1dbDQ8q193sCDrhff",
+          "insider": false
+        },
+        {
+          "address": "4PUAnc1tXkjsNQKcBo13AArFTWTH91Lu9GXXAfijp2z9",
+          "amount": 8827735611780,
+          "decimals": 6,
+          "pct": 0.8827748922207274,
+          "uiAmount": 8827735.61178,
+          "uiAmountString": "8827735.61178",
+          "owner": "7v1KvyHrbTaT2a6UAJm2z4sJ7616UyJEkRugsnDiHbSQ",
+          "insider": false
+        },
+        {
+          "address": "JCQtrg7onkt5tK4w4eFYXisy6e5Af6SrN2NPWv8UcKgj",
+          "amount": 8615295663590,
+          "decimals": 6,
+          "pct": 0.86153086537011,
+          "uiAmount": 8615295.66359,
+          "uiAmountString": "8615295.66359",
+          "owner": "BDbe6C5kQiq7Gz2NKEReKdx7BvY2eQrHdDexenLBJeEe",
+          "insider": false
+        },
+        {
+          "address": "GTsCn1qGjtXevLWz4T2qwnUrwoaR73EbgfC5dURz23ax",
+          "amount": 8494430837001,
+          "decimals": 6,
+          "pct": 0.849444364487256,
+          "uiAmount": 8494430.837001,
+          "uiAmountString": "8494430.837001",
+          "owner": "DNfuF1L62WWyW3pNakVkyGGFzVVhj4Yr52jSmdTyeBHm",
+          "insider": false
+        },
+        {
+          "address": "Dmu2ENGqW9ve6n8NezQ4w2rwH6AjaPJKK9F2d6YJM9vT",
+          "amount": 8093282300698,
+          "decimals": 6,
+          "pct": 0.8093294503719274,
+          "uiAmount": 8093282.300698,
+          "uiAmountString": "8093282.300698",
+          "owner": "591FoGm1B2SiTaJ3zBvMQS8Z3gnzgPmKefuoCcJ6qfgL",
+          "insider": false
+        },
+        {
+          "address": "6Smvt9CFk2EyvZ2qXuPJB4hq4HDZCg2n4Q2efJG8WDn2",
+          "amount": 7989040667662,
+          "decimals": 6,
+          "pct": 0.7989052713508122,
+          "uiAmount": 7989040.667662,
+          "uiAmountString": "7989040.667662",
+          "owner": "12bzbUttLdzZdYXWUC15ZULe9BHYBfLRhA7bUJuLZ9xL",
+          "insider": false
+        },
+        {
+          "address": "8ai6YCJvzTqwgxp41GQY3UykkfqozeRb13TSuxmUVMQW",
+          "amount": 7965218573116,
+          "decimals": 6,
+          "pct": 0.7965230583043257,
+          "uiAmount": 7965218.573116,
+          "uiAmountString": "7965218.573116",
+          "owner": "EXwEXo6r3yypUag6A2Kk1HDkyQxRw2fMDX5QMVY8CQyG",
+          "insider": false
+        }
+      ],
+      "freezeAuthority": null,
+      "mintAuthority": null,
+      "risks": [],
+      "score": 1,
+      "score_normalised": 1,
+      "fileMeta": {
+        "description": "",
+        "name": "PlaiPin",
+        "symbol": "PlaiPin",
+        "image": "https://metadata.rapidlaunch.io/images/b906ceaa-b077-46a2-89f1-1e200f6a3f39.png"
+      },
+      "lockerOwners": {},
+      "lockers": {},
+      "markets": [
+        {
+          "pubkey": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+          "marketType": "pump_fun_amm",
+          "mintA": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+          "mintB": "So11111111111111111111111111111111111111112",
+          "mintLP": "4BEb5C6HPsYiC7LfYmvtA4U6jXJv6XR8qhJZogerJhdt",
+          "liquidityA": "4RFF1AM4WKwBcWDcxuGp52T2KnAQ3sL5KDV4a7WvNn2K",
+          "liquidityB": "tE9VuX1eVz1GT8Ys6tkWUEutE5sMrcspprrdjHocFgX",
+          "mintAAccount": {
+            "mintAuthority": null,
+            "supply": 999998492205953,
+            "decimals": 6,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintBAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 9,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintLPAccount": {
+            "mintAuthority": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+            "supply": 0,
+            "decimals": 9,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "liquidityAAccount": {
+            "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "owner": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+            "amount": 95513983729186,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "liquidityBAccount": {
+            "mint": "So11111111111111111111111111111111111111112",
+            "owner": "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX",
+            "amount": 242682989499,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "lp": {
+            "baseMint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "quoteMint": "So11111111111111111111111111111111111111112",
+            "lpMint": "4BEb5C6HPsYiC7LfYmvtA4U6jXJv6XR8qhJZogerJhdt",
+            "quotePrice": 175.89891626573515,
+            "basePrice": 0.0004173214171294889,
+            "base": 95513983.729186,
+            "quote": 242.682989499,
+            "reserveSupply": 4193388292893,
+            "currentSupply": 0,
+            "quoteUSD": 42687.674849002884,
+            "baseUSD": 39860.03104554684,
+            "pctReserve": 0,
+            "pctSupply": 0,
+            "holders": null,
+            "totalTokensUnlocked": 0,
+            "tokenSupply": 0,
+            "lpLocked": 4193388292893,
+            "lpUnlocked": 0,
+            "lpLockedPct": 100,
+            "lpLockedUSD": 82547.70589454973,
+            "lpMaxSupply": 0,
+            "lpCurrentSupply": 0,
+            "lpTotalSupply": 4193388292893
+          }
+        },
+        {
+          "pubkey": "38xewkQBnErLCBcMeCwGnVGSmwzvoXjbHiEHC7oDP3Vn",
+          "marketType": "meteora_damm_v2",
+          "mintA": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+          "mintB": "So11111111111111111111111111111111111111112",
+          "mintLP": "11111111111111111111111111111111",
+          "liquidityA": "5rtVkyxkrKKnqLxMivabQA8VNXPUnNz1pA3R2m5WhLDM",
+          "liquidityB": "86NtsheZKoLK5RKkxitwY27JLrhJLT1koLSxHWGdWGKu",
+          "mintAAccount": {
+            "mintAuthority": null,
+            "supply": 999998492205953,
+            "decimals": 6,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintBAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 9,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintLPAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 0,
+            "isInitialized": false,
+            "freezeAuthority": null
+          },
+          "liquidityAAccount": {
+            "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 71676602761,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "liquidityBAccount": {
+            "mint": "So11111111111111111111111111111111111111112",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 351720091,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "lp": {
+            "baseMint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "quoteMint": "So11111111111111111111111111111111111111112",
+            "lpMint": "11111111111111111111111111111111",
+            "quotePrice": 175.89891626573515,
+            "basePrice": 0.0004173214171294889,
+            "base": 71676.602761,
+            "quote": 0.351720091,
+            "reserveSupply": 0,
+            "currentSupply": 0,
+            "quoteUSD": 61.86718283578575,
+            "baseUSD": 29.912181439247956,
+            "pctReserve": 0,
+            "pctSupply": 0,
+            "holders": null,
+            "totalTokensUnlocked": 0,
+            "tokenSupply": 0,
+            "lpLocked": 0,
+            "lpUnlocked": 0,
+            "lpLockedPct": 0,
+            "lpLockedUSD": 0,
+            "lpMaxSupply": 0,
+            "lpCurrentSupply": 0,
+            "lpTotalSupply": 0
+          }
+        },
+        {
+          "pubkey": "9ofjxY8SinESucTueoCN976WqoeP4Jb6PZNHXvvWWeCt",
+          "marketType": "meteora_damm_v2",
+          "mintA": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+          "mintB": "So11111111111111111111111111111111111111112",
+          "mintLP": "11111111111111111111111111111111",
+          "liquidityA": "GNACidPgYTAFBEg7QrZZuk5YuG1agBcXztxKsmdCT9Tx",
+          "liquidityB": "B5k669CAGHPtFajrB3fhgr3M2enVCyoNErvWcggvzMNN",
+          "mintAAccount": {
+            "mintAuthority": null,
+            "supply": 999998492205953,
+            "decimals": 6,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintBAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 9,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintLPAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 0,
+            "isInitialized": false,
+            "freezeAuthority": null
+          },
+          "liquidityAAccount": {
+            "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 8618721527,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "liquidityBAccount": {
+            "mint": "So11111111111111111111111111111111111111112",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 22732896,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "lp": {
+            "baseMint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "quoteMint": "So11111111111111111111111111111111111111112",
+            "lpMint": "11111111111111111111111111111111",
+            "quotePrice": 175.89891626573515,
+            "basePrice": 0.0004173214171294889,
+            "base": 8618.721527,
+            "quote": 0.022732896,
+            "reserveSupply": 0,
+            "currentSupply": 0,
+            "quoteUSD": 3.9986917699816655,
+            "baseUSD": 3.5967770814920725,
+            "pctReserve": 0,
+            "pctSupply": 0,
+            "holders": null,
+            "totalTokensUnlocked": 0,
+            "tokenSupply": 0,
+            "lpLocked": 0,
+            "lpUnlocked": 0,
+            "lpLockedPct": 0,
+            "lpLockedUSD": 0,
+            "lpMaxSupply": 0,
+            "lpCurrentSupply": 0,
+            "lpTotalSupply": 0
+          }
+        },
+        {
+          "pubkey": "DrnM6jf3gf54u7YyYn4aNnbVQvtKSqoRsPHrZXtz46ay",
+          "marketType": "meteora_damm_v2",
+          "mintA": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+          "mintB": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "mintLP": "11111111111111111111111111111111",
+          "liquidityA": "J7uHxYLqKS2Kf1D4XisLiBshSkqmjEc45zbn5NttioFb",
+          "liquidityB": "5Lt81C9FAtB5MHfazNRWjFFcn2N8qVcYqgwjfz2fHPsZ",
+          "mintAAccount": {
+            "mintAuthority": null,
+            "supply": 999998492205953,
+            "decimals": 6,
+            "isInitialized": true,
+            "freezeAuthority": null
+          },
+          "mintBAccount": {
+            "mintAuthority": "BJE5MMbqXjVwjAF7oxwPYXnTXDyspzZyt4vwenNw5ruG",
+            "supply": 10343688471311256,
+            "decimals": 6,
+            "isInitialized": true,
+            "freezeAuthority": "7dGbd2QZcCKcTndnHcTL8q7SMVXAkp688NTQYwrRCrar"
+          },
+          "mintLPAccount": {
+            "mintAuthority": null,
+            "supply": 0,
+            "decimals": 0,
+            "isInitialized": false,
+            "freezeAuthority": null
+          },
+          "liquidityAAccount": {
+            "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 1,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "liquidityBAccount": {
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+            "amount": 1,
+            "delegate": null,
+            "state": 1,
+            "delegatedAmount": 0,
+            "closeAuthority": null
+          },
+          "lp": {
+            "baseMint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+            "quoteMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "lpMint": "11111111111111111111111111111111",
+            "quotePrice": 1,
+            "basePrice": 0.0004173214171294889,
+            "base": 1e-06,
+            "quote": 1e-06,
+            "reserveSupply": 0,
+            "currentSupply": 0,
+            "quoteUSD": 1e-06,
+            "baseUSD": 4.1732141712948887e-10,
+            "pctReserve": 0,
+            "pctSupply": 0,
+            "holders": null,
+            "totalTokensUnlocked": 0,
+            "tokenSupply": 0,
+            "lpLocked": 0,
+            "lpUnlocked": 0,
+            "lpLockedPct": 0,
+            "lpLockedUSD": 0,
+            "lpMaxSupply": 0,
+            "lpCurrentSupply": 0,
+            "lpTotalSupply": 0
+          }
+        }
+      ],
+      "totalMarketLiquidity": 82647.08072867665,
+      "totalStableLiquidity": 42753.54072460865,
+      "totalLPProviders": 0,
+      "totalHolders": 4053,
+      "price": 0.0004290901585095219,
+      "rugged": false,
+      "tokenType": "",
+      "transferFee": {
+        "pct": 0,
+        "maxAmount": 0,
+        "authority": "11111111111111111111111111111111"
+      },
+      "knownAccounts": {
+        "4RFF1AM4WKwBcWDcxuGp52T2KnAQ3sL5KDV4a7WvNn2K": {
+          "name": "Pump Fun AMM",
+          "type": "AMM"
+        },
+        "5Lt81C9FAtB5MHfazNRWjFFcn2N8qVcYqgwjfz2fHPsZ": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "5b6B5vYDR1nvFRHDFPhDgmEtn7dmvf8xCc7vzMa6gczB": {
+          "name": "Creator",
+          "type": "CREATOR"
+        },
+        "5rtVkyxkrKKnqLxMivabQA8VNXPUnNz1pA3R2m5WhLDM": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "6PDubJZbKGQaDVGuHR2HK2EN2kLmkAfks2x2okVBsW84": {
+          "name": "Pump Fun",
+          "type": "AMM"
+        },
+        "86NtsheZKoLK5RKkxitwY27JLrhJLT1koLSxHWGdWGKu": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "9ZJSHtoDbykDGnfwAA4P6RBm6khJepWZkoyRWzDCTdBf": {
+          "name": "Pump Fun",
+          "type": "AMM"
+        },
+        "B5k669CAGHPtFajrB3fhgr3M2enVCyoNErvWcggvzMNN": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "BBuLcYBj94J4Uq2u4mYHmmYzxANhS8iSj6Wgk6CSa5YX": {
+          "name": "Pump Fun AMM",
+          "type": "AMM"
+        },
+        "GNACidPgYTAFBEg7QrZZuk5YuG1agBcXztxKsmdCT9Tx": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "J7uHxYLqKS2Kf1D4XisLiBshSkqmjEc45zbn5NttioFb": {
+          "name": "Meteora DAMM v2 Pool",
+          "type": "AMM"
+        },
+        "tE9VuX1eVz1GT8Ys6tkWUEutE5sMrcspprrdjHocFgX": {
+          "name": "Pump Fun AMM",
+          "type": "AMM"
+        }
+      },
+      "events": [],
+      "verification": null,
+      "graphInsidersDetected": 73,
+      "insiderNetworks": [
+        {
+          "id": "radiant-wine-cow",
+          "size": 7,
+          "type": "transfer",
+          "tokenAmount": 23241003124338,
+          "activeAccounts": 7
+        },
+        {
+          "id": "fast-sand-weasel",
+          "size": 312,
+          "type": "trade",
+          "tokenAmount": 76451487356,
+          "activeAccounts": 51
+        },
+        {
+          "id": "weak-indigo-prawn",
+          "size": 92,
+          "type": "trade",
+          "tokenAmount": 20943220521,
+          "activeAccounts": 15
+        }
+      ],
+      "detectedAt": "2025-11-03T06:46:35.430351089Z",
+      "creatorTokens": null,
+      "launchpad": {
+        "name": "Pump.Fun",
+        "logo": "https://api.rugcheck.xyz/public/logos/pump_fun.png",
+        "url": "https://x.com/moonshot",
+        "platform": "pump_fun"
+      },
+      "deployPlatform": "rapidlaunch"
+    },
+    "holiday_check": {
+      "countries": [
+        "US",
+        "GB",
+        "DE",
+        "JP",
+        "SG",
+        "KR",
+        "CN",
+        "CA",
+        "AU"
+      ],
+      "is_holiday": true
+    }
+  },
+  "features": {
+    "mint": "CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump",
+    "checked_at_utc": "2025-11-03T12:24:33.082938+00:00",
+    "checked_at_timestamp": 1762172673,
+    "time_of_day_utc": 12,
+    "day_of_week_utc": 0,
+    "is_weekend_utc": false,
+    "is_public_holiday_any": true,
+    "signal_source": "discovery",
+    "grade": "MEDIUM",
+    "price_usd": 0.0004418,
+    "fdv_usd": 441868.0,
+    "liquidity_usd": 84914.3,
+    "volume_h24_usd": 7440703.72,
+    "price_change_h24_pct": 510.0,
+    "pair_created_at_timestamp": 1762152797,
+    "token_age_at_signal_seconds": 19876
+  },
+  "finalization": {
+    "token_age_hours_at_signal": 5.52,
+    "is_new_token": true,
+    "tracking_duration_hours": 24,
+    "finalize_deadline": "2025-11-04T12:24:33.082938+00:00",
+    "check_interval_minutes": 30,
+    "next_check_at": "2025-11-03T16:14:04.129176+00:00",
+    "check_count": 2,
+    "finalization_status": "pending",
+    "claimed_by": "aggregator",
+    "claimed_at": "2025-11-03T15:43:22.351746+00:00",
+    "finalized_at": null
+  },
+  "label": null
+}

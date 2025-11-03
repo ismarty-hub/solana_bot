@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
 main.py - FastAPI entrypoint for Render deployment.
-It imports and runs the Telegram bot (from bot.py) in a background thread,
-runs the analytics tracker continuously, and exposes HTTP endpoints for 
-uptime pings and additional integrations (merged in from api.py).
+
+It imports and runs:
+1. The Telegram bot (from bot.py)
+2. The analytics tracker (from analytics_tracker.py)
+3. The snapshot collector (from collector.py)
+...all in background tasks.
+
+It also exposes HTTP endpoints for uptime pings and additional integrations
+(merged in from api.py and collector.py).
 """
 
 import logging
 import asyncio
+import aiohttp
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 import uvicorn
@@ -32,11 +39,20 @@ import bot
 # Import analytics tracker
 import analytics_tracker
 
+# Import collector
+try:
+    import collector
+except ImportError:
+    logging.getLogger("main").error("--- 'collector.py' not found. Collector service will not start. ---")
+    collector = None # Set to None to handle gracefully
+
 # ----------------------
 # Logging Setup
 # ----------------------
 # Keep one logging configuration
 LOGLEVEL = os.environ.get("LOGLEVEL", "DEBUG")
+# Note: collector.py also sets up logging, which might add file handlers.
+# This basicConfig will apply first.
 logging.basicConfig(level=LOGLEVEL, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("main")
 
@@ -59,14 +75,68 @@ JOB_FUTURES: Dict[str, Any] = {}
 # Global variables to store background tasks
 bot_task = None
 analytics_task = None
+collector_task = None
+collector_session = None # For collector's aiohttp session
+collector_log = None # To store the collector's logger instance
+
+# ----------------------
+# Collector Service Runner
+# ----------------------
+async def run_collector_service():
+    """Initializes and runs the CollectorService in a loop."""
+    global collector_session, collector_log
+    
+    if not collector:
+        logger.error("Collector module not loaded. Service cannot start.")
+        return
+
+    try:
+        config = collector.Config()
+        
+        # collector.py's setup_logging() configures the root logger AND
+        # returns its own logger. It also sets a global 'log' variable
+        # within its own module, which its components rely on.
+        try:
+            # This sets collector.log and returns the logger instance
+            collector.log = collector.setup_logging(config.LOG_LEVEL)
+        except Exception as log_e:
+            logger.warning(f"Could not configure collector's custom logging: {log_e}. It may use main's logging.")
+            # Fallback: get the logger it *would* have used
+            collector.log = logging.getLogger("CollectorService")
+
+        collector_log = collector.log # Get a reference to it
+        
+        collector_log.info("Collector service starting...")
+        
+        async with aiohttp.ClientSession() as session:
+            collector_session = session # Store for graceful shutdown
+            service = collector.CollectorService(config, session)
+            await service.run() # This is the infinite loop
+            
+    except asyncio.CancelledError:
+        if collector_log:
+            collector_log.info("Collector service loop cancelled.")
+        else:
+            logger.info("Collector service loop cancelled.")
+    except Exception as e:
+        logger.error(f"Collector service failed critically: {e}", exc_info=True)
+    finally:
+        if collector_session and not collector_session.closed:
+            await collector_session.close()
+            if collector_log:
+                collector_log.info("Collector session closed.")
+            else:
+                logger.info("Collector session closed.")
+        logger.info("Collector service shut down complete.")
+
 
 # ----------------------
 # Lifespan context manager for startup/shutdown
 # ----------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage bot and analytics tracker lifecycle with proper startup and shutdown."""
-    global bot_task, analytics_task
+    """Manage bot, analytics, and collector lifecycles with proper startup and shutdown."""
+    global bot_task, analytics_task, collector_task
 
     # Startup
     logger.info("🚀 Starting Telegram bot...")
@@ -75,6 +145,14 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting Analytics Tracker...")
     analytics_task = asyncio.create_task(analytics_tracker.main_loop())
 
+    # --- NEW: Start Collector Service ---
+    if collector:
+        logger.info("🚀 Starting Snapshot Collector Service...")
+        collector_task = asyncio.create_task(run_collector_service())
+    else:
+        logger.warning("Collector module not loaded, skipping collector service startup.")
+    # ------------------------------------
+
     yield  # FastAPI runs here
 
     # Shutdown
@@ -82,6 +160,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown bot
     if bot_task and not bot_task.done():
+        logger.info("🛑 Shutting down bot...")
         bot_task.cancel()
         try:
             await bot_task
@@ -92,6 +171,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown analytics tracker
     if analytics_task and not analytics_task.done():
+        logger.info("🛑 Shutting down analytics tracker...")
         analytics_task.cancel()
         try:
             await analytics_task
@@ -99,6 +179,19 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Analytics tracker cancelled successfully")
         except Exception as e:
             logger.error(f"Error during analytics tracker shutdown: {e}")
+
+    # --- NEW: Shutdown Collector Service ---
+    if collector_task and not collector_task.done():
+        logger.info("🛑 Shutting down collector service...")
+        collector_task.cancel()
+        try:
+            await collector_task
+        except asyncio.CancelledError:
+            logger.info("✅ Collector task cancelled successfully")
+        except Exception as e:
+            logger.error(f"Error during collector shutdown: {e}")
+    # Session cleanup is handled in run_collector_service's finally block
+    # ---------------------------------------
     
     # Cleanup HTTP session from analytics tracker
     if analytics_tracker.http_session and not analytics_tracker.http_session.closed:
@@ -110,10 +203,10 @@ async def lifespan(app: FastAPI):
 # FastAPI app setup
 # ----------------------
 app = FastAPI(
-    title="Solana Bot Service (with Trader ROI API & Analytics)",
-    version="1.0.0",
+    title="Solana Bot Service (Trader ROI API, Analytics & Collector)",
+    version="1.1.0",
     lifespan=lifespan,
-    description="Combined service running the Telegram bot, analytics tracker, and ROI analysis endpoints."
+    description="Combined service running the Telegram bot, analytics tracker, ROI analysis, and snapshot collector."
 )
 
 # ----------------------
@@ -121,7 +214,7 @@ app = FastAPI(
 # ----------------------
 @app.api_route("/", methods=["GET", "HEAD"])
 async def root():
-    return {"message": "Solana Bot Service with Analytics is running!"}
+    return {"message": "Solana Bot Service with Analytics & Collector is running!"}
 
 
 @app.head("/health")
@@ -131,6 +224,10 @@ async def health_check():
     bot_status = "running" if bot_task and not bot_task.done() else "stopped"
     analytics_status = "running" if analytics_task and not analytics_task.done() else "stopped"
     
+    collector_status = "not_loaded" # Default if collector is None
+    if collector:
+         collector_status = "running" if collector_task and not collector_task.done() else "stopped"
+    
     # Basic job stats
     running_jobs = sum(1 for f in JOB_FUTURES.values() if not f.done()) if JOB_FUTURES else 0
     
@@ -139,9 +236,10 @@ async def health_check():
     
     return {
         "status": "ok",
-        "service": "Solana Bot + Trader ROI API + Analytics Tracker",
+        "service": "Solana Bot + Trader ROI API + Analytics + Collector",
         "bot_status": bot_status,
         "analytics_status": analytics_status,
+        "collector_status": collector_status,
         "running_jobs": running_jobs,
         "active_tracking_tokens": active_tokens,
         "details": "All services running smoothly"
@@ -225,7 +323,7 @@ class AnalysisRequest(BaseModel):
 # ----------------------
 # API endpoints (from api.py)
 # ----------------------
-@app.post("/analyze")
+@app.post("/analyze", tags=["Trader Analysis"])
 def analyze(req: AnalysisRequest):
     """Starts run_pipeline in a background thread and returns a jobId immediately."""
     try:
@@ -303,7 +401,7 @@ def analyze(req: AnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/job/{job_id}")
+@app.get("/job/{job_id}", tags=["Trader Analysis"])
 def job_status(job_id: str):
     """Check job status and include Supabase storage path if complete"""
     logger.info(f"Checking status for job {job_id}")
@@ -343,8 +441,46 @@ def job_status(job_id: str):
     }
 
 # ----------------------
+# NEW: Collector API Endpoints
+# ----------------------
+
+@app.post("/collector/test-apis", tags=["Collector"])
+async def run_collector_api_tests():
+    """
+    Triggers the collector's 'test-apis' command from its main() function.
+    This runs connectivity tests for Supabase, Dexscreener, RugCheck, and HolidayAPI.
+    Results are printed to the server logs.
+    """
+    if not collector:
+        raise HTTPException(status_code=503, detail="Collector module is not loaded.")
+    
+    logger.info("--- Triggering Collector API tests via endpoint ---")
+    
+    try:
+        config = collector.Config()
+        
+        # Ensure the collector's logger is available for the test run
+        # (It's normally set in the run_collector_service task)
+        if not hasattr(collector, 'log') or not collector.log:
+             collector.log = collector.setup_logging(config.LOG_LEVEL)
+
+        # run_tests is an async function that needs a session
+        async with aiohttp.ClientSession() as session:
+            await collector.run_tests(config, session)
+        
+        logger.info("--- Collector API tests complete ---")
+        return {"status": "ok", "message": "Collector API tests triggered. Check server logs for results."}
+    
+    except Exception as e:
+        logger.error(f"Failed to run collector API tests: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to run tests: {str(e)}")
+
+
+# ----------------------
 # Run locally (Render will use Procfile instead)
 # ----------------------
 if __name__ == "__main__":
     # Use uvicorn to run the app; keep reload for local dev
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    logger.info(f"Starting server locally on http://0.0.0.0:{port}")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
