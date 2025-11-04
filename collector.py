@@ -14,8 +14,9 @@ dynamic `finalize_deadline` based on its age at signal time. The aggregator
 intelligently scans *only* the required analytics daily files for snapshots
 that are due for a recheck, rather than a full 7-day lookback.
 
-The collector is robust, idempotent (via checking snapshot existence),
-and built for async performance with retries, backoff, and caching.
+(CORRECTED) The service now extracts pre-fetched Dexscreener and RugCheck
+data from the signal files instead of making redundant live API calls.
+It only fetches live data if it's missing from the signal.
 """
 
 import os
@@ -466,6 +467,56 @@ class FeatureComputer:
             if isinstance(obj, str): return obj
         return "UNKNOWN"
 
+    # --- (CORRECTION) ADDED HELPER FUNCTIONS ---
+    def _safe_get_dex_data(self, entry: dict) -> Optional[Dict]:
+        """Safely extract Dexscreener data from a history entry."""
+        if not isinstance(entry, dict): return None
+        
+        # Path 1: Top-level key (discovery-style)
+        dex_data = entry.get("dexscreener")
+        if isinstance(dex_data, dict) and dex_data:
+            log.debug("Found 'dexscreener' data at top level.")
+            return dex_data
+        
+        # Path 2: Nested in result (alpha-style)
+        if isinstance(entry.get("result"), dict):
+            dex_data = entry["result"].get("dexscreener")
+            if isinstance(dex_data, dict) and dex_data:
+                log.debug("Found 'dexscreener' data in result.")
+                return dex_data
+        
+        log.debug("No pre-fetched 'dexscreener' block found in history entry.")
+        return None
+
+    def _safe_get_rug_data(self, entry: dict) -> Optional[Dict]:
+        """Safely extract RugCheck API response from a history entry."""
+        if not isinstance(entry, dict): return None
+        
+        # Path 1: Alpha-style (result.security.rugcheck_raw)
+        try:
+            raw_data = entry.get("result", {}).get("security", {}).get("rugcheck_raw")
+            if isinstance(raw_data, dict) and "ok" in raw_data:
+                log.debug("Found 'rugcheck_raw' data in result.security.")
+                return raw_data
+        except Exception:
+            pass # Ignore errors from path traversal
+        
+        # Path 2: Discovery-style (top-level 'rugcheck_raw')
+        raw_data = entry.get("rugcheck_raw")
+        if isinstance(raw_data, dict) and "ok" in raw_data:
+            log.debug("Found 'rugcheck_raw' data at top level.")
+            return raw_data
+            
+        # Path 3: Fallback to 'rugcheck' key if it looks like the raw report
+        raw_data = entry.get("rugcheck")
+        if isinstance(raw_data, dict) and "ok" in raw_data:
+            log.debug("Found 'rugcheck' data at top level (as fallback).")
+            return raw_data
+        
+        log.debug("No pre-fetched 'rugcheck_raw' or 'rugcheck' block found.")
+        return None
+    # --- END CORRECTION ---
+
     def compute_features(self, signal_type: str, history_entry: Dict, 
                          dex_data: Optional[Dict], rug_data: Optional[Dict], 
                          is_holiday: bool) -> Tuple[Optional[Dict], Optional[datetime]]:
@@ -528,10 +579,25 @@ class FeatureComputer:
                     "price_change_h24_pct": float(best_pair.get("priceChange", {}).get("h24", 0.0) or 0.0),
                     "pair_created_at_timestamp": pair_created_at_timestamp,
                 }
+        
+        # (CORRECTION) Use the `price` from the rugcheck_raw block if price_usd is missing
+        if market_features.get("price_usd", 0.0) == 0.0 and rug_data and rug_data.get("ok"):
+            try:
+                # Path from overlap_results_alpha.json: rugcheck_raw.raw.price
+                rug_price = float(rug_data.get("raw", {}).get("price", 0.0) or 0.0)
+                if rug_price > 0:
+                    market_features["price_usd"] = rug_price
+                    log.debug(f"Using fallback price from rug_data: {rug_price}")
+            except Exception:
+                pass # Ignore if price isn't there or invalid
 
         security_features = {}
         if rug_data and rug_data.get("ok"):
-            data = rug_data.get("data", {})
+            # (CORRECTION) Handle both 'data' (v2) and 'raw' (v1) structures
+            data = rug_data.get("data", rug_data.get("raw", {})) # Fallback to 'raw'
+            if not isinstance(data, dict):
+                data = {}
+
             top_holders = data.get("topHolders", []) or []
             markets = data.get("markets", []) or []
 
@@ -1078,14 +1144,24 @@ class CollectorService:
         }
 
     async def process_signal(self, signal: Dict):
-        """Main processing pipeline for a single signal."""
+        """
+        (CORRECTED) Main processing pipeline for a single signal.
+        Fetches live data ONLY if it's missing from the signal file.
+        """
         mint = signal['mint']
         signal_type = signal['signal_type']
         history_entry = signal['data']
 
-        # 1. Generate unique ID and check for idempotency
+        # --- (CORRECTION) START ---
+        # 1. Try to extract pre-fetched data from the signal
+        dex_data = self.computer._safe_get_dex_data(history_entry)
+        rug_data = self.computer._safe_get_rug_data(history_entry)
+        # --- (CORRECTION) END ---
+
+        # 2. Generate unique ID and check for idempotency
+        # We compute features *first* using any available data.
         features, checked_at_dt = self.computer.compute_features(
-            signal_type, history_entry, None, None, False
+            signal_type, history_entry, dex_data, rug_data, False # is_holiday=False for now
         )
         
         if not features or not checked_at_dt:
@@ -1107,20 +1183,41 @@ class CollectorService:
 
         log.info(f"Processing new signal: {filename_base}")
 
-        # 2. Fetch all external data in parallel
+        # --- (CORRECTION) START ---
+        # 3. Fetch *only missing* external data
+        tasks_to_run = {}
+        
+        if not dex_data:
+            log.warning(f"No pre-fetched Dex data for {filename_base}. Fetching live.")
+            tasks_to_run["dex_data"] = self.dex_client.get_token_data(mint)
+        
+        if not rug_data:
+            log.warning(f"No pre-fetched Rug data for {filename_base}. Fetching live.")
+            tasks_to_run["rug_data"] = self.rug_client.get_token_report(mint)
+            
+        # Holiday data is always fetched live as it's not in the signal file
+        tasks_to_run["is_holiday"] = self.holiday_client.is_holiday(checked_at_dt, self.config.HOLIDAY_COUNTRY_CODES)
+        
         try:
-            dex_data, rug_data, is_holiday = await asyncio.gather(
-                self.dex_client.get_token_data(mint),
-                self.rug_client.get_token_report(mint),
-                self.holiday_client.is_holiday(checked_at_dt, self.config.HOLIDAY_COUNTRY_CODES),
-                return_exceptions=False
-            )
+            if tasks_to_run:
+                task_keys = list(tasks_to_run.keys())
+                results = await asyncio.gather(*tasks_to_run.values(), return_exceptions=False)
+                results_dict = dict(zip(task_keys, results))
+            else:
+                results_dict = {}
+
+            # Merge pre-fetched and newly-fetched data
+            dex_data = dex_data or results_dict.get("dex_data")
+            rug_data = rug_data or results_dict.get("rug_data")
+            is_holiday = results_dict.get("is_holiday", False) # is_holiday is always fetched
 
         except Exception as e:
             log.error(f"Data-gathering failed for {filename_base}: {e}", exc_info=False)
             return
+        # --- (CORRECTION) END ---
 
-        # 3. Compute final features
+
+        # 4. Compute final features with all data
         final_features, _ = self.computer.compute_features(
             signal_type, history_entry, dex_data, rug_data, is_holiday
         )
@@ -1129,7 +1226,7 @@ class CollectorService:
             log.error(f"Failed to compute final features for {filename_base}. Skipping.")
             return
 
-        # 4. Build and save snapshot with finalization metadata
+        # 5. Build and save snapshot with finalization metadata
         snapshot = self._build_canonical_snapshot(
             signal, final_features, dex_data, rug_data, is_holiday, filename_base
         )

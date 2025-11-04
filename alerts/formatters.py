@@ -12,6 +12,7 @@ Recent fixes:
 - Proper HTML formatting for Telegram
 - Shows ALL risks for alpha alerts
 - Fixed refresh button functionality
+- (CORRECTION) Removed live data fetch from format_alert_html, uses pre-fetched data instead.
 """
 
 from typing import Optional, Dict, Any, Tuple
@@ -23,7 +24,8 @@ from pathlib import Path
 import html
 from config import DATA_DIR
 from shared.file_io import safe_load, safe_save
-from shared.utils import format_marketcap_display, fetch_marketcap_and_fdv, truncate_address
+# (CORRECTION) Removed fetch_marketcap_and_fdv, it's no longer called
+from shared.utils import format_marketcap_display, truncate_address
 
 # Define state file path
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
@@ -397,10 +399,10 @@ def format_alert_html(
 ) -> str:
     """
     Format regular token alert as an HTML message with a tappable address.
-    Used for standard overlap alerts (non-alpha).
+    Uses data ALREADY FETCHED by the monitoring loop.
     
     Args:
-        token_data: Token information dictionary
+        token_data: Token information dictionary (MUST include 'dexscreener' and 'rugcheck' keys)
         alert_type: "NEW" or "CHANGE"
         previous_grade: Previous grade (for CHANGE alerts)
         initial_mc: Initial market cap (for comparison)
@@ -416,8 +418,23 @@ def format_alert_html(
     grade = token_data.get("grade", "NONE")
     mint = token_meta.get("mint", "") or token_data.get("token", "")
 
-    # Fetch live market data
-    current_mc, current_fdv, current_liquidity = fetch_marketcap_and_fdv(mint)
+    # --- (CORRECTION) REMOVED LIVE FETCH ---
+    # current_mc, current_fdv, current_liquidity = fetch_marketcap_and_fdv(mint)
+    
+    # --- (CORRECTION) ADDED: Get data from token_data ---
+    dex_data = token_data.get("dexscreener", {})
+    rugcheck_data = token_data.get("rugcheck", {})
+
+    # Use Dexscreener's market cap (which is FDV from their API)
+    current_mc = dex_data.get("market_cap_usd")
+    
+    # Use RugCheck's aggregated liquidity
+    current_liquidity = rugcheck_data.get("total_liquidity_usd")
+    
+    # We will use 'current_mc' for both MC and FDV display.
+    current_fdv = current_mc 
+    # --- END CORRECTION ---
+
 
     # Build Market Cap / FDV line based on alert_type
     mc_line = ""
@@ -449,7 +466,8 @@ def format_alert_html(
         f"<b>{name}</b> ({symbol})" if symbol else f"<b>{name}</b>",
         f"<b>Grade:</b> {grade}" + (f" (was {previous_grade})" if previous_grade and alert_type == "CHANGE" else ""),
         mc_line,
-        f"💧 <b>Liquidity:</b> {format_marketcap_display(current_liquidity)}" if current_liquidity else "💧 <b>Liquidity:</b> Unknown",
+        # (CORRECTION) Handle 'None' for liquidity
+        f"💧 <b>Liquidity:</b> {format_marketcap_display(current_liquidity)}" if current_liquidity is not None else "💧 <b>Liquidity:</b> Unknown",
         f"<b>Concentration:</b> {token_data.get('concentration')}%"
     ]
 

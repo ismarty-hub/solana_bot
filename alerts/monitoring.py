@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 alerts/monitoring.py - Background monitoring with Supabase polling
+
+(CORRECTION) Updated load_latest_tokens_from_overlap to pull dexscreener
+and rugcheck data saved by token_monitor.py, to avoid failed live fetches.
 """
 
 import os
@@ -151,7 +154,10 @@ async def periodic_supabase_sync():
 
 
 def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
-    """Load overlap_results.pkl from local disk."""
+    """
+    Load overlap_results.pkl from local disk.
+    (CORRECTION) Now loads the full last entry to get dexscreener/rugcheck data.
+    """
     if not OVERLAP_FILE.exists() or OVERLAP_FILE.stat().st_size == 0:
         logger.info("ℹ️ No local overlap file yet (will be downloaded from Supabase)")
         return {}
@@ -164,7 +170,16 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
             if not history:
                 continue
             
-            result = history[-1].get("result", {})
+            # --- (CORRECTION) Get the entire last entry ---
+            last_entry = history[-1]
+            if not isinstance(last_entry, dict):
+                logger.warning(f"Skipping malformed entry for {token_id}")
+                continue
+                
+            result = last_entry.get("result", {})
+            dexscreener_data = last_entry.get("dexscreener", {})
+            rugcheck_data = last_entry.get("rugcheck", {})
+            
             latest_tokens[token_id] = {
                 "grade": result.get("grade", "NONE"),
                 "token_metadata": {
@@ -174,7 +189,11 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
                 },
                 "overlap_percentage": result.get("overlap_percentage", 0.0),
                 "concentration": result.get("concentration", 0.0),
-                "checked_at": result.get("checked_at")
+                "checked_at": result.get("checked_at"),
+                # --- (CORRECTION) ADDED pre-fetched data ---
+                "dexscreener": dexscreener_data,
+                "rugcheck": rugcheck_data
+                # --- END CORRECTION ---
             }
         
         logger.info(f"📊 Loaded {len(latest_tokens)} tokens from overlap file")
@@ -195,7 +214,11 @@ async def send_alert_to_subscribers(
     initial_fdv: Optional[float] = None,
     first_alert_at: Optional[str] = None
 ):
-    """Send alert notification to subscribed users with 'alerts' mode enabled."""
+    """
+    Send alert notification to subscribed users with 'alerts' mode enabled.
+    (CORRECTION) token_data is now passed to format_alert_html, which
+    contains the pre-fetched dexscreener/rugcheck data.
+    """
     alerting_users = user_manager.get_alerting_users()
     
     if not alerting_users:
@@ -203,7 +226,7 @@ async def send_alert_to_subscribers(
         return
 
     message = format_alert_html(
-        token_data,
+        token_data, # This token_data now contains the dexscreener/rugcheck keys
         "CHANGE" if previous_grade else "NEW",
         previous_grade,
         initial_mc=initial_mc,
@@ -369,16 +392,34 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 
                 # --- Initial State Saving (to Gate Alerts and Track Retries) ---
                 if is_new_token:
-                    mc, fdv, lqd = fetch_marketcap_and_fdv(token_id)
+                    # (CORRECTION) We check the pre-fetched data now, not a live fetch
+                    dex_data = token_info.get("dexscreener", {})
+                    rugcheck_data = token_info.get("rugcheck", {})
+                    
+                    mc = dex_data.get("market_cap_usd")
+                    lqd = rugcheck_data.get("total_liquidity_usd")
                     
                     # Determine if data is complete (MUST have MC AND Liquidity)
+                    # Note: We check for 'is not None' because 0 is a valid value
                     data_complete = (mc is not None and lqd is not None)
                     
+                    # We still call fetch_marketcap_and_fdv here just to get FDV
+                    # as a fallback, but we prioritize the pre-fetched data.
+                    # This part of the logic is for state tracking, not alerting.
+                    _mc_live, _fdv_live, _lqd_live = fetch_marketcap_and_fdv(token_id)
+                    
+                    final_mc = mc if data_complete else _mc_live
+                    final_lqd = lqd if data_complete else _lqd_live
+                    final_fdv = _fdv_live # FDV is not in our pre-fetched data, so live is fine
+                    
+                    # Re-check data completeness
+                    data_complete = (final_mc is not None and final_lqd is not None)
+
                     alerts_state[token_id] = {
                         "last_grade": grade, 
-                        "initial_marketcap": mc,
-                        "initial_fdv": fdv,
-                        "initial_liquidity": lqd, 
+                        "initial_marketcap": final_mc,
+                        "initial_fdv": final_fdv,
+                        "initial_liquidity": final_lqd, 
                         "first_alert_at": datetime.utcnow().isoformat() + "Z",
                         "broadcasted": False,
                         "data_complete": data_complete, 
@@ -392,7 +433,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 should_send_gated_alert = False 
 
                 # --- GATED ALERT AND EXPONENTIAL SILENT RETRY ---
-                # Only retry if token exists (not new) and data is incomplete
+                # This logic remains, as it's for tokens that were *initially*
+                # detected with incomplete data.
                 if not is_new_token and state.get("data_complete") is False:
                     last_retry = state.get("last_market_data_retry_at")
                     retry_count = state.get("market_data_retry_count", 1)
@@ -472,6 +514,7 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
 
                     state = alerts_state.get(token_id, {})
                     
+                    # (CORRECTION) token_info is passed directly, containing all needed data
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
                         previous_grade=last_grade if is_grade_change else None,

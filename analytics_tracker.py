@@ -9,8 +9,8 @@ This script:
 1.  Downloads 'discovery' (overlap_results.json) and 'alpha'
     (overlap_results_alpha.json) signal files every 3 minutes.
 2.  Deduplicates tokens, tracking each mint only once per signal type.
-3.  Fetches token age from Dexscreener to determine tracking duration.
-4.  Gets entry price with priority: JSON data -> Jupiter -> Dexscreener.
+3.  (CORRECTED) Fetches token age from the JSON data to determine tracking duration.
+4.  (CORRECTED) Gets entry price with priority: JSON data (multiple fields) -> Jupiter -> Dexscreener.
 5.  Tracks prices asynchronously (Jupiter -> Dexscreener) at intervals
     based on token age (5s for new, 4min for old).
 6.  Calculates ROI, ATH, and win/loss status (win >= 50% ROI).
@@ -32,6 +32,10 @@ from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 from dateutil import parser
 import copy
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # --- Configuration Variables ---
 
@@ -222,65 +226,6 @@ def parse_ts(ts_str: str) -> datetime:
 
 # --- Price Fetching Functions ---
 
-async def fetch_token_age(mint: str) -> tuple[float | None, int | None]:
-    """
-    Fetch token age from Dexscreener API.
-    Returns (age_in_hours, pair_created_at_timestamp_seconds).
-    """
-    global http_session
-    if not http_session or http_session.closed:
-        http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=DEXSCREENER_TIMEOUT))
-
-    url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
-    try:
-        async with http_session.get(url) as response:
-            if response.status != 200:
-                logger.warning(f"Dexscreener age check failed for {mint} (Status: {response.status})")
-                return None, None
-            
-            data = await response.json()
-            pairs = data.get("pairs")
-            if not pairs:
-                logger.warning(f"No pairs found on Dexscreener for {mint}")
-                return None, None
-            
-            # Collect all found creation timestamps (in milliseconds)
-            timestamps_ms = []
-            for pair in pairs:
-                if not isinstance(pair, dict):
-                    continue
-                    
-                # Check Path 1: Top-level of pair object
-                ts1 = pair.get("pairCreatedAt")
-                if isinstance(ts1, (int, float, str)) and str(ts1).isdigit():
-                    timestamps_ms.append(int(ts1))
-                    
-                # Check Path 2: Inside liquidity object
-                liquidity = pair.get("liquidity")
-                if isinstance(liquidity, dict):
-                    ts2 = liquidity.get("pairCreatedAt")
-                    if isinstance(ts2, (int, float, str)) and str(ts2).isdigit():
-                        timestamps_ms.append(int(ts2))
-
-            if not timestamps_ms:
-                logger.warning(f"No 'pairCreatedAt' key found in any pair for {mint}")
-                return None, None
-            
-            # Find the earliest timestamp (in milliseconds)
-            earliest_ms = min(timestamps_ms)
-            
-            # Convert to seconds for calculation
-            earliest_seconds = earliest_ms / 1000.0
-            
-            age_seconds = time.time() - earliest_seconds
-            age_hours = age_seconds / 3600
-            
-            return age_hours, int(earliest_seconds)
-
-    except Exception as e:
-        logger.error(f"Error fetching token age for {mint}: {e}")
-        return None, None
-
 async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
     """Fetch prices from Jupiter API in a batch."""
     global http_session
@@ -335,29 +280,46 @@ async def fetch_price_dexscreener(mint: str) -> float | None:
         return None
 
 async def get_entry_price(mint: str, signal_data: dict) -> float | None:
-    """Get entry price using priority: JSON -> Jupiter -> Dexscreener."""
+    """Get entry price using priority: JSON (dexscreener) -> JSON (rugcheck) -> Jupiter -> Dexscreener."""
     
-    # 1. Try to get from signal data
     price = None
+    
+    # 1. Try to get from signal data (dexscreener field)
     if "result" in signal_data and isinstance(signal_data.get("result"), dict):
         price = signal_data["result"].get("dexscreener", {}).get("current_price_usd")
     else:
         price = signal_data.get("dexscreener", {}).get("current_price_usd")
 
-    if price is not None and float(price) > 0:
-        logger.info(f"Entry price for {mint} from JSON: ${price}")
-        return float(price)
+    if price is not None:
+        try:
+            price_float = float(price)
+            if price_float > 0:
+                logger.info(f"Entry price for {mint} from JSON (dexscreener): ${price_float}")
+                return price_float
+        except (ValueError, TypeError):
+            pass # Price was null or invalid
 
-    # 2. Try Jupiter
+    # 2. Try to get from signal data (rugcheck_raw.price field)
+    try:
+        price = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("price")
+        if price is not None:
+            price_float = float(price)
+            if price_float > 0:
+                logger.info(f"Entry price for {mint} from JSON (rugcheck.raw.price): ${price_float}")
+                return price_float
+    except (ValueError, TypeError, AttributeError):
+        pass # Field didn't exist or was invalid
+
+    # 3. Try Jupiter (live)
     prices = await fetch_price_jupiter([mint])
     if mint in prices and prices[mint] > 0:
-        logger.info(f"Entry price for {mint} from Jupiter: ${prices[mint]}")
+        logger.info(f"Entry price for {mint} from Jupiter (live): ${prices[mint]}")
         return prices[mint]
     
-    # 3. Try Dexscreener
+    # 4. Try Dexscreener (live)
     price = await fetch_price_dexscreener(mint)
     if price is not None and price > 0:
-        logger.info(f"Entry price for {mint} from Dexscreener: ${price}")
+        logger.info(f"Entry price for {mint} from Dexscreener (live): ${price}")
         return price
 
     logger.error(f"Failed to get any entry price for {mint}")
@@ -472,43 +434,72 @@ def finalize_token_tracking(mint: str, token_data: dict):
         logger.info(f"Removed {mint} from active tracking.")
 
 async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: dict):
-    """Fetch all data for a new token and add to active_tracking."""
+    """(CORRECTED) Use JSON data for entry price and age, not live APIs."""
     
-    # 1. Get Entry Price
+    # 1. Get Entry Price (using our updated function)
     entry_price = await get_entry_price(mint, signal_data)
     if entry_price is None:
         logger.warning(f"Excluding {mint}: No entry price found.")
         return
 
-    # 2. Get Token Age
-    age_hours, pair_created_at = await fetch_token_age(mint)
-    if age_hours is None:
-        logger.warning(f"Excluding {mint}: Could not determine token age.")
+    # 2. Get Token Age (from JSON, not live API)
+    detected_at_str = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("detectedAt")
+    entry_ts_str = safe_get_timestamp(signal_data) # Fallback to entry timestamp
+    
+    creation_ts_str = detected_at_str or entry_ts_str
+    
+    if creation_ts_str is None:
+        logger.warning(f"Excluding {mint}: Could not determine creation timestamp from JSON.")
         return
 
+    creation_dt = parse_ts(creation_ts_str)
+    pair_created_at_seconds = int(creation_dt.timestamp())
+    age_seconds = (get_now() - creation_dt).total_seconds()
+    age_hours = age_seconds / 3600
+    
+    if age_hours < 0:
+        logger.warning(f"Token {mint} has a future creation date: {creation_ts_str}. Using 0 for age.")
+        age_hours = 0
+    
     # 3. Determine tracking intervals
     is_new = age_hours <= 12
     interval_sec = PRICE_CHECK_INTERVAL_NEW if is_new else PRICE_CHECK_INTERVAL_OLD
     duration_hours = TRACKING_DURATION_NEW if is_new else TRACKING_DURATION_OLD
 
-    # 4. Get metadata from signal
-    entry_time = get_now()
+    # 4. Get metadata from signal (using new, more reliable paths)
+    entry_time = get_now() # This is the time *we* start tracking
     symbol = "N/A"
     name = "N/A"
-    
-    if "result" in signal_data and isinstance(signal_data.get("result"), dict):
-        # Alpha structure
-        meta = signal_data["result"].get("token_metadata", {})
+
+    try:
+        # Priority 1: From rugcheck_raw.tokenMeta (most reliable)
+        meta = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("tokenMeta", {})
         symbol = meta.get("symbol", "N/A")
         name = meta.get("name", "N/A")
-    else:
-        # Discovery structure
-        meta = signal_data.get("token_metadata")
-        if not meta:
-             meta = signal_data.get("token")
-        if isinstance(meta, dict):
-            symbol = meta.get("symbol", "N/A")
-            name = meta.get("name", "N/A")
+        
+        if symbol == "N/A" or name == "N/A":
+            # Priority 2: From result.token_metadata (alpha structure)
+            meta_alpha = signal_data.get("result", {}).get("token_metadata", {})
+            if meta_alpha:
+                if symbol == "N/A":
+                    symbol = meta_alpha.get("symbol", "N/A")
+                if name == "N/A":
+                    name = meta_alpha.get("name", "N/A")
+        
+        if symbol == "N/A" or name == "N/A":
+             # Priority 3: From top-level token_metadata (discovery structure)
+            meta_disc = signal_data.get("token_metadata", {})
+            if not meta_disc:
+                meta_disc = signal_data.get("token", {}) # even older fallback
+            if meta_disc:
+                if symbol == "N/A":
+                    symbol = meta_disc.get("symbol", "N/A")
+                if name == "N/A":
+                    name = meta_disc.get("name", "N/A")
+                 
+    except Exception as e:
+        logger.error(f"Error extracting metadata for {mint}: {e}")
+
 
     # 5. Create active_tracking entry
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
@@ -521,7 +512,7 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "entry_price": entry_price,
         "entry_time": to_iso(entry_time),
         "token_age_hours": round(age_hours, 2),
-        "pair_created_at": pair_created_at,
+        "pair_created_at": pair_created_at_seconds, # Storing the timestamp
         "tracking_interval_seconds": interval_sec,
         "tracking_duration_hours": duration_hours,
         "tracking_end_time": to_iso(tracking_end_time),

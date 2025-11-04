@@ -2688,3 +2688,160 @@ httpx.RemoteProtocolError: Server disconnected
 2025-11-03 16:48:55,499 - CollectorService - INFO - Processing new signal: 5yVT7keCgESd6S523y6EwiVfJ3JoRj8f28JkZt2ipump_2025-11-03T15-03-11.343913_00-00_alpha
 2025-11-03 16:49:03,646 - CollectorService - INFO - 
 Service stopped manually.
+2025-11-03 17:08:14,950 - CollectorService - INFO - Supabase client initialized.
+2025-11-03 17:08:14,951 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-03 17:08:14,951 - CollectorService - INFO - CollectorService initialized.
+2025-11-03 17:08:14,951 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-03 17:08:14,951 - CollectorService - INFO - Starting new polling cycle...
+2025-11-03 17:08:18,616 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-03 17:08:18,616 - CollectorService - INFO - Found 58 total signals to check.
+2025-11-03 17:08:19,331 - CollectorService - INFO - Processing new signal: 2wTr7CbhVx85JeJjJ4aVsMFJKcvLwDJyfyK3SKd6pump_2025-11-03T15-54-56.176660_00-00_alpha
+2025-11-03 17:08:24,626 - CollectorService - INFO - Uploaded snapshot to Supabase: 2wTr7CbhVx85JeJjJ4aVsMFJKcvLwDJyfyK3SKd6pump_2025-11-03T15-54-56.176660_00-00_alpha
+2025-11-03 17:08:25,287 - CollectorService - INFO - Processing new signal: 7rCrPCf5qTcEAvDC3mH89rjZMetpRDLXZBvqLoPPpump_2025-11-03T15-54-56.176650_00-00_alpha
+2025-11-03 17:08:27,052 - CollectorService - INFO - Uploaded snapshot to Supabase: 7rCrPCf5qTcEAvDC3mH89rjZMetpRDLXZBvqLoPPpump_2025-11-03T15-54-56.176650_00-00_alpha
+2025-11-03 17:08:27,382 - CollectorService - INFO - Processing new signal: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T14-48-04.182090_00-00_alpha
+2025-11-03 17:08:27,579 - CollectorService - WARNING - Initial next_check_at for CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T14-48-04.182090_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:08:28,813 - CollectorService - INFO - Uploaded snapshot to Supabase: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T14-48-04.182090_00-00_alpha
+2025-11-03 17:08:29,139 - CollectorService - INFO - Processing new signal: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T15-54-56.176591_00-00_alpha
+2025-11-03 17:08:30,287 - CollectorService - INFO - Uploaded snapshot to Supabase: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T15-54-56.176591_00-00_alpha
+2025-11-03 17:08:30,621 - CollectorService - INFO - Processing new signal: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T14-48-42.073424_00-00_alpha
+2025-11-03 17:08:31,095 - CollectorService - WARNING - Initial next_check_at for CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T14-48-42.073424_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:08:32,434 - CollectorService - INFO - Uploaded snapshot to Supabase: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T14-48-42.073424_00-00_alpha
+2025-11-03 17:08:32,781 - CollectorService - INFO - Processing new signal: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T15-54-56.176581_00-00_alpha
+2025-11-03 17:08:34,046 - CollectorService - INFO - Uploaded snapshot to Supabase: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T15-54-56.176581_00-00_alpha
+2025-11-03 17:08:34,375 - CollectorService - INFO - Processing new signal: 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1_2025-11-03T14-50-20.670665_00-00_alpha
+2025-11-03 17:08:34,588 - CollectorService - WARNING - Initial next_check_at for 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1_2025-11-03T14-50-20.670665_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:08:35,984 - CollectorService - INFO - Uploaded snapshot to Supabase: 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1_2025-11-03T14-50-20.670665_00-00_alpha
+2025-11-03 17:08:36,324 - CollectorService - INFO - Processing new signal: 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1_2025-11-03T15-54-56.176571_00-00_alpha
+2025-11-03 17:08:37,477 - CollectorService - INFO - Uploaded snapshot to Supabase: 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1_2025-11-03T15-54-56.176571_00-00_alpha
+2025-11-03 17:08:38,138 - CollectorService - INFO - Processing new signal: 86Qzt4Dpx51pYGj7TscfEEBbTspsnQJQpNQxodm6pump_2025-11-03T15-54-56.176564_00-00_alpha
+2025-11-03 17:08:39,420 - CollectorService - INFO - Uploaded snapshot to Supabase: 86Qzt4Dpx51pYGj7TscfEEBbTspsnQJQpNQxodm6pump_2025-11-03T15-54-56.176564_00-00_alpha
+2025-11-03 17:08:39,739 - CollectorService - INFO - Processing new signal: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-03T14-50-20.670753_00-00_alpha
+2025-11-03 17:08:39,940 - CollectorService - WARNING - Initial next_check_at for 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-03T14-50-20.670753_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:08:41,130 - CollectorService - INFO - Uploaded snapshot to Supabase: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-03T14-50-20.670753_00-00_alpha
+2025-11-03 17:08:41,471 - CollectorService - INFO - Processing new signal: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-03T15-54-56.176559_00-00_alpha
+2025-11-03 17:08:42,667 - CollectorService - INFO - Uploaded snapshot to Supabase: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-03T15-54-56.176559_00-00_alpha
+2025-11-03 17:08:43,336 - CollectorService - INFO - Processing new signal: 8ZeTmGGktvSwSSghx8btbTAVGdWogThKM4DQBJgRpump_2025-11-03T15-54-56.176553_00-00_alpha
+2025-11-03 17:08:45,172 - CollectorService - INFO - Uploaded snapshot to Supabase: 8ZeTmGGktvSwSSghx8btbTAVGdWogThKM4DQBJgRpump_2025-11-03T15-54-56.176553_00-00_alpha
+2025-11-03 17:08:45,821 - CollectorService - INFO - Processing new signal: Z6RHtkv5xrhpHwswaHSP6W1GQkhgqH3fAcA4NHforma_2025-11-03T15-54-56.176547_00-00_alpha
+2025-11-03 17:08:47,380 - CollectorService - INFO - Uploaded snapshot to Supabase: Z6RHtkv5xrhpHwswaHSP6W1GQkhgqH3fAcA4NHforma_2025-11-03T15-54-56.176547_00-00_alpha
+2025-11-03 17:08:48,044 - CollectorService - INFO - Processing new signal: 5SEc2JdcAeQPLeASmuXv8cFkVvgekWWEJkQybz19pump_2025-11-03T15-54-56.176536_00-00_alpha
+2025-11-03 17:08:49,460 - CollectorService - INFO - Uploaded snapshot to Supabase: 5SEc2JdcAeQPLeASmuXv8cFkVvgekWWEJkQybz19pump_2025-11-03T15-54-56.176536_00-00_alpha
+2025-11-03 17:08:49,796 - CollectorService - INFO - Processing new signal: 9zxC7GoHrw3hBeur2ChQNW3XsbBJ692Q8dq9bJnCpump_2025-11-03T14-54-11.874209_00-00_alpha
+2025-11-03 17:08:50,385 - CollectorService - WARNING - Initial next_check_at for 9zxC7GoHrw3hBeur2ChQNW3XsbBJ692Q8dq9bJnCpump_2025-11-03T14-54-11.874209_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:08:51,269 - CollectorService - INFO - Uploaded snapshot to Supabase: 9zxC7GoHrw3hBeur2ChQNW3XsbBJ692Q8dq9bJnCpump_2025-11-03T14-54-11.874209_00-00_alpha
+2025-11-03 17:08:51,588 - CollectorService - INFO - Processing new signal: 9zxC7GoHrw3hBeur2ChQNW3XsbBJ692Q8dq9bJnCpump_2025-11-03T15-54-56.176529_00-00_alpha
+2025-11-03 17:08:52,495 - CollectorService - INFO - Uploaded snapshot to Supabase: 9zxC7GoHrw3hBeur2ChQNW3XsbBJ692Q8dq9bJnCpump_2025-11-03T15-54-56.176529_00-00_alpha
+2025-11-03 17:08:53,155 - CollectorService - INFO - Processing new signal: 6zLLXvcGJ2kow9JF14oL7TCGQMMFPyQdrYikYRfKzviH_2025-11-03T15-54-56.176523_00-00_alpha
+2025-11-03 17:09:43,837 - CollectorService - INFO - Uploaded snapshot to Supabase: 6zLLXvcGJ2kow9JF14oL7TCGQMMFPyQdrYikYRfKzviH_2025-11-03T15-54-56.176523_00-00_alpha
+2025-11-03 17:09:44,529 - CollectorService - INFO - Processing new signal: DNH4MTv8WWpoARP2D44wAsWtWb6YnrMh8SQjXGga3Hot_2025-11-03T15-54-56.176516_00-00_alpha
+2025-11-03 17:09:54,954 - CollectorService - WARNING - [RugCheck] Timeout for https://api.rugcheck.xyz/v1/tokens/DNH4MTv8WWpoARP2D44wAsWtWb6YnrMh8SQjXGga3Hot/report (attempt 1)
+2025-11-03 17:10:38,980 - CollectorService - INFO - Uploaded snapshot to Supabase: DNH4MTv8WWpoARP2D44wAsWtWb6YnrMh8SQjXGga3Hot_2025-11-03T15-54-56.176516_00-00_alpha
+2025-11-03 17:10:39,309 - CollectorService - INFO - Processing new signal: EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump_2025-11-03T14-54-11.874262_00-00_alpha
+2025-11-03 17:10:40,075 - CollectorService - WARNING - Initial next_check_at for EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump_2025-11-03T14-54-11.874262_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:10:41,080 - CollectorService - INFO - Uploaded snapshot to Supabase: EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump_2025-11-03T14-54-11.874262_00-00_alpha
+2025-11-03 17:10:41,405 - CollectorService - INFO - Processing new signal: EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump_2025-11-03T15-54-56.176506_00-00_alpha
+2025-11-03 17:10:42,397 - CollectorService - INFO - Uploaded snapshot to Supabase: EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump_2025-11-03T15-54-56.176506_00-00_alpha
+2025-11-03 17:10:43,075 - CollectorService - INFO - Processing new signal: 5amEEXbtaXZ69st9uyYC3S9V9K22BMYswesHWEsrpump_2025-11-03T15-54-56.176493_00-00_alpha
+2025-11-03 17:11:35,603 - CollectorService - INFO - Uploaded snapshot to Supabase: 5amEEXbtaXZ69st9uyYC3S9V9K22BMYswesHWEsrpump_2025-11-03T15-54-56.176493_00-00_alpha
+2025-11-03 17:11:36,262 - CollectorService - INFO - Processing new signal: CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump_2025-11-03T15-54-56.176476_00-00_alpha
+2025-11-03 17:11:46,949 - CollectorService - WARNING - [RugCheck] Timeout for https://api.rugcheck.xyz/v1/tokens/CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump/report (attempt 1)
+2025-11-03 17:12:30,982 - CollectorService - INFO - Uploaded snapshot to Supabase: CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump_2025-11-03T15-54-56.176476_00-00_alpha
+2025-11-03 17:12:31,629 - CollectorService - INFO - Processing new signal: 6Hb2xgEhyN9iVVH3cgSxYjfN774ExzgiCftwiWdjpump_2025-11-03T15-54-56.176468_00-00_alpha
+2025-11-03 17:12:34,313 - CollectorService - INFO - Uploaded snapshot to Supabase: 6Hb2xgEhyN9iVVH3cgSxYjfN774ExzgiCftwiWdjpump_2025-11-03T15-54-56.176468_00-00_alpha
+2025-11-03 17:12:35,016 - CollectorService - INFO - Processing new signal: 9yZ5Ru8pbmJZ6Q2DKLCGXkaLNwkm83cnJ4QCw4PFpump_2025-11-03T15-54-56.176443_00-00_alpha
+2025-11-03 17:12:36,784 - CollectorService - INFO - Uploaded snapshot to Supabase: 9yZ5Ru8pbmJZ6Q2DKLCGXkaLNwkm83cnJ4QCw4PFpump_2025-11-03T15-54-56.176443_00-00_alpha
+2025-11-03 17:12:37,480 - CollectorService - INFO - Processing new signal: 7q5cXm4WheAeUz8PCvWEkCFiU7cYNeQPRtCSxcvSpump_2025-11-03T15-54-56.176437_00-00_alpha
+2025-11-03 17:12:38,583 - CollectorService - INFO - Uploaded snapshot to Supabase: 7q5cXm4WheAeUz8PCvWEkCFiU7cYNeQPRtCSxcvSpump_2025-11-03T15-54-56.176437_00-00_alpha
+2025-11-03 17:12:39,224 - CollectorService - INFO - Processing new signal: 3BheocqQgiYvLnDTuT82WcpyTxhuGtJ3Vjb8f9fbyBLV_2025-11-03T15-54-56.176430_00-00_alpha
+2025-11-03 17:12:40,753 - CollectorService - INFO - Uploaded snapshot to Supabase: 3BheocqQgiYvLnDTuT82WcpyTxhuGtJ3Vjb8f9fbyBLV_2025-11-03T15-54-56.176430_00-00_alpha
+2025-11-03 17:12:41,104 - CollectorService - INFO - Processing new signal: D7Z2fUrxECBh91chmnou8u7E9Yaq7inzzcjg9G1Apump_2025-11-03T14-55-07.672584_00-00_alpha
+2025-11-03 17:12:41,342 - CollectorService - WARNING - Initial next_check_at for D7Z2fUrxECBh91chmnou8u7E9Yaq7inzzcjg9G1Apump_2025-11-03T14-55-07.672584_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:12:42,753 - CollectorService - INFO - Uploaded snapshot to Supabase: D7Z2fUrxECBh91chmnou8u7E9Yaq7inzzcjg9G1Apump_2025-11-03T14-55-07.672584_00-00_alpha
+2025-11-03 17:12:43,079 - CollectorService - INFO - Processing new signal: D7Z2fUrxECBh91chmnou8u7E9Yaq7inzzcjg9G1Apump_2025-11-03T15-54-56.176423_00-00_alpha
+2025-11-03 17:12:44,452 - CollectorService - INFO - Uploaded snapshot to Supabase: D7Z2fUrxECBh91chmnou8u7E9Yaq7inzzcjg9G1Apump_2025-11-03T15-54-56.176423_00-00_alpha
+2025-11-03 17:12:45,161 - CollectorService - INFO - Processing new signal: BVSv98vyMEkjwCd4ZSBcPUB8MjDPqQfVHTrbCGtYpump_2025-11-03T15-54-56.176417_00-00_alpha
+2025-11-03 17:12:46,692 - CollectorService - INFO - Uploaded snapshot to Supabase: BVSv98vyMEkjwCd4ZSBcPUB8MjDPqQfVHTrbCGtYpump_2025-11-03T15-54-56.176417_00-00_alpha
+2025-11-03 17:12:47,349 - CollectorService - INFO - Processing new signal: 7VKG39KqGopTetYvgBA3WADEB7fiB3kMChqA6Lj8pump_2025-11-03T15-54-56.176409_00-00_alpha
+2025-11-03 17:12:49,241 - CollectorService - INFO - Uploaded snapshot to Supabase: 7VKG39KqGopTetYvgBA3WADEB7fiB3kMChqA6Lj8pump_2025-11-03T15-54-56.176409_00-00_alpha
+2025-11-03 17:12:49,946 - CollectorService - INFO - Processing new signal: CS4zw6awUFKcYbYJbukqtWZF6iee7JZEsnWis2TZpump_2025-11-03T15-54-56.176379_00-00_alpha
+2025-11-03 17:12:51,335 - CollectorService - INFO - Uploaded snapshot to Supabase: CS4zw6awUFKcYbYJbukqtWZF6iee7JZEsnWis2TZpump_2025-11-03T15-54-56.176379_00-00_alpha
+2025-11-03 17:12:52,037 - CollectorService - INFO - Processing new signal: FDgSegoxrdpsct21YVeAbC9dWeTwTxA8Cceeh8BPpump_2025-11-03T15-54-56.176307_00-00_alpha
+2025-11-03 17:12:53,559 - CollectorService - INFO - Uploaded snapshot to Supabase: FDgSegoxrdpsct21YVeAbC9dWeTwTxA8Cceeh8BPpump_2025-11-03T15-54-56.176307_00-00_alpha
+2025-11-03 17:12:54,242 - CollectorService - INFO - Processing new signal: 4CrRnKWXQ2fLrFqqHvnqmoq8QFKKpJiJbqsW5Nv4pump_2025-11-03T15-54-56.176296_00-00_alpha
+2025-11-03 17:13:46,780 - CollectorService - INFO - Uploaded snapshot to Supabase: 4CrRnKWXQ2fLrFqqHvnqmoq8QFKKpJiJbqsW5Nv4pump_2025-11-03T15-54-56.176296_00-00_alpha
+2025-11-03 17:13:47,499 - CollectorService - INFO - Processing new signal: G1DXVVmqJs8Ei79QbK41dpgk2WtXSGqLtx9of7o8BAGS_2025-11-03T15-54-56.176263_00-00_alpha
+2025-11-03 17:13:49,635 - CollectorService - INFO - Uploaded snapshot to Supabase: G1DXVVmqJs8Ei79QbK41dpgk2WtXSGqLtx9of7o8BAGS_2025-11-03T15-54-56.176263_00-00_alpha
+2025-11-03 17:13:50,007 - CollectorService - INFO - Processing new signal: 5yVT7keCgESd6S523y6EwiVfJ3JoRj8f28JkZt2ipump_2025-11-03T15-03-11.343913_00-00_alpha
+2025-11-03 17:13:50,291 - CollectorService - WARNING - Initial next_check_at for 5yVT7keCgESd6S523y6EwiVfJ3JoRj8f28JkZt2ipump_2025-11-03T15-03-11.343913_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:13:51,276 - CollectorService - INFO - Uploaded snapshot to Supabase: 5yVT7keCgESd6S523y6EwiVfJ3JoRj8f28JkZt2ipump_2025-11-03T15-03-11.343913_00-00_alpha
+2025-11-03 17:13:51,628 - CollectorService - INFO - Processing new signal: 2fmZrq5CN3S52PbyRGtpmvBQShNHTVBs2ZNTMURtpump_2025-11-03T14-57-58.637179_00-00_alpha
+2025-11-03 17:13:51,936 - CollectorService - WARNING - Initial next_check_at for 2fmZrq5CN3S52PbyRGtpmvBQShNHTVBs2ZNTMURtpump_2025-11-03T14-57-58.637179_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:13:53,252 - CollectorService - INFO - Uploaded snapshot to Supabase: 2fmZrq5CN3S52PbyRGtpmvBQShNHTVBs2ZNTMURtpump_2025-11-03T14-57-58.637179_00-00_alpha
+2025-11-03 17:13:53,959 - CollectorService - INFO - Processing new signal: 6d2Wze1KMUxQ28sFLrH9DKfgBXpUJSJYZaRbufucvBLV_2025-11-03T14-52-28.970073_00-00_alpha
+2025-11-03 17:13:54,244 - CollectorService - WARNING - Initial next_check_at for 6d2Wze1KMUxQ28sFLrH9DKfgBXpUJSJYZaRbufucvBLV_2025-11-03T14-52-28.970073_00-00_alpha is in the past. Setting to now.
+2025-11-03 17:13:55,590 - CollectorService - INFO - Uploaded snapshot to Supabase: 6d2Wze1KMUxQ28sFLrH9DKfgBXpUJSJYZaRbufucvBLV_2025-11-03T14-52-28.970073_00-00_alpha
+2025-11-03 17:13:55,593 - CollectorService - INFO - Polling cycle finished in 340.64s.
+2025-11-03 17:13:55,595 - CollectorService - INFO - Sleeping for 0.00s...
+2025-11-03 17:13:55,596 - CollectorService - INFO - Starting new polling cycle...
+2025-11-03 17:13:57,012 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-03 17:13:57,015 - CollectorService - INFO - Found 11 total signals to check.
+2025-11-03 17:13:57,366 - CollectorService - INFO - Processing new signal: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T16-06-39.217867_00-00_alpha
+2025-11-03 17:13:59,102 - CollectorService - INFO - Uploaded snapshot to Supabase: CMx7yon2cLzHcXqgHsKJhuU3MmME6noWLQk2rAycBAGS_2025-11-03T16-06-39.217867_00-00_alpha
+2025-11-03 17:13:59,465 - CollectorService - INFO - Processing new signal: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T16-05-53.323428_00-00_alpha
+2025-11-03 17:14:01,123 - CollectorService - INFO - Uploaded snapshot to Supabase: CnqAQXJB7vSiwdNvgSf22JSPPa53orxSfXn6L2D6pump_2025-11-03T16-05-53.323428_00-00_alpha
+2025-11-03 17:14:01,457 - CollectorService - INFO - Processing new signal: CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump_2025-11-03T16-05-53.323420_00-00_alpha
+2025-11-03 17:14:11,963 - CollectorService - WARNING - [RugCheck] Timeout for https://api.rugcheck.xyz/v1/tokens/CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump/report (attempt 1)
+2025-11-03 17:14:17,308 - CollectorService - INFO - Uploaded snapshot to Supabase: CAe441ntBPCQBZFj9arRobBnVmGzh8dEB7pTHq9Lpump_2025-11-03T16-05-53.323420_00-00_alpha
+2025-11-03 17:14:17,691 - CollectorService - INFO - Processing new signal: 7rCrPCf5qTcEAvDC3mH89rjZMetpRDLXZBvqLoPPpump_2025-11-03T16-05-53.323291_00-00_alpha
+2025-11-03 17:14:19,895 - CollectorService - INFO - Uploaded snapshot to Supabase: 7rCrPCf5qTcEAvDC3mH89rjZMetpRDLXZBvqLoPPpump_2025-11-03T16-05-53.323291_00-00_alpha
+2025-11-03 17:51:27,673 - CollectorService - ERROR - Failed to check existence of analytics/snapshots/7q5cXm4WheAeUz8PCvWEkCFiU7cYNeQPRtCSxcvSpump_2025-11-03T16-05-25.022907_00-00_alpha.json: The read operation timed out
+2025-11-03 17:51:27,731 - CollectorService - ERROR - Failed idempotency check for 7q5cXm4WheAeUz8PCvWEkCFiU7cYNeQPRtCSxcvSpump_2025-11-03T16-05-25.022907_00-00_alpha: The read operation timed out. Skipping.
+2025-11-03 17:52:11,941 - CollectorService - INFO - Running snapshot aggregation...
+2025-11-03 17:52:11,947 - CollectorService - INFO - Starting snapshot aggregation scan...
+2025-11-03 17:53:25,065 - CollectorService - INFO - Found 1 snapshots due for checking
+2025-11-03 17:53:25,069 - CollectorService - INFO - Scanning 1 unique dates (2025-11-03 to 2025-11-03) and 1 pipelines.
+2025-11-03 17:53:25,415 - CollectorService - INFO - Built targeted label index with 0 labeled tokens.
+2025-11-03 17:53:28,047 - CollectorService - INFO - Polling cycle finished in 2372.44s.
+2025-11-03 17:53:28,050 - CollectorService - INFO - Sleeping for 0.00s...
+2025-11-03 17:53:28,050 - CollectorService - INFO - Starting new polling cycle...
+2025-11-03 17:53:29,718 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-03 17:53:29,718 - CollectorService - INFO - Found 34 total signals to check.
+2025-11-03 17:53:41,921 - CollectorService - INFO - Polling cycle finished in 13.86s.
+2025-11-03 17:53:41,927 - CollectorService - INFO - Sleeping for 166.14s...
+2025-11-03 17:56:28,085 - CollectorService - INFO - Starting new polling cycle...
+2025-11-03 18:02:42,397 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-03 18:02:42,423 - CollectorService - INFO - Found 34 total signals to check.
+2025-11-03 18:02:55,282 - CollectorService - INFO - Running snapshot aggregation...
+2025-11-03 18:02:55,282 - CollectorService - INFO - Starting snapshot aggregation scan...
+2025-11-03 18:03:23,946 - CollectorService - INFO - Found 8 snapshots due for checking
+2025-11-03 18:03:23,951 - CollectorService - INFO - Scanning 1 unique dates (2025-11-03 to 2025-11-03) and 1 pipelines.
+2025-11-03 18:03:24,315 - CollectorService - INFO - Built targeted label index with 0 labeled tokens.
+2025-11-03 18:03:28,040 - CollectorService - INFO - Polling cycle finished in 419.95s.
+2025-11-03 18:03:28,042 - CollectorService - INFO - Sleeping for 0.00s...
+2025-11-03 18:03:28,043 - CollectorService - INFO - Starting new polling cycle...
+2025-11-03 18:03:28,050 - CollectorService - ERROR - Failed to download overlap_results.json: Server disconnected
+2025-11-03 18:03:28,050 - CollectorService - ERROR - Failed to download overlap_results_alpha.json: Server disconnected
+2025-11-03 18:03:28,051 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-03 18:03:28,052 - CollectorService - WARNING - No valid data found for alpha signals.
+2025-11-03 18:03:28,054 - CollectorService - INFO - Found 0 total signals to check.
+2025-11-03 18:03:28,055 - CollectorService - INFO - Polling cycle finished in 0.02s.
+2025-11-03 18:03:28,056 - CollectorService - INFO - Sleeping for 179.98s...
+2025-11-04 06:28:12,112 - CollectorService - INFO - Supabase client initialized.
+2025-11-04 06:28:12,113 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-04 06:28:12,114 - CollectorService - INFO - CollectorService initialized.
+2025-11-04 06:28:12,114 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-04 06:28:12,114 - CollectorService - INFO - Starting new polling cycle...
+2025-11-04 06:28:14,576 - CollectorService - INFO - Found 12 total signals to check.
+2025-11-04 06:28:18,828 - CollectorService - INFO - Polling cycle finished in 6.72s.
+2025-11-04 06:28:18,828 - CollectorService - INFO - Sleeping for 173.28s...
+2025-11-04 06:28:40,079 - CollectorService - INFO - Service stopped manually.
+2025-11-04 06:28:44,630 - CollectorService - INFO - Supabase client initialized.
+2025-11-04 06:28:44,630 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-04 06:28:44,631 - CollectorService - INFO - CollectorService initialized.
+2025-11-04 06:28:44,632 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-04 06:28:44,633 - CollectorService - INFO - Starting new polling cycle...
+2025-11-04 06:28:45,625 - CollectorService - INFO - Found 12 total signals to check.
+2025-11-04 06:28:49,957 - CollectorService - INFO - Polling cycle finished in 5.33s.
+2025-11-04 06:28:49,958 - CollectorService - INFO - Sleeping for 174.67s...
+2025-11-04 06:29:00,190 - CollectorService - INFO - Service stopped manually.

@@ -1881,3 +1881,75 @@ AttributeError: 'NoneType' object has no attribute 'send'
 2025-11-03 00:13:19,023 - __main__ - INFO - Using temp directory: /tmp/analytics_tracker
 2025-11-03 00:13:19,023 - __main__ - CRITICAL - Missing SUPABASE_URL or SUPABASE_KEY env variables.
 2025-11-03 00:13:19,023 - __main__ - INFO - Tracker stopped.
+2025-11-04 06:29:15,467 - __main__ - INFO - Initializing Analytics Tracker...
+2025-11-04 06:29:15,470 - __main__ - INFO - Using temp directory: /tmp/analytics_tracker
+2025-11-04 06:29:15,470 - __main__ - CRITICAL - Missing SUPABASE_URL or SUPABASE_KEY env variables.
+2025-11-04 06:29:15,470 - __main__ - INFO - Tracker stopped.
+2025-11-04 06:30:17,385 - __main__ - INFO - Initializing Analytics Tracker...
+2025-11-04 06:30:17,386 - __main__ - INFO - Using temp directory: /tmp/analytics_tracker
+2025-11-04 06:30:59,826 - httpx - INFO - HTTP Request: GET https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-04 06:30:59,837 - __main__ - INFO - Downloaded analytics/active_tracking.json
+2025-11-04 06:30:59,862 - __main__ - INFO - Loaded 130 active tokens to resume tracking.
+2025-11-04 06:30:59,866 - __main__ - INFO - Initialization complete. Stats will be generated in the first loop.
+2025-11-04 06:30:59,867 - __main__ - INFO - Downloading signals...
+2025-11-04 06:31:00,098 - httpx - INFO - HTTP Request: GET https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-04 06:31:00,100 - __main__ - INFO - Downloaded overlap_results.json
+2025-11-04 06:31:00,324 - httpx - INFO - HTTP Request: GET https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-04 06:31:00,338 - __main__ - INFO - Downloaded overlap_results_alpha.json
+2025-11-04 06:31:00,356 - __main__ - INFO - Processing 1 tokens for discovery signals...
+2025-11-04 06:31:00,356 - __main__ - INFO - Found 0 new tokens for discovery.
+2025-11-04 06:31:00,387 - __main__ - INFO - Processing 9 tokens for alpha signals...
+2025-11-04 06:31:00,388 - __main__ - INFO - Found 0 new tokens for alpha.
+2025-11-04 06:31:00,395 - __main__ - INFO - Fetching prices for 83 tokens...
+2025-11-04 06:31:07,841 - __main__ - INFO - Jupiter failed for 33 tokens. Trying Dexscreener...
+2025-11-04 06:31:08,069 - __main__ - INFO - Price recovery successful for 3hVhbSBbu49Vwah3BG1jnCXnVvTxKqM7GEhcJWjWpump!
+2025-11-04 06:31:08,281 - __main__ - INFO - Price recovery successful for FxUniKYRESjn43wt2uM656kdSCxdqEXEnc9vTkAepump!
+2025-11-04 06:31:08,514 - __main__ - INFO - Price recovery successful for 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS!
+2025-11-04 06:31:08,747 - __main__ - INFO - Price recovery successful for 8rsZxFLwy8oxV5Tea2zbekNeZR4iitoNR44mV4nDKHx1!
+2025-11-04 06:31:08,980 - __main__ - INFO - Price recovery successful for 9oxcWN1SKDFuxAmSE49J5dDSq7ucQ8NBjiwjPE2Tpump!
+2025-11-04 06:31:09,205 - __main__ - INFO - Price recovery successful for 2BTgyeau8AFVL6bJvVksLLAaoVUyPLEo4osYNKQMjxVP!
+2025-11-04 06:31:09,431 - __main__ - INFO - Price recovery successful for BVSv98vyMEkjwCd4ZSBcPUB8MjDPqQfVHTrbCGtYpump!
+2025-11-04 06:31:09,665 - __main__ - INFO - Price recovery successful for 5yVT7keCgESd6S523y6EwiVfJ3JoRj8f28JkZt2ipump!
+2025-11-04 06:31:09,871 - __main__ - INFO - Price recovery successful for 6b4EHcm7KgDdVBZJ4oQQk1oaTuffmi7H9AL6qXiXpump!
+2025-11-04 06:31:10,086 - __main__ - INFO - Price recovery successful for 7mR69k8GwjKcKgCRwsKUaMvrqFjvHK2roXi3UF8TWBLA!
+2025-11-04 06:31:10,298 - __main__ - INFO - Price recovery successful for 7y5TyfNzkQRp8hUMZAzjfV2raY2arDxpu1B7roTLpump!
+2025-11-04 06:31:10,510 - __main__ - INFO - Price recovery successful for Gjn8zsTwZ5myCKqwuFLiiuqzDw5ZZzWW86i9vcGYpump!
+2025-11-04 06:31:10,734 - __main__ - INFO - Price recovery successful for 6MQHuLVD68VtGPCGeC6kGYWM2qjk7Fwma2RVb9typump!
+2025-11-04 06:31:10,955 - __main__ - INFO - Price recovery successful for G53H5TfXLoDC4DLHaLWQfL7MuyMuKCMxtUEuJFBTpump!
+2025-11-04 06:31:11,165 - __main__ - INFO - Price recovery successful for DiiTPZdpd9t3XorHiuZUu4E1FoSaQ7uGN4q9YkQupump!
+2025-11-04 06:31:11,373 - __main__ - INFO - Price recovery successful for Dq2gnDsJVWyb4hUdqLBSEt7Tq8sThNFaREivJZFSpump!
+2025-11-04 06:31:11,582 - __main__ - INFO - Price recovery successful for CS4zw6awUFKcYbYJbukqtWZF6iee7JZEsnWis2TZpump!
+2025-11-04 06:31:11,798 - __main__ - INFO - Price recovery successful for hxcxN81ma8m5PMzPuCyysaMJ9wqJenBr811DbX4moon!
+2025-11-04 06:31:12,031 - __main__ - INFO - Price recovery successful for 6zLLXvcGJ2kow9JF14oL7TCGQMMFPyQdrYikYRfKzviH!
+2025-11-04 06:31:12,237 - __main__ - INFO - Price recovery successful for EZgDxeds5rktezxEoDnTXXssVWjgT35NsWBrbtgwpump!
+2025-11-04 06:31:12,453 - __main__ - INFO - Price recovery successful for CtAEfdCEv2W46a6CRgGLZTg1JvCabxWUwMezNfV3pump!
+2025-11-04 06:31:12,668 - __main__ - INFO - Price recovery successful for 3BheocqQgiYvLnDTuT82WcpyTxhuGtJ3Vjb8f9fbyBLV!
+2025-11-04 06:31:12,875 - __main__ - INFO - Price recovery successful for FRqRKQwVDiBtjm2QWBVFAGpdZboph54CkbCAGSmypump!
+2025-11-04 06:31:13,101 - __main__ - INFO - Price recovery successful for EuXmwrSj6rAPMwqdG7tM3wrJWwvS9yvxQNo2uHj2pump!
+2025-11-04 06:31:13,305 - __main__ - INFO - Price recovery successful for CRX2sctTcrdCTEiAjJRVRZHfaKCynpjbf711SFumpump!
+2025-11-04 06:31:13,510 - __main__ - INFO - Price recovery successful for 9tm5bNMaAhwVc8PpUA5QgVzvLHkfFinA2WG2FKnjpump!
+2025-11-04 06:31:13,744 - __main__ - INFO - Price recovery successful for EGhdtB7B12ezVooo6CwqxjiFUUCJXbDXx7iE77uSpump!
+2025-11-04 06:31:13,956 - __main__ - INFO - Price recovery successful for 46cmZGZXDYWEzJ7RSkA93bEwejRGQ9VTRF9wCK76pump!
+2025-11-04 06:31:14,169 - __main__ - INFO - Price recovery successful for FdbTgFitA4NMC96RPfUTafceHoU2VSshA5G2N8VYrF4J!
+2025-11-04 06:31:14,374 - __main__ - INFO - Price recovery successful for keAJkDQAsq2SAnGpYjcgHAv9CWFhUACCJYFoKrgpump!
+2025-11-04 06:31:14,574 - __main__ - INFO - Price recovery successful for 3zWamrcm37PvqSrf8a1whYxy3ekBCnaVJ1ZX7BEHpump!
+2025-11-04 06:31:14,780 - __main__ - INFO - Price recovery successful for 5kwVRu1QGFArzkaHaWhz5AxZ2u7VL3VN5VKGqQvrpump!
+2025-11-04 06:31:15,007 - __main__ - INFO - Price recovery successful for CCqh8dh7EVdhwfFxYmuMCAWFuqLRkGMB1rsXw4eHpump!
+2025-11-04 06:31:15,009 - __main__ - INFO - Retrying 14 tokens in retry state...
+2025-11-04 06:31:15,216 - __main__ - INFO - Retry successful for 7q5cXm4WheAeUz8PCvWEkCFiU7cYNeQPRtCSxcvSpump!
+2025-11-04 06:31:15,432 - __main__ - INFO - Retry successful for XV6vmbSJv7EhqMvzxT65yD28UD4DMAnqtVBkqKYpump!
+2025-11-04 06:31:15,644 - __main__ - INFO - Retry successful for EyQmvAVHvq46MRYW63X6tXz5o4UkFt7SFY7bhMEopump!
+2025-11-04 06:31:15,855 - __main__ - INFO - Retry successful for 7UHyADBmBLxnesu2oneFoNKdU4v9cn6DFGJtNunhpump!
+2025-11-04 06:31:16,062 - __main__ - INFO - Retry successful for 5HYc46UWY6c4wp7wx1p7cRcbcmNVtTkVYmKvtNrepump!
+2025-11-04 06:31:16,271 - __main__ - INFO - Retry successful for 8eCD6RCYYWtfH7bY7v4i6CikEChWRZHZsj2z4G72pump!
+2025-11-04 06:31:16,482 - __main__ - INFO - Retry successful for 7oLWGMuGbBm9uwDmffSdxLE98YChFAH1UdY5XpKYLff8!
+2025-11-04 06:31:16,703 - __main__ - INFO - Retry successful for 7RUn4S8hP4kxJA28MWwMEa3f2GJtAbF8dc9QZbVY34p3!
+2025-11-04 06:31:16,916 - __main__ - INFO - Retry successful for dWqwDzrMVWadRf8gHZGn8iXYJcMNhcn1aWtV6iJ6rcH!
+2025-11-04 06:31:17,135 - __main__ - INFO - Retry successful for 9nXWduTKWCYLgbCKKLjLhqE4S7M85mgAsFVkKZZYpump!
+2025-11-04 06:31:17,343 - __main__ - INFO - Retry successful for 8dktTBKseLSsLPpfBYhoKzaAGTAwKqsp6W6UNFtxpump!
+2025-11-04 06:31:17,561 - __main__ - INFO - Retry successful for JhWbUQTjwZ46UehbEGiX93VAjmHwWWRtNNgPJBPpump!
+2025-11-04 06:31:17,787 - __main__ - INFO - Retry successful for 9aSkRkcW82CaobGQ2ZnJDpY2HJqWcQvoaR8euaGxpump!
+2025-11-04 06:31:18,016 - __main__ - INFO - Retry successful for AKg1ArLBMvqbJKeEd3PyHtTVKChikUuWCtoYEWVDpump!
+2025-11-04 06:31:18,017 - __main__ - INFO - Uploading active_tracking.json...
+2025-11-04 06:31:38,097 - __main__ - INFO - Shutting down tracker.
+2025-11-04 06:31:38,100 - __main__ - INFO - Tracker stopped.
