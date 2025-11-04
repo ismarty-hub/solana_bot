@@ -8,7 +8,8 @@ memecoin trading signals from Supabase.
 This script:
 1.  Downloads 'discovery' (overlap_results.json) and 'alpha'
     (overlap_results_alpha.json) signal files every 3 minutes.
-2.  Deduplicates tokens, tracking each mint only once per signal type.
+2.  (CORRECTED) Deduplicates tokens PER SIGNAL TYPE, tracking each
+    mint-signal pair (e.g., 'XYZ_discovery' and 'XYZ_alpha') distinctly.
 3.  (CORRECTED) Fetches token age from the JSON data to determine tracking duration.
 4.  (CORRECTED) Gets entry price with priority: JSON data (multiple fields) -> Jupiter -> Dexscreener.
 5.  Tracks prices asynchronously (Jupiter -> Dexscreener) at intervals
@@ -180,6 +181,13 @@ def save_json(data: dict | list, file_path: str) -> str | None:
         return None
 
 # --- Utility Functions ---
+
+def get_composite_key(mint: str, signal_type: str) -> str:
+    """
+    (*** NEW ***)
+    Create a unique key for tracking a token per signal type.
+    """
+    return f"{mint}_{signal_type}"
 
 def safe_get_timestamp(entry: dict) -> str | None:
     """Extract timestamp from a history entry using priority list."""
@@ -366,12 +374,12 @@ def handle_price_failure(token_data: dict):
     if token_data["retry_start_time"] is None:
         # Start the retry "state"
         token_data["retry_start_time"] = to_iso(now)
-        logger.warning(f"Price fetch failed for {mint}. Entering retry state. Will retry every {RETRY_INTERVAL}s.")
+        logger.warning(f"Price fetch failed for {mint} ({token_data['signal_type']}). Entering retry state. Will retry every {RETRY_INTERVAL}s.")
     
     # Update last_price_check to align with RETRY_INTERVAL
     token_data["last_price_check"] = to_iso(now)
     
-    logger.warning(f"Retryable error for {mint}. Fail count: {token_data['consecutive_failures']}. Will continue retrying until tracking duration ends.")
+    logger.warning(f"Retryable error for {mint} ({token_data['signal_type']}). Fail count: {token_data['consecutive_failures']}. Will continue retrying until tracking duration ends.")
 
 
 def update_token_price(token_data: dict, price: float):
@@ -402,11 +410,16 @@ def update_token_price(token_data: dict, price: float):
         time_to_50 = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
         token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
         token_data["status"] = "win"
-        logger.info(f"WIN: {token_data['symbol']} ({token_data['mint'][:6]}...) hit {current_roi:.2f}% ROI!")
+        logger.info(f"WIN: {token_data['symbol']} ({token_data['mint'][:6]}... | {token_data['signal_type']}) hit {current_roi:.2f}% ROI!")
 
-def finalize_token_tracking(mint: str, token_data: dict):
-    """Move a token from active_tracking to its daily file."""
-    logger.info(f"Tracking complete for {mint}. Final status: {token_data['status']}")
+def finalize_token_tracking(composite_key: str, token_data: dict):
+    """
+    (*** MODIFIED ***)
+    Move a token from active_tracking to its daily file.
+    Uses composite_key to remove from active_tracking.
+    """
+    mint = token_data["mint"]
+    logger.info(f"Tracking complete for {composite_key}. Final status: {token_data['status']}")
     
     # Set final status if still active
     if token_data["status"] == "active":
@@ -428,18 +441,22 @@ def finalize_token_tracking(mint: str, token_data: dict):
     
     generate_daily_file(entry_date_str, signal_type, completed_token=token_data)
     
-    # 2. Remove from active tracking
-    if mint in active_tracking:
-        del active_tracking[mint]
-        logger.info(f"Removed {mint} from active tracking.")
+    # 2. Remove from active tracking using the composite key
+    if composite_key in active_tracking:
+        del active_tracking[composite_key]
+        logger.info(f"Removed {composite_key} from active tracking.")
 
 async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: dict):
-    """(CORRECTED) Use JSON data for entry price and age, not live APIs."""
+    """
+    (*** MODIFIED ***)
+    Use JSON data for entry price and age, not live APIs.
+    Saves to active_tracking using a composite key.
+    """
     
     # 1. Get Entry Price (using our updated function)
     entry_price = await get_entry_price(mint, signal_data)
     if entry_price is None:
-        logger.warning(f"Excluding {mint}: No entry price found.")
+        logger.warning(f"Excluding {mint} ({signal_type}): No entry price found.")
         return
 
     # 2. Get Token Age (from JSON, not live API)
@@ -449,7 +466,7 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     creation_ts_str = detected_at_str or entry_ts_str
     
     if creation_ts_str is None:
-        logger.warning(f"Excluding {mint}: Could not determine creation timestamp from JSON.")
+        logger.warning(f"Excluding {mint} ({signal_type}): Could not determine creation timestamp from JSON.")
         return
 
     creation_dt = parse_ts(creation_ts_str)
@@ -458,7 +475,7 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     age_hours = age_seconds / 3600
     
     if age_hours < 0:
-        logger.warning(f"Token {mint} has a future creation date: {creation_ts_str}. Using 0 for age.")
+        logger.warning(f"Token {mint} ({signal_type}) has a future creation date: {creation_ts_str}. Using 0 for age.")
         age_hours = 0
     
     # 3. Determine tracking intervals
@@ -541,12 +558,19 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "tracking_completed_at": None
     }
     
-    active_tracking[mint] = token_data
-    logger.info(f"New token: {symbol} ({mint[:6]}...) | Signal: {signal_type} | Age: {age_hours:.2f}h | Entry: ${entry_price}")
+    # (*** MODIFIED ***) Use composite key to store in active_tracking
+    composite_key = get_composite_key(mint, signal_type)
+    active_tracking[composite_key] = token_data
+    
+    logger.info(f"New token: {symbol} ({mint[:6]}...) | Key: {composite_key} | Age: {age_hours:.2f}h | Entry: ${entry_price}")
 
 
 async def process_signals(signal_data: dict, signal_type: str):
-    """Process downloaded signal file, find new tokens, and add to tracking."""
+    """
+    (*** MODIFIED ***)
+    Process downloaded signal file, find new tokens (per signal type),
+    and add to tracking using a composite key.
+    """
     if not isinstance(signal_data, dict):
         logger.warning(f"Signal data for {signal_type} is not a dict. Skipping.")
         return
@@ -567,7 +591,11 @@ async def process_signals(signal_data: dict, signal_type: str):
     
     new_tokens_found = 0
     for mint, first_entry, ts in sorted_tokens:
-        if mint not in active_tracking:
+        
+        # (*** MODIFIED ***) Check active_tracking using the composite key
+        composite_key = get_composite_key(mint, signal_type)
+        
+        if composite_key not in active_tracking:
             new_tokens_found += 1
             await add_new_token_to_tracking(mint, signal_type, first_entry)
 
@@ -576,21 +604,26 @@ async def process_signals(signal_data: dict, signal_type: str):
 
 async def update_active_token_prices():
     """
+    (*** MODIFIED ***)
     Check all active tokens, batch fetch prices for those needing
     an update, and update their state.
+    Iterates by composite_key and batches API calls by mint.
     """
     now = get_now()
+    
+    # (*** MODIFIED ***) These dicts are now keyed by composite_key
     tokens_to_check = {}
     tokens_to_retry = {}
     
     # --- 1. Identify tokens to update ---
-    for mint, token_data in list(active_tracking.items()):
+    # Iterate by composite_key
+    for composite_key, token_data in list(active_tracking.items()):
         
         # Check if tracking period ended - ONLY reason to finalize
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
         if now >= tracking_end_time:
-            logger.info(f"Tracking duration ended for {mint}. Finalizing...")
-            finalize_token_tracking(mint, token_data)
+            logger.info(f"Tracking duration ended for {composite_key}. Finalizing...")
+            finalize_token_tracking(composite_key, token_data) # (*** MODIFIED ***) Pass composite_key
             continue
 
         # Check if in retry state
@@ -598,41 +631,57 @@ async def update_active_token_prices():
             # Token is in a retry state - check on RETRY_INTERVAL
             last_check = parse_ts(token_data["last_price_check"])
             if (now - last_check).total_seconds() >= RETRY_INTERVAL:
-                tokens_to_retry[mint] = token_data
+                tokens_to_retry[composite_key] = token_data # (*** MODIFIED ***)
             continue
 
         # Check for normal price update
         last_check = parse_ts(token_data["last_price_check"])
         interval = token_data["tracking_interval_seconds"]
         if (now - last_check).total_seconds() >= interval:
-            tokens_to_check[mint] = token_data
+            tokens_to_check[composite_key] = token_data # (*** MODIFIED ***)
 
     # --- 2. Batch fetch prices for normal checks ---
     if tokens_to_check:
-        logger.info(f"Fetching prices for {len(tokens_to_check)} tokens...")
-        mints_list = list(tokens_to_check.keys())
+        logger.info(f"Fetching prices for {len(tokens_to_check)} token-signals...")
         
-        # Use Jupiter batch fetch first
+        # (*** MODIFIED ***) Create a map of {mint: [list of composite_keys]}
+        # This allows batching API calls by mint, even if we track mint_alpha and mint_discovery
+        mint_to_keys_map = {}
+        for composite_key, token_data in tokens_to_check.items():
+            mint = token_data["mint"]
+            if mint not in mint_to_keys_map:
+                mint_to_keys_map[mint] = []
+            mint_to_keys_map[mint].append(composite_key)
+            
+        mints_list = list(mint_to_keys_map.keys()) # Unique mints to fetch
+        
         try:
             prices = await fetch_price_jupiter(mints_list)
         except Exception as e:
             logger.error(f"Jupiter batch fetch failed: {e}. Will retry individuals.")
             prices = {}
         
-        failed_mints = []
-        for mint, token_data in tokens_to_check.items():
-            if mint in prices:
-                update_token_price(token_data, prices[mint])
-            else:
-                failed_mints.append((mint, token_data))
+        # (*** MODIFIED ***) Store failures as (composite_key, token_data)
+        failed_mints_with_keys = []
+        
+        # (*** MODIFIED ***) Iterate over the map to apply updates
+        for mint, composite_keys in mint_to_keys_map.items():
+            price = prices.get(mint)
+            for composite_key in composite_keys:
+                token_data = tokens_to_check[composite_key]
+                if price is not None:
+                    update_token_price(token_data, price)
+                else:
+                    failed_mints_with_keys.append((composite_key, token_data))
         
         # For tokens Jupiter failed on, try Dexscreener one-by-one
-        if failed_mints:
-            logger.info(f"Jupiter failed for {len(failed_mints)} tokens. Trying Dexscreener...")
-            for mint, token_data in failed_mints:
+        if failed_mints_with_keys:
+            logger.info(f"Jupiter failed for {len(failed_mints_with_keys)} token-signals. Trying Dexscreener...")
+            for composite_key, token_data in failed_mints_with_keys:
+                mint = token_data["mint"] # Get mint from token_data
                 price = await fetch_current_price(mint)
                 if price is not None:
-                    logger.info(f"Price recovery successful for {mint}!")
+                    logger.info(f"Price recovery successful for {mint} ({composite_key})!")
                     update_token_price(token_data, price)
                 else:
                     handle_price_failure(token_data)
@@ -640,10 +689,12 @@ async def update_active_token_prices():
     # --- 3. Handle tokens in retry mode ---
     if tokens_to_retry:
         logger.info(f"Retrying {len(tokens_to_retry)} tokens in retry state...")
-        for mint, token_data in tokens_to_retry.items():
+        # (*** MODIFIED ***) Iterate by composite_key
+        for composite_key, token_data in tokens_to_retry.items():
+            mint = token_data["mint"] # Get mint from token_data
             price = await fetch_current_price(mint)
             if price is not None:
-                logger.info(f"Retry successful for {mint}!")
+                logger.info(f"Retry successful for {mint} ({composite_key})!")
                 update_token_price(token_data, price)
             else:
                 handle_price_failure(token_data)
@@ -653,8 +704,9 @@ async def update_active_token_prices():
 
 def generate_daily_file(date_str: str, signal_type: str, completed_token: dict = None):
     """
+    (*** MODIFIED ***)
     Load, update, and save the daily file for a given date and signal type.
-    If completed_token is provided, add it to the file.
+    Duplicate check now uses both mint and signal_type.
     """
     remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
     local_path = os.path.join(TEMP_DIR, remote_path)
@@ -671,15 +723,30 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
     
     # 2. Add completed token if provided
     if completed_token:
-        # Avoid duplicates
-        if not any(t["mint"] == completed_token["mint"] for t in daily_data["tokens"]):
+        # (*** MODIFIED ***) Avoid duplicates: check for mint AND signal_type
+        token_key = get_composite_key(completed_token["mint"], completed_token["signal_type"])
+        
+        is_duplicate = False
+        for t in daily_data["tokens"]:
+            # Check if token in file has both mint and signal_type
+            if "mint" in t and "signal_type" in t:
+                existing_key = get_composite_key(t["mint"], t["signal_type"])
+                if existing_key == token_key:
+                    is_duplicate = True
+                    break
+            # Fallback for old data: just check mint
+            elif t["mint"] == completed_token["mint"]:
+                 is_duplicate = True
+                 break
+
+        if not is_duplicate:
             # Prune price history before saving to daily file
             pruned_token = copy.deepcopy(completed_token)
             pruned_token.pop("price_history", None)
             daily_data["tokens"].append(pruned_token)
-            logger.info(f"Added {completed_token['mint']} to daily file {remote_path}")
+            logger.info(f"Added {token_key} to daily file {remote_path}")
         else:
-            logger.warning(f"Token {completed_token['mint']} already in daily file {remote_path}")
+            logger.warning(f"Token {token_key} already in daily file {remote_path}")
 
     # 3. Recalculate daily summary
     tokens = daily_data.get("tokens", [])
@@ -1001,7 +1068,7 @@ async def initialize():
         active_data = load_json(remote_path)
         if isinstance(active_data, dict):
             active_tracking = active_data
-            logger.info(f"Loaded {len(active_tracking)} active tokens to resume tracking.")
+            logger.info(f"Loaded {len(active_tracking)} active token-signals to resume tracking.")
         else:
             logger.warning("active_tracking.json is invalid, starting fresh.")
             active_tracking = {}
@@ -1042,7 +1109,7 @@ async def download_and_process_signals():
 
 async def upload_active_tracking():
     """Save and upload the current active_tracking.json."""
-    logger.info("Uploading active_tracking.json...")
+    logger.info(f"Uploading active_tracking.json with {len(active_tracking)} items...")
     remote_path = "analytics/active_tracking.json"
     local_path = save_json(active_tracking, remote_path)
     if local_path:
