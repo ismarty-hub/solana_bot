@@ -2845,3 +2845,13 @@ Service stopped manually.
 2025-11-04 06:28:49,957 - CollectorService - INFO - Polling cycle finished in 5.33s.
 2025-11-04 06:28:49,958 - CollectorService - INFO - Sleeping for 174.67s...
 2025-11-04 06:29:00,190 - CollectorService - INFO - Service stopped manually.
+2025-11-05 03:22:53,616 - CollectorService - INFO - Supabase client initialized.
+2025-11-05 03:22:53,671 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-05 03:22:53,730 - CollectorService - INFO - CollectorService initialized.
+2025-11-05 03:22:53,778 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-05 03:22:53,816 - CollectorService - INFO - Starting new polling cycle...
+2025-11-05 03:22:56,995 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-05 03:22:56,996 - CollectorService - INFO - Found 2 total signals to check.
+2025-11-05 03:22:57,916 - CollectorService - INFO - Polling cycle finished in 4.11s.
+2025-11-05 03:22:57,922 - CollectorService - INFO - Sleeping for 175.89s...
+2025-11-05 03:23:17,035 - CollectorService - INFO - Service stopped manually.

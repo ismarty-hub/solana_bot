@@ -17,6 +17,12 @@ that are due for a recheck, rather than a full 7-day lookback.
 (CORRECTED) The service now extracts pre-fetched Dexscreener and RugCheck
 data from the signal files instead of making redundant live API calls.
 It only fetches live data if it's missing from the signal.
+
+(*** BUGFIX ***) The SnapshotAggregator now uses a composite key
+(mint + signal_type) to look up labels, matching the logic
+in analytics_tracker.py. This ensures the correct label (e.g.,
+from 'mint_alpha') is applied to the correct snapshot (e.g.,
+'snapshot_mint_alpha').
 """
 
 import os
@@ -115,6 +121,15 @@ def setup_logging(level: str) -> logging.Logger:
     logging.getLogger("supabase").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     return logging.getLogger("CollectorService")
+
+# --- (*** NEW ***) Keying Utility Function ---
+
+def get_composite_key(mint: str, signal_type: str) -> str:
+    """
+    Create a unique key for tracking a token per signal type.
+    Must match the key used by analytics_tracker.py.
+    """
+    return f"{mint}_{signal_type}"
 
 # --- Async TTL Cache Utility ---
 
@@ -645,7 +660,8 @@ class SnapshotAggregator:
         # Caches for a single aggregation pass
         self._file_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
         self._cache_lock = asyncio.Lock()
-        self._label_index: Dict[str, Dict] = {} # {mint: {latest_label_data}}
+        # (*** MODIFIED ***) Label index is keyed by composite_key
+        self._label_index: Dict[str, Dict] = {} # {composite_key: {latest_label_data}}
 
     def _clear_caches(self):
         """Clears caches at the start of a scan."""
@@ -774,6 +790,7 @@ class SnapshotAggregator:
         
         file_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
         
+        # (*** MODIFIED ***) Build label index using composite key
         for content in file_contents:
             if isinstance(content, Exception) or not content or not isinstance(content.get("tokens"), list):
                 continue
@@ -781,8 +798,13 @@ class SnapshotAggregator:
             for token in content["tokens"]:
                 if not isinstance(token, dict): continue
                 mint = token.get("mint")
-                if not mint or token.get("status") not in ("win", "loss"):
+                signal_type = token.get("signal_type") # Get signal_type
+                
+                # Check for both mint and signal_type
+                if not mint or not signal_type or token.get("status") not in ("win", "loss"):
                     continue
+                
+                composite_key = get_composite_key(mint, signal_type) # Create key
                 
                 # Check for latest tracking_completed_at
                 tracking_completed_at_str = token.get("tracking_completed_at")
@@ -792,21 +814,22 @@ class SnapshotAggregator:
                 try:
                     new_label_time = parser.isoparse(tracking_completed_at_str)
                 except Exception:
-                    log.warning(f"Could not parse tracking_completed_at for {mint}: {tracking_completed_at_str}")
+                    log.warning(f"Could not parse tracking_completed_at for {composite_key}: {tracking_completed_at_str}")
                     continue # Bad data
                 
-                existing_label = self._label_index.get(mint)
+                existing_label = self._label_index.get(composite_key) # Use key
                 if not existing_label:
-                    self._label_index[mint] = token
+                    self._label_index[composite_key] = token
                 else:
                     try:
                         existing_label_time = parser.isoparse(existing_label.get("tracking_completed_at"))
                         if new_label_time > existing_label_time:
-                            self._label_index[mint] = token # Update with newer label
+                            self._label_index[composite_key] = token # Update with newer label
                     except Exception:
-                        self._label_index[mint] = token # Overwrite if old label was bad
+                        self._label_index[composite_key] = token # Overwrite if old label was bad
         
-        log.info(f"Built targeted label index with {len(self._label_index)} labeled tokens.")
+        log.info(f"Built targeted label index with {len(self._label_index)} labeled token-signals.")
+        # (*** END MODIFICATION ***)
 
         # 4. Process due snapshots in batches
         batch_size = self.config.AGGREGATOR_BATCH_SIZE
@@ -830,27 +853,31 @@ class SnapshotAggregator:
             pipeline = snapshot['features']['signal_source']
             now = datetime.now(timezone.utc)
             
+            # (*** MODIFIED ***) Create composite key for lookup
+            composite_key = get_composite_key(mint, pipeline)
+            
             finalization = snapshot['finalization']
             finalize_deadline_str = finalization['finalize_deadline']
             finalize_deadline = parser.isoparse(finalize_deadline_str).astimezone(timezone.utc)
             
-            # 2. Look up label in our targeted index
-            label_data = self._label_index.get(mint)
+            # 2. Look up label in our targeted index using composite key
+            label_data = self._label_index.get(composite_key)
             
             if label_data:
                 # LABEL FOUND - Aggregate to dataset
-                log.info(f"Label found for {mint}: {label_data['status']}")
+                log.info(f"Label found for {composite_key}: {label_data['status']}")
                 await self._aggregate_with_label(snapshot, label_data, filename, remote_path)
                 
             elif now >= finalize_deadline:
                 # EXPIRED - No label found before deadline
-                log.warning(f"Snapshot {filename} expired without label (Deadline: {finalize_deadline_str})")
+                log.warning(f"Snapshot {filename} ({composite_key}) expired without label (Deadline: {finalize_deadline_str})")
                 await self._aggregate_expired(snapshot, filename, remote_path)
                 
             else:
                 # NOT YET - Reschedule for next check
-                log.debug(f"No label yet for {mint}, rescheduling (Deadline: {finalize_deadline_str})")
+                log.debug(f"No label yet for {composite_key}, rescheduling (Deadline: {finalize_deadline_str})")
                 await self._reschedule_snapshot(snapshot, filename, remote_path)
+            # (*** END MODIFICATION ***)
                 
         except Exception as e:
             log.error(f"Error processing snapshot {filename}: {e}", exc_info=True)
@@ -920,9 +947,9 @@ class SnapshotAggregator:
         if success:
             # 4. Delete original snapshot (local + remote + pkl)
             await self._delete_snapshot(filename, remote_path)
-            log.info(f"Successfully aggregated {mint} to dataset {pipeline}/{date_str}")
+            log.info(f"Successfully aggregated {mint} ({pipeline}) to dataset {pipeline}/{date_str}")
         else:
-            log.error(f"Failed to save dataset for {mint}, keeping snapshot")
+            log.error(f"Failed to save dataset for {mint} ({pipeline}), keeping snapshot")
             # Release claim but don't delete
             self.claimed_snapshots.discard(filename)
     
@@ -947,9 +974,9 @@ class SnapshotAggregator:
         if success:
             # 4. Delete original snapshot
             await self._delete_snapshot(filename, remote_path)
-            log.info(f"Moved expired snapshot {mint} to {pipeline}/expired_no_label/{filename}")
+            log.info(f"Moved expired snapshot {mint} ({pipeline}) to {pipeline}/expired_no_label/{filename}")
         else:
-            log.error(f"Failed to save expired dataset for {mint}")
+            log.error(f"Failed to save expired dataset for {mint} ({pipeline})")
             self.claimed_snapshots.discard(filename)
     
     async def _reschedule_snapshot(self, snapshot: Dict, filename: str, remote_path: str):
