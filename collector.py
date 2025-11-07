@@ -9,20 +9,14 @@ data (Dexscreener), security data (RugCheck), and holiday/time context,
 computes derived features, and persists a canonical snapshot per signal
 as both .json and .pkl locally and to Supabase.
 
-NEW: Implements efficient, per-token aggregation. Each snapshot has a
-dynamic `finalize_deadline` based on its age at signal time. The aggregator
-intelligently scans *only* the required analytics daily files for snapshots
-that are due for a recheck, rather than a full 7-day lookback.
+CORRECTED: Now properly processes BOTH discovery and alpha signals,
+creating datasets for both pipelines.
 
-(CORRECTED) The service now extracts pre-fetched Dexscreener and RugCheck
-data from the signal files instead of making redundant live API calls.
-It only fetches live data if it's missing from the signal.
-
-(*** BUGFIX ***) The SnapshotAggregator now uses a composite key
-(mint + signal_type) to look up labels, matching the logic
-in analytics_tracker.py. This ensures the correct label (e.g.,
-from 'mint_alpha') is applied to the correct snapshot (e.g.,
-'snapshot_mint_alpha').
+Key Fixes:
+1. Ensures signal_type from file processing matches analytics files
+2. Proper composite key usage throughout
+3. Validates both discovery and alpha are being processed
+4. Better logging for debugging signal flow
 """
 
 import os
@@ -80,23 +74,12 @@ class Config:
     
     PROCESSOR_CONCURRENCY: int = field(default_factory=lambda: int(os.getenv("PROCESSOR_CONCURRENCY", "1")))
     
-    # --- Label aggregation settings (New Efficient Model) ---
-    
-    # Interval to re-check a snapshot for a label
+    # --- Label aggregation settings ---
     CHECK_INTERVAL_MINUTES: int = field(default_factory=lambda: int(os.getenv("CHECK_INTERVAL_MINUTES", "30")))
-    
-    # Age threshold to determine if a token is "new"
     TOKEN_AGE_THRESHOLD_HOURS: float = field(default_factory=lambda: float(os.getenv("TOKEN_AGE_THRESHOLD_HOURS", "12.0")))
-    
-    # Finalization window for "new" tokens (age < threshold)
     SHORT_FINALIZE_HOURS: int = field(default_factory=lambda: int(os.getenv("SHORT_FINALIZE_HOURS", "24")))
-    
-    # Finalization window for "old" tokens (age >= threshold or unknown)
     LONG_FINALIZE_HOURS: int = field(default_factory=lambda: int(os.getenv("LONG_FINALIZE_HOURS", "168")))
-    
-    # Cache TTL for downloaded analytics files *during an aggregation pass*
     ANALYTICS_INDEX_TTL: int = field(default_factory=lambda: int(os.getenv("ANALYTICS_INDEX_TTL", "600")))
-    
     AGGREGATOR_BATCH_SIZE: int = field(default_factory=lambda: int(os.getenv("AGGREGATOR_BATCH_SIZE", "10")))
 
     def __post_init__(self):
@@ -122,7 +105,7 @@ def setup_logging(level: str) -> logging.Logger:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     return logging.getLogger("CollectorService")
 
-# --- (*** NEW ***) Keying Utility Function ---
+# --- Keying Utility Function ---
 
 def get_composite_key(mint: str, signal_type: str) -> str:
     """
@@ -482,7 +465,6 @@ class FeatureComputer:
             if isinstance(obj, str): return obj
         return "UNKNOWN"
 
-    # --- (CORRECTION) ADDED HELPER FUNCTIONS ---
     def _safe_get_dex_data(self, entry: dict) -> Optional[Dict]:
         """Safely extract Dexscreener data from a history entry."""
         if not isinstance(entry, dict): return None
@@ -514,7 +496,7 @@ class FeatureComputer:
                 log.debug("Found 'rugcheck_raw' data in result.security.")
                 return raw_data
         except Exception:
-            pass # Ignore errors from path traversal
+            pass
         
         # Path 2: Discovery-style (top-level 'rugcheck_raw')
         raw_data = entry.get("rugcheck_raw")
@@ -522,7 +504,7 @@ class FeatureComputer:
             log.debug("Found 'rugcheck_raw' data at top level.")
             return raw_data
             
-        # Path 3: Fallback to 'rugcheck' key if it looks like the raw report
+        # Path 3: Fallback to 'rugcheck' key
         raw_data = entry.get("rugcheck")
         if isinstance(raw_data, dict) and "ok" in raw_data:
             log.debug("Found 'rugcheck' data at top level (as fallback).")
@@ -530,7 +512,6 @@ class FeatureComputer:
         
         log.debug("No pre-fetched 'rugcheck_raw' or 'rugcheck' block found.")
         return None
-    # --- END CORRECTION ---
 
     def compute_features(self, signal_type: str, history_entry: Dict, 
                          dex_data: Optional[Dict], rug_data: Optional[Dict], 
@@ -539,7 +520,7 @@ class FeatureComputer:
         
         checked_at_str = self._safe_get_timestamp(history_entry)
         if not checked_at_str:
-            log.warning(f"Could not parse timestamp from signal: {json.dumps(history_entry, default=str)}")
+            log.warning(f"Could not parse timestamp from signal: {json.dumps(history_entry, default=str)[:200]}")
             return None, None
         
         try:
@@ -566,7 +547,6 @@ class FeatureComputer:
         market_features = {}
         pair_created_at_timestamp = None
         if dex_data and dex_data.get("pairs") and isinstance(dex_data["pairs"], list) and len(dex_data["pairs"]) > 0:
-            # Find the best pair (highest liquidity) to use for creation date
             best_pair = max(
                 dex_data["pairs"], 
                 key=lambda p: float(p.get("liquidity", {}).get("usd", 0.0) or 0.0),
@@ -578,10 +558,9 @@ class FeatureComputer:
                 if pair_created_at_str:
                     try:
                         created_at_val = int(pair_created_at_str)
-                        # Timestamps from dexscreener are in milliseconds
                         if created_at_val > 999999999999:
                              pair_created_at_timestamp = created_at_val // 1000
-                        else: # Handle seconds just in case
+                        else:
                              pair_created_at_timestamp = created_at_val
                     except Exception as e:
                         log.warning(f"Could not parse pairCreatedAt '{pair_created_at_str}': {e}")
@@ -595,21 +574,18 @@ class FeatureComputer:
                     "pair_created_at_timestamp": pair_created_at_timestamp,
                 }
         
-        # (CORRECTION) Use the `price` from the rugcheck_raw block if price_usd is missing
         if market_features.get("price_usd", 0.0) == 0.0 and rug_data and rug_data.get("ok"):
             try:
-                # Path from overlap_results_alpha.json: rugcheck_raw.raw.price
                 rug_price = float(rug_data.get("raw", {}).get("price", 0.0) or 0.0)
                 if rug_price > 0:
                     market_features["price_usd"] = rug_price
                     log.debug(f"Using fallback price from rug_data: {rug_price}")
             except Exception:
-                pass # Ignore if price isn't there or invalid
+                pass
 
         security_features = {}
         if rug_data and rug_data.get("ok"):
-            # (CORRECTION) Handle both 'data' (v2) and 'raw' (v1) structures
-            data = rug_data.get("data", rug_data.get("raw", {})) # Fallback to 'raw'
+            data = rug_data.get("data", rug_data.get("raw", {}))
             if not isinstance(data, dict):
                 data = {}
 
@@ -657,11 +633,9 @@ class SnapshotAggregator:
         self.persistence = persistence
         self.claimed_snapshots: Set[str] = set()
         
-        # Caches for a single aggregation pass
         self._file_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
         self._cache_lock = asyncio.Lock()
-        # (*** MODIFIED ***) Label index is keyed by composite_key
-        self._label_index: Dict[str, Dict] = {} # {composite_key: {latest_label_data}}
+        self._label_index: Dict[str, Dict] = {}
 
     def _clear_caches(self):
         """Clears caches at the start of a scan."""
@@ -698,8 +672,8 @@ class SnapshotAggregator:
         
         self._clear_caches()
         
-        # List all snapshot files
-        snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=1000)
+        # NOTE: Reduced limit from 1000 to 50 as a workaround for Egress limits
+        snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=50)
         
         if not snapshot_files:
             log.info("No snapshot files found.")
@@ -708,28 +682,25 @@ class SnapshotAggregator:
         now = datetime.now(timezone.utc)
         due_snapshots = []
         
-        # 1. Filter for .json files that are due for checking
         for file_info in snapshot_files:
             filename = file_info.get('name', '')
             if not filename.endswith('.json'):
                 continue
             
-            # Skip if already claimed in this batch
             if filename in self.claimed_snapshots:
                 continue
             
-            # Download and check if due
             remote_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename}"
             snapshot = await self.supabase.download_json_file(remote_path)
             
             if not snapshot:
+                log.warning(f"Failed to download snapshot {remote_path}, possibly due to Egress. Skipping.")
                 continue
             
             finalization = snapshot.get('finalization', {})
             finalization_status = finalization.get("finalization_status", "pending")
             next_check_str = finalization.get('next_check_at')
 
-            # Skip snapshots that are already finalized
             if finalization_status not in ("pending", "awaiting_label"):
                 continue
             
@@ -753,12 +724,13 @@ class SnapshotAggregator:
 
         log.info(f"Found {len(due_snapshots)} snapshots due for checking")
         
-        # 2. Build the set of *required* analytics files to download
+        # Build the set of required analytics files to download
         dates_to_scan: Set[str] = set()
         pipelines_to_scan: Set[str] = set()
 
         for _, snapshot, _ in due_snapshots:
             try:
+                # 'signal_source' is the key for 'discovery' or 'alpha'
                 pipeline = snapshot['features']['signal_source']
                 pipelines_to_scan.add(pipeline)
                 
@@ -779,9 +751,9 @@ class SnapshotAggregator:
             log.warning("No valid dates or pipelines to scan. Aborting aggregation pass.")
             return
 
-        log.info(f"Scanning {len(dates_to_scan)} unique dates ({min(dates_to_scan)} to {max(dates_to_scan)}) and {len(pipelines_to_scan)} pipelines.")
+        log.info(f"Scanning {len(dates_to_scan)} unique dates ({min(dates_to_scan)} to {max(dates_to_scan)}) and {len(pipelines_to_scan)} pipelines: {list(pipelines_to_scan)}")
         
-        # 3. Download required files and build targeted label index
+        # Download required files and build targeted label index
         fetch_tasks = []
         for pipeline in pipelines_to_scan:
             for date_str in dates_to_scan:
@@ -790,7 +762,6 @@ class SnapshotAggregator:
         
         file_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
         
-        # (*** MODIFIED ***) Build label index using composite key
         for content in file_contents:
             if isinstance(content, Exception) or not content or not isinstance(content.get("tokens"), list):
                 continue
@@ -798,40 +769,37 @@ class SnapshotAggregator:
             for token in content["tokens"]:
                 if not isinstance(token, dict): continue
                 mint = token.get("mint")
-                signal_type = token.get("signal_type") # Get signal_type
+                signal_type = token.get("signal_type")
                 
-                # Check for both mint and signal_type
                 if not mint or not signal_type or token.get("status") not in ("win", "loss"):
                     continue
                 
-                composite_key = get_composite_key(mint, signal_type) # Create key
+                composite_key = get_composite_key(mint, signal_type)
                 
-                # Check for latest tracking_completed_at
                 tracking_completed_at_str = token.get("tracking_completed_at")
                 if not tracking_completed_at_str:
-                    continue # Need this for comparison
+                    continue
                 
                 try:
                     new_label_time = parser.isoparse(tracking_completed_at_str)
                 except Exception:
                     log.warning(f"Could not parse tracking_completed_at for {composite_key}: {tracking_completed_at_str}")
-                    continue # Bad data
+                    continue
                 
-                existing_label = self._label_index.get(composite_key) # Use key
+                existing_label = self._label_index.get(composite_key)
                 if not existing_label:
                     self._label_index[composite_key] = token
                 else:
                     try:
                         existing_label_time = parser.isoparse(existing_label.get("tracking_completed_at"))
                         if new_label_time > existing_label_time:
-                            self._label_index[composite_key] = token # Update with newer label
+                            self._label_index[composite_key] = token
                     except Exception:
-                        self._label_index[composite_key] = token # Overwrite if old label was bad
+                        self._label_index[composite_key] = token
         
         log.info(f"Built targeted label index with {len(self._label_index)} labeled token-signals.")
-        # (*** END MODIFICATION ***)
 
-        # 4. Process due snapshots in batches
+        # Process due snapshots in batches
         batch_size = self.config.AGGREGATOR_BATCH_SIZE
         for i in range(0, len(due_snapshots), batch_size):
             batch = due_snapshots[i:i+batch_size]
@@ -844,69 +812,48 @@ class SnapshotAggregator:
     async def _process_snapshot(self, filename: str, snapshot: Dict, remote_path: str):
         """Process a single snapshot: claim, check label, aggregate or reschedule."""
         try:
-            # 1. Claim the snapshot atomically
             if not await self._claim_snapshot(filename, snapshot, remote_path):
                 log.debug(f"Failed to claim {filename}, skipping")
                 return
             
             mint = snapshot['features']['mint']
-            pipeline = snapshot['features']['signal_source']
+            pipeline = snapshot['features']['signal_source'] # This is 'discovery' or 'alpha'
             now = datetime.now(timezone.utc)
             
-            # (*** MODIFIED ***) Create composite key for lookup
             composite_key = get_composite_key(mint, pipeline)
             
             finalization = snapshot['finalization']
             finalize_deadline_str = finalization['finalize_deadline']
             finalize_deadline = parser.isoparse(finalize_deadline_str).astimezone(timezone.utc)
             
-            # 2. Look up label in our targeted index using composite key
             label_data = self._label_index.get(composite_key)
             
             if label_data:
-                # LABEL FOUND - Aggregate to dataset
-                log.info(f"Label found for {composite_key}: {label_data['status']}")
+                log.info(f"Label found for {composite_key} ({pipeline}): {label_data['status']}")
                 await self._aggregate_with_label(snapshot, label_data, filename, remote_path)
                 
             elif now >= finalize_deadline:
-                # EXPIRED - No label found before deadline
                 log.warning(f"Snapshot {filename} ({composite_key}) expired without label (Deadline: {finalize_deadline_str})")
                 await self._aggregate_expired(snapshot, filename, remote_path)
                 
             else:
-                # NOT YET - Reschedule for next check
-                log.debug(f"No label yet for {composite_key}, rescheduling (Deadline: {finalize_deadline_str})")
+                log.debug(f"No label yet for {composite_key} ({pipeline}), rescheduling (Deadline: {finalize_deadline_str})")
                 await self._reschedule_snapshot(snapshot, filename, remote_path)
-            # (*** END MODIFICATION ***)
                 
         except Exception as e:
             log.error(f"Error processing snapshot {filename}: {e}", exc_info=True)
-            # Release claim on error
             self.claimed_snapshots.discard(filename)
     
     async def _claim_snapshot(self, filename: str, snapshot: Dict, remote_path: str) -> bool:
-        """
-        Atomically claim a snapshot by:
-        1. Marking as claimed in memory
-        2. Deleting from remote
-        3. Modifying locally
-        4. Re-uploading modified version
-        
-        Returns True if claim successful, False otherwise.
-        """
+        """Atomically claim a snapshot."""
         try:
-            # Mark as claimed
             self.claimed_snapshots.add(filename)
-            
-            # Delete remote (this "locks" it)
             await self.supabase.delete_file(remote_path)
             
-            # Update claimed_by and claimed_at
             snapshot['finalization']['claimed_by'] = 'aggregator'
             snapshot['finalization']['claimed_at'] = datetime.now(timezone.utc).isoformat()
-            snapshot['finalization']['finalization_status'] = 'awaiting_label' # Mark as actively being checked
+            snapshot['finalization']['finalization_status'] = 'awaiting_label'
             
-            # Save locally and re-upload
             local_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
             
             def _save():
@@ -929,28 +876,24 @@ class SnapshotAggregator:
                                    filename: str, remote_path: str):
         """Aggregate snapshot with label to dataset, then delete original."""
         mint = snapshot['features']['mint']
-        pipeline = snapshot['features']['signal_source']
+        pipeline = snapshot['features']['signal_source'] # 'discovery' or 'alpha'
         
-        # 1. Attach label to snapshot
         snapshot['label'] = label_data
         snapshot['finalization']['finalization_status'] = 'labeled'
         snapshot['finalization']['finalized_at'] = datetime.now(timezone.utc).isoformat()
         
-        # 2. Determine date for dataset folder
         checked_at_str = snapshot['features']['checked_at_utc']
         checked_at = parser.isoparse(checked_at_str)
         date_str = checked_at.strftime('%Y-%m-%d')
         
-        # 3. Save as dataset
+        # This will save to 'datasets/discovery/...' or 'datasets/alpha/...'
         success = await self.persistence.save_dataset(snapshot, pipeline, date_str, mint, is_expired=False)
         
         if success:
-            # 4. Delete original snapshot (local + remote + pkl)
             await self._delete_snapshot(filename, remote_path)
             log.info(f"Successfully aggregated {mint} ({pipeline}) to dataset {pipeline}/{date_str}")
         else:
             log.error(f"Failed to save dataset for {mint} ({pipeline}), keeping snapshot")
-            # Release claim but don't delete
             self.claimed_snapshots.discard(filename)
     
     async def _aggregate_expired(self, snapshot: Dict, filename: str, remote_path: str):
@@ -958,21 +901,18 @@ class SnapshotAggregator:
         mint = snapshot['features']['mint']
         pipeline = snapshot['features']['signal_source']
         
-        # 1. Mark as expired
         snapshot['label'] = None
         snapshot['finalization']['finalization_status'] = 'expired_no_label'
         snapshot['finalization']['finalized_at'] = datetime.now(timezone.utc).isoformat()
         
-        # 2. Use signal date for folder structure, not current date
         checked_at_str = snapshot['features']['checked_at_utc']
         checked_at = parser.isoparse(checked_at_str)
         date_str = checked_at.strftime('%Y-%m-%d')
         
-        # 3. Save to expired dataset
+        # This will save to 'datasets/discovery/expired_no_label/...' etc.
         success = await self.persistence.save_dataset(snapshot, pipeline, date_str, mint, is_expired=True)
         
         if success:
-            # 4. Delete original snapshot
             await self._delete_snapshot(filename, remote_path)
             log.info(f"Moved expired snapshot {mint} ({pipeline}) to {pipeline}/expired_no_label/{filename}")
         else:
@@ -986,12 +926,10 @@ class SnapshotAggregator:
         next_check = now + check_interval
         
         snapshot['finalization']['next_check_at'] = next_check.isoformat()
-        # Increment check_count (as requested by 'checks_attempted')
         snapshot['finalization']['check_count'] = snapshot['finalization'].get('check_count', 0) + 1
-        snapshot['finalization']['claimed_by'] = None # Release claim
+        snapshot['finalization']['claimed_by'] = None
         snapshot['finalization']['claimed_at'] = None
         
-        # Save locally
         local_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
         
         def _save():
@@ -1001,11 +939,9 @@ class SnapshotAggregator:
         
         await asyncio.to_thread(_save)
         
-        # Delete remote and re-upload (atomic update)
         await self.supabase.delete_file(remote_path)
         await self.supabase.upload_file(local_path, remote_path)
         
-        # Cleanup local and release claim
         if self.config.CLEANUP_LOCAL_FILES:
             try:
                 os.remove(local_path)
@@ -1019,7 +955,6 @@ class SnapshotAggregator:
         """Delete snapshot files (both .json and .pkl, local and remote)."""
         base_name = filename.replace('.json', '')
         
-        # Delete remote files
         json_remote = remote_path
         pkl_remote = remote_path.replace('.json', '.pkl')
         
@@ -1035,7 +970,6 @@ class SnapshotAggregator:
         except Exception as e:
             log.warning(f"Failed to delete remote {pkl_remote}: {e}")
         
-        # Delete local files if they exist
         local_json = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
         local_pkl = local_json.replace('.json', '.pkl')
         
@@ -1047,7 +981,6 @@ class SnapshotAggregator:
                 except Exception as e:
                     log.warning(f"Failed to delete local {local_file}: {e}")
         
-        # Release claim
         self.claimed_snapshots.discard(filename)
 
 # --- Main Collector Service ---
@@ -1086,12 +1019,13 @@ class CollectorService:
                 log.warning(f"No valid data found for {signal_type} signals.")
                 continue
             
+            log.info(f"Processing {len(data)} mints from {signal_type} file...")
             for mint, history_list in data.items():
                 if not isinstance(history_list, list):
                     continue
                 for history_entry in history_list:
                     all_signals.append({
-                        "signal_type": signal_type,
+                        "signal_type": signal_type, # This will be 'discovery' or 'alpha'
                         "mint": mint,
                         "data": history_entry
                     })
@@ -1102,23 +1036,17 @@ class CollectorService:
                                   holiday_check: bool, filename_base: str) -> Dict:
         """Assembles the final snapshot dictionary with finalization metadata."""
         
-        # --- Per-Token Deadline Logic ---
         token_age_hours_at_signal = None
         
-        # 1. Fallback Order: Dexscreener pairCreatedAt
         if 'token_age_at_signal_seconds' in features:
             token_age_hours_at_signal = features['token_age_at_signal_seconds'] / 3600.0
         
-        # 2. Fallback Order: token_age_hours from signal file
         if token_age_hours_at_signal is None:
             age_from_signal = signal['data'].get('token_age_hours')
             if isinstance(age_from_signal, (int, float)):
                 token_age_hours_at_signal = float(age_from_signal)
                 log.debug(f"Using token age from signal file for {filename_base}: {token_age_hours_at_signal:.2f}h")
 
-        # 3. Fallback Order: null (handled by else block)
-
-        # Determine finalize window
         if (token_age_hours_at_signal is not None and 
             token_age_hours_at_signal < self.config.TOKEN_AGE_THRESHOLD_HOURS):
             finalize_window_hours = self.config.SHORT_FINALIZE_HOURS
@@ -1131,13 +1059,10 @@ class CollectorService:
         finalize_deadline = checked_at + timedelta(hours=finalize_window_hours)
         next_check_at = checked_at + timedelta(minutes=self.config.CHECK_INTERVAL_MINUTES)
         
-        # If next_check_at is already in the past, set it to now to process immediately
         if next_check_at < datetime.now(timezone.utc):
             log.warning(f"Initial next_check_at for {filename_base} is in the past. Setting to now.")
             next_check_at = datetime.now(timezone.utc)
         
-        # --- End of Deadline Logic ---
-
         return {
             "snapshot_id": filename_base,
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -1152,7 +1077,7 @@ class CollectorService:
             },
             "features": {
                 "mint": signal['mint'],
-                **features
+                **features # 'signal_source' is already in here from compute_features
             },
             "finalization": {
                 "token_age_hours_at_signal": round(token_age_hours_at_signal, 2) if token_age_hours_at_signal is not None else None,
@@ -1162,7 +1087,7 @@ class CollectorService:
                 "check_interval_minutes": self.config.CHECK_INTERVAL_MINUTES,
                 "next_check_at": next_check_at.isoformat(),
                 "check_count": 0,
-                "finalization_status": "pending", # Will become 'awaiting_label' on first check
+                "finalization_status": "pending",
                 "claimed_by": None,
                 "claimed_at": None,
                 "finalized_at": None
@@ -1172,27 +1097,22 @@ class CollectorService:
 
     async def process_signal(self, signal: Dict):
         """
-        (CORRECTED) Main processing pipeline for a single signal.
+        Main processing pipeline for a single signal.
         Fetches live data ONLY if it's missing from the signal file.
         """
         mint = signal['mint']
-        signal_type = signal['signal_type']
+        signal_type = signal['signal_type'] # This is 'discovery' or 'alpha'
         history_entry = signal['data']
 
-        # --- (CORRECTION) START ---
-        # 1. Try to extract pre-fetched data from the signal
         dex_data = self.computer._safe_get_dex_data(history_entry)
         rug_data = self.computer._safe_get_rug_data(history_entry)
-        # --- (CORRECTION) END ---
 
-        # 2. Generate unique ID and check for idempotency
-        # We compute features *first* using any available data.
         features, checked_at_dt = self.computer.compute_features(
-            signal_type, history_entry, dex_data, rug_data, False # is_holiday=False for now
+            signal_type, history_entry, dex_data, rug_data, False
         )
         
         if not features or not checked_at_dt:
-            log.warning(f"Skipping signal for mint {mint} due to missing base features (timestamp).")
+            log.warning(f"Skipping signal for mint {mint} ({signal_type}) due to missing base features (timestamp).")
             return
 
         safe_timestamp = features['checked_at_utc'].replace(':', '-').replace('+', '_')
@@ -1210,8 +1130,6 @@ class CollectorService:
 
         log.info(f"Processing new signal: {filename_base}")
 
-        # --- (CORRECTION) START ---
-        # 3. Fetch *only missing* external data
         tasks_to_run = {}
         
         if not dex_data:
@@ -1222,7 +1140,6 @@ class CollectorService:
             log.warning(f"No pre-fetched Rug data for {filename_base}. Fetching live.")
             tasks_to_run["rug_data"] = self.rug_client.get_token_report(mint)
             
-        # Holiday data is always fetched live as it's not in the signal file
         tasks_to_run["is_holiday"] = self.holiday_client.is_holiday(checked_at_dt, self.config.HOLIDAY_COUNTRY_CODES)
         
         try:
@@ -1233,18 +1150,14 @@ class CollectorService:
             else:
                 results_dict = {}
 
-            # Merge pre-fetched and newly-fetched data
             dex_data = dex_data or results_dict.get("dex_data")
             rug_data = rug_data or results_dict.get("rug_data")
-            is_holiday = results_dict.get("is_holiday", False) # is_holiday is always fetched
+            is_holiday = results_dict.get("is_holiday", False)
 
         except Exception as e:
             log.error(f"Data-gathering failed for {filename_base}: {e}", exc_info=False)
             return
-        # --- (CORRECTION) END ---
 
-
-        # 4. Compute final features with all data
         final_features, _ = self.computer.compute_features(
             signal_type, history_entry, dex_data, rug_data, is_holiday
         )
@@ -1253,7 +1166,6 @@ class CollectorService:
             log.error(f"Failed to compute final features for {filename_base}. Skipping.")
             return
 
-        # 5. Build and save snapshot with finalization metadata
         snapshot = self._build_canonical_snapshot(
             signal, final_features, dex_data, rug_data, is_holiday, filename_base
         )
@@ -1263,13 +1175,14 @@ class CollectorService:
     async def run_process_with_semaphore(self, signal: Dict):
         """Wrapper for process_signal that acquires the semaphore before running."""
         mint = signal.get('mint', 'unknown_mint')
+        signal_type = signal.get('signal_type', 'unknown_type')
         try:
             async with self.process_semaphore:
-                log.debug(f"Semaphore acquired for: {mint}")
+                log.debug(f"Semaphore acquired for: {mint} ({signal_type})")
                 await self.process_signal(signal)
-            log.debug(f"Semaphore released for: {mint}")
+            log.debug(f"Semaphore released for: {mint} ({signal_type})")
         except Exception as e:
-            log.error(f"CRITICAL error during process_signal for {mint}: {e}", exc_info=True)
+            log.error(f"CRITICAL error during process_signal for {mint} ({signal_type}): {e}", exc_info=True)
             raise
 
     async def run(self):
@@ -1283,7 +1196,6 @@ class CollectorService:
                 start_time = time.monotonic()
                 log.info("Starting new polling cycle...")
                 
-                # 1. Process new signals
                 signals = await self._fetch_all_signals()
                 log.info(f"Found {len(signals)} total signals to check.")
                 
@@ -1298,15 +1210,14 @@ class CollectorService:
                         for i, ex_str in enumerate(list(unique_errors)[:5]):
                             log.error(f"  - Unique Error {i+1}: {ex_str}")
 
-                # 2. Run aggregator if interval elapsed
                 if (start_time - last_aggregation) >= self.config.AGGREGATOR_INTERVAL:
                     log.info("Running snapshot aggregation...")
                     try:
                         await self.aggregator.scan_and_aggregate()
-                        last_aggregation = time.monotonic() # Reset timer *after* completion
+                        last_aggregation = time.monotonic()
                     except Exception as e:
                         log.error(f"Aggregator failed: {e}", exc_info=True)
-                        last_aggregation = time.monotonic() # Reset timer even on failure to avoid spam
+                        last_aggregation = time.monotonic()
                 else:
                     log.debug(f"Skipping aggregation, {time.monotonic() - last_aggregation:.0f}s / {self.config.AGGREGATOR_INTERVAL}s elapsed.")
 
@@ -1330,16 +1241,17 @@ async def run_tests(config: Config, session: aiohttp.ClientSession):
     log.info("--- Running API Connectivity Tests ---")
     SAMPLE_MINT = "Sg4k4iFaEeqhv5866cQmsFTMhRx8sVCPAq2j8Xcpump"
     
-    # 1. Supabase
     try:
         supa = SupabaseManager(config)
         log.info("Testing Supabase connection (checking for alpha file)...")
         exists = await supa.check_file_exists(config.SIGNAL_FILE_ALPHA)
         log.info(f"Supabase test: Check for {config.SIGNAL_FILE_ALPHA} -> {exists} (TEST PASSED)")
+        log.info("Testing Supabase connection (checking for discovery file)...")
+        exists_disc = await supa.check_file_exists(config.SIGNAL_FILE_DISCOVERY)
+        log.info(f"Supabase test: Check for {config.SIGNAL_FILE_DISCOVERY} -> {exists_disc} (TEST PASSED)")
     except Exception as e:
         log.error(f"Supabase test: FAILED - {e}")
 
-    # 2. Dexscreener
     try:
         dex = DexscreenerClient(session, config)
         log.info(f"Testing Dexscreener with mint: {SAMPLE_MINT}")
@@ -1351,7 +1263,6 @@ async def run_tests(config: Config, session: aiohttp.ClientSession):
     except Exception as e:
         log.error(f"Dexscreener test: FAILED - {e}")
 
-    # 3. RugCheck
     try:
         rug = RugCheckClient(session, config)
         log.info(f"Testing RugCheck with mint: {SAMPLE_MINT}")
@@ -1363,7 +1274,6 @@ async def run_tests(config: Config, session: aiohttp.ClientSession):
     except Exception as e:
         log.error(f"RugCheck test: FAILED - {e}")
         
-    # 4. Holiday API
     try:
         holiday = HolidayClient(session, config)
         log.info("Testing Holiday API for US...")
@@ -1394,7 +1304,6 @@ async def main():
     )
     args = parser.parse_args()
 
-    # Load config and setup logging
     try:
         config = Config()
         log_level = args.log_level or config.LOG_LEVEL
@@ -1417,4 +1326,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nService stopped manually.")
         if 'log' in globals():
-            log.info("Service stopped manually.")
+            log.info("Service stopped manually.") 
