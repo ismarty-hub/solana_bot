@@ -21,10 +21,6 @@ This script:
 8.  Generates and uploads daily, summary (1d, 7d, 30d, all-time),
     and overall analytics to Supabase.
 9.  Resumes tracking from 'active_tracking.json' on restart.
-
-(*** REVISION ***) Supabase download functions now use private signed URLs and
-conditional GETs (ETag/Last-Modified) for all downloads, falling back
-to a local file cache.
 """
 
 import os
@@ -33,13 +29,11 @@ import time
 import asyncio
 import aiohttp
 import logging
-import requests # Added for conditional downloads
 from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 from dateutil import parser
 import copy
 from dotenv import load_dotenv
-from typing import Dict, Any, Optional # Added for typing
 
 load_dotenv()
 
@@ -84,8 +78,6 @@ logger = logging.getLogger(__name__)
 supabase: Client | None = None
 active_tracking: dict = {}  # In-memory store for active tokens
 http_session: aiohttp.ClientSession | None = None
-# In-memory cache for conditional GET headers
-_file_cache_headers: Dict[str, Dict[str, str]] = {}
 
 # --- Supabase Client & Helpers ---
 
@@ -119,108 +111,24 @@ def list_files_in_supabase_folder(folder_path: str) -> list[str]:
         logger.error(f"Error listing files in {folder_path}: {e}")
         return []
 
-async def download_file_from_supabase(remote_path: str, local_path: str) -> bool:
-    """
-    Download file from private Supabase Storage using signed URL and
-    conditional GET with 'If-Modified-Since' and 'If-None-Match' (ETag).
-    If not modified (304), confirms local file exists.
-    If modified (200), downloads and saves to `local_path`.
-    Returns True if local file is present and up-to-date, False otherwise.
-    """
-    global _file_cache_headers
-    client = get_supabase_client()
-
+def download_file_from_supabase(remote_path: str, local_path: str) -> bool:
+    """Download file from Supabase Storage."""
     try:
-        # 1. Generate a 60-second signed URL (blocking, run in thread)
-        signed_url_response = await asyncio.to_thread(
-            client.storage.from_(BUCKET_NAME).create_signed_url,
-            remote_path,
-            60
-        )
-        signed_url = signed_url_response.get('signedURL')
-        if not signed_url:
-            logger.error(f"Error: Could not generate signed URL for '{remote_path}'. Response: {signed_url_response}")
-            return False
-
-        # 2. Prepare headers for conditional GET
-        headers = {}
-        cached_headers = _file_cache_headers.get(remote_path, {})
-        if cached_headers.get('Last-Modified'):
-            headers['If-Modified-Since'] = cached_headers['Last-Modified']
-        if cached_headers.get('ETag'):
-            headers['If-None-Match'] = cached_headers['ETag']
-
-        # 3. Perform the HTTP request (blocking, run in thread)
-        def _blocking_get():
-            return requests.get(signed_url, headers=headers, timeout=15)
-        
-        response = await asyncio.to_thread(_blocking_get)
-
-        # 4. Handle the response
-        if response.status_code == 304:
-            # 304 Not Modified: File hasn't changed
-            logger.debug(f"File '{remote_path}': No change detected (304 Not Modified).")
-            if os.path.exists(local_path):
-                logger.debug(f"Confirmed local cache exists: '{local_path}'")
-                return True # Local file is current
-            else:
-                # File not modified, but local copy is missing. Force re-download.
-                logger.warning(f"File '{remote_path}' not modified, but local file '{local_path}' missing. Forcing re-download.")
-                headers.pop('If-Modified-Since', None)
-                headers.pop('If-None-Match', None)
-                _file_cache_headers.pop(remote_path, None)
-                response = await asyncio.to_thread(_blocking_get) # Re-fetch without headers
-                # Allow to fall through to 200 logic
-
-        if response.status_code == 200:
-            # 200 OK: File is new or has been updated
-            logger.debug(f"File '{remote_path}': File updated — new data loaded.")
-            data = response.content
-
-            # Update our cache with the new headers
-            new_last_modified = response.headers.get('Last-Modified')
-            new_etag = response.headers.get('ETag')
-            new_headers_to_cache = {}
-            if new_last_modified:
-                new_headers_to_cache['Last-Modified'] = new_last_modified
-            if new_etag:
-                new_headers_to_cache['ETag'] = new_etag
-                
-            if new_headers_to_cache:
-                _file_cache_headers[remote_path] = new_headers_to_cache
-
-            # Save the new file content locally (blocking, run in thread)
-            def _save_local():
-                os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
-                with open(local_path, "wb") as f:
-                    f.write(data)
-            
-            await asyncio.to_thread(_save_local)
-            logger.info(f"Downloaded and saved '{remote_path}' -> '{local_path}'")
-            return True
-
-        else:
-            # Handle other errors (404 Not Found, 403 Forbidden, 500, etc.)
-            logger.error(f"File '{remote_path}': Error fetching file. Status: {response.status_code}, Response: {response.text[:100]}...")
-            # Check if file exists locally as a last resort
-            if os.path.exists(local_path):
-                logger.warning(f"Loading from local cache as fallback: '{local_path}'")
-                return True # Use stale local file
-            return False
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"File '{remote_path}': Network or request error. {e}")
-    except Exception as e:
-        logger.error(f"File '{remote_path}': An unexpected error occurred. {e}")
-
-    # Fallback: Try to load from local cache if any error occurs
-    if os.path.exists(local_path):
-        logger.warning(f"Loading from local cache as final fallback: '{local_path}'")
+        client = get_supabase_client()
+        data = client.storage.from_(BUCKET_NAME).download(remote_path)
+        os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        logger.info(f"Downloaded {remote_path}")
         return True
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e):
+            logger.debug(f"File not found: {remote_path}")
+        else:
+            logger.error(f"Download failed for {remote_path}: {e}")
+        return False
 
-    return False # Download failed and no local file exists
-
-async def upload_file_to_supabase(local_path: str, remote_path: str, content_type: str = "application/json") -> bool:
+def upload_file_to_supabase(local_path: str, remote_path: str, content_type: str = "application/json") -> bool:
     """Upload file to Supabase Storage, overwriting if exists."""
     if not os.path.exists(local_path):
         logger.error(f"Cannot upload, local file missing: {local_path}")
@@ -228,30 +136,14 @@ async def upload_file_to_supabase(local_path: str, remote_path: str, content_typ
         
     try:
         client = get_supabase_client()
-        
-        # 1. Remove existing file first
-        try:
-            await asyncio.to_thread(
-                client.storage.from_(BUCKET_NAME).remove,
-                [remote_path]
-            )
-            logger.debug(f"Removed existing remote file: {remote_path}")
-        except Exception as e:
-            # This is fine, file might not exist
-            logger.debug(f"Pre-delete failed (likely OK): {remote_path}, {e}")
+        with open(local_path, "rb") as f:
+            data = f.read()
 
-        # 2. Read file and upload
-        def _read_file():
-            with open(local_path, "rb") as f:
-                return f.read()
-        
-        data = await asyncio.to_thread(_read_file)
-
-        await asyncio.to_thread(
-            client.storage.from_(BUCKET_NAME).upload,
+        # Supabase Python client's upload handles upsert logic
+        client.storage.from_(BUCKET_NAME).upload(
             remote_path,
             data,
-            {"content-type": content_type, "cache-control": "3600"} # No 'upsert' needed
+            {"content-type": content_type, "cache-control": "3600", "upsert": "true"}
         )
         logger.info(f"Uploaded {remote_path} ({len(data)/1024:.2f} KB)")
         return True
@@ -892,15 +784,15 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
     # 4. Save and upload
     saved_path = save_json(daily_data, remote_path)
     if saved_path:
-        asyncio.create_task(upload_file_to_supabase(saved_path, remote_path))
+        upload_file_to_supabase(saved_path, remote_path)
 
-async def get_available_daily_files(signal_type: str) -> list[str]:
+def get_available_daily_files(signal_type: str) -> list[str]:
     """
     Get list of available daily JSON files from Supabase for a signal type.
     Returns list of date strings (YYYY-MM-DD).
     """
     folder_path = f"analytics/{signal_type}/daily"
-    files = await asyncio.to_thread(list_files_in_supabase_folder, folder_path)
+    files = list_files_in_supabase_folder(folder_path)
     
     # Extract dates from filenames (e.g., "2025-11-03.json" -> "2025-11-03")
     dates = []
@@ -917,7 +809,7 @@ async def get_available_daily_files(signal_type: str) -> list[str]:
     
     return sorted(dates)
 
-async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -> list[dict]:
+def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -> list[dict]:
     """
     Load all completed tokens from specified daily files.
     """
@@ -932,7 +824,7 @@ async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -
         # If not in cache, try downloading
         if daily_data is None:
             local_path = os.path.join(TEMP_DIR, remote_path)
-            if await download_file_from_supabase(remote_path, local_path):
+            if download_file_from_supabase(remote_path, local_path):
                 daily_data = load_json(remote_path)
         
         if daily_data and isinstance(daily_data.get("tokens"), list):
@@ -1006,13 +898,13 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
         "top_tokens": top_tokens[:10]
     }
 
-async def generate_summary_stats(signal_type: str):
+def generate_summary_stats(signal_type: str):
     """Generate and upload summary stats for a single signal type."""
     logger.info(f"Generating summary stats for {signal_type}...")
     now = get_now()
     
     # 1. Get list of all available daily files from Supabase
-    available_dates = await get_available_daily_files(signal_type)
+    available_dates = get_available_daily_files(signal_type)
     
     if not available_dates:
         logger.warning(f"No daily files found for {signal_type}. Skipping summary stats.")
@@ -1021,7 +913,7 @@ async def generate_summary_stats(signal_type: str):
     logger.info(f"Found {len(available_dates)} daily files for {signal_type}: {available_dates[0]} to {available_dates[-1]}")
     
     # 2. Load ALL tokens from available daily files
-    all_tokens = await load_tokens_from_daily_files(signal_type, available_dates)
+    all_tokens = load_tokens_from_daily_files(signal_type, available_dates)
     
     if not all_tokens:
         logger.warning(f"No tokens loaded for {signal_type}. Skipping summary stats.")
@@ -1060,9 +952,9 @@ async def generate_summary_stats(signal_type: str):
     remote_path = f"analytics/{signal_type}/summary_stats.json"
     local_path = save_json(summary_data, remote_path)
     if local_path:
-        await upload_file_to_supabase(local_path, remote_path)
+        upload_file_to_supabase(local_path, remote_path)
 
-async def generate_overall_analytics():
+def generate_overall_analytics():
     """Combine discovery and alpha stats for overall summary."""
     logger.info("Generating overall system analytics...")
     
@@ -1139,14 +1031,14 @@ async def generate_overall_analytics():
     remote_path = "analytics/overall/summary_stats.json"
     local_path = save_json(overall, remote_path)
     if local_path:
-        await upload_file_to_supabase(local_path, remote_path)
+        upload_file_to_supabase(local_path, remote_path)
 
 async def update_all_summary_stats():
     """Run the complete analytics generation pipeline."""
     try:
-        await generate_summary_stats("discovery")
-        await generate_summary_stats("alpha")
-        await generate_overall_analytics()
+        generate_summary_stats("discovery")
+        generate_summary_stats("alpha")
+        generate_overall_analytics()
         logger.info("All summary stats updated.")
     except Exception as e:
         logger.exception(f"Error during summary stats generation: {e}")
@@ -1172,7 +1064,7 @@ async def initialize():
     remote_path = "analytics/active_tracking.json"
     local_path = os.path.join(TEMP_DIR, remote_path)
     
-    if await download_file_from_supabase(remote_path, local_path):
+    if download_file_from_supabase(remote_path, local_path):
         active_data = load_json(remote_path)
         if isinstance(active_data, dict):
             active_tracking = active_data
@@ -1197,8 +1089,8 @@ async def download_and_process_signals():
     alpha_local = os.path.join(TEMP_DIR, alpha_remote)
     
     # Download
-    disc_success = await download_file_from_supabase(disc_remote, disc_local)
-    alpha_success = await download_file_from_supabase(alpha_remote, alpha_local)
+    disc_success = download_file_from_supabase(disc_remote, disc_local)
+    alpha_success = download_file_from_supabase(alpha_remote, alpha_local)
     
     # Process
     if disc_success:
@@ -1221,7 +1113,7 @@ async def upload_active_tracking():
     remote_path = "analytics/active_tracking.json"
     local_path = save_json(active_tracking, remote_path)
     if local_path:
-        await upload_file_to_supabase(local_path, remote_path)
+        upload_file_to_supabase(local_path, remote_path)
 
 async def main_loop():
     """The main event loop for the tracker."""
