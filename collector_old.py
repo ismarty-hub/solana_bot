@@ -23,6 +23,10 @@ It only fetches live data if it's missing from the signal.
 in analytics_tracker.py. This ensures the correct label (e.g.,
 from 'mint_alpha') is applied to the correct snapshot (e.g.,
 'snapshot_mint_alpha').
+
+(*** REVISION ***) SupabaseManager now uses private signed URLs and
+conditional GETs (ETag/Last-Modified) for all downloads, falling back
+to a local file cache.
 """
 
 import os
@@ -33,6 +37,7 @@ import aiohttp
 import logging
 import argparse
 import time
+import requests # Added for private, conditional downloads
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple, Callable
 from dataclasses import dataclass, field
@@ -276,30 +281,146 @@ class HolidayClient(BaseAPIClient):
 
 class SupabaseManager:
     """Manages Supabase interactions using asyncio.to_thread for blocking calls."""
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, session: aiohttp.ClientSession):
         self.config = config
+        self.session = session # aiohttp session for external API calls
         try:
             self.client: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
             log.info("Supabase client initialized.")
         except Exception as e:
             log.critical(f"Failed to initialize Supabase client: {e}")
             raise
+        
+        # Cache for conditional GET headers (ETag, Last-Modified)
+        self._file_cache_headers: Dict[str, Dict[str, str]] = {}
+        # Local file cache directory
+        self._local_cache_dir = os.path.join(config.DATASET_DIR_LOCAL, ".cache")
+        os.makedirs(self._local_cache_dir, exist_ok=True)
     
     async def download_json_file(self, remote_path: str) -> Optional[Dict]:
-        """Downloads and parses a JSON file from Supabase storage."""
+        """
+        Downloads and parses a JSON file from a private Supabase storage
+        using signed URLs and conditional GETs (ETag / Last-Modified).
+        Caches file locally to read from on 304 Not Modified.
+        """
+        # Create a unique-ish but stable local file path
+        local_save_path = os.path.join(
+            self._local_cache_dir, 
+            remote_path.replace('/', '_').replace('\\', '_')
+        )
+        
         try:
-            log.debug(f"Downloading file: {remote_path}")
-            file_bytes = await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).download,
-                remote_path
+            # 1. Generate signed URL (blocking call, run in thread)
+            log.debug(f"Generating signed URL for: {remote_path}")
+            signed_url_response = await asyncio.to_thread(
+                self.client.storage.from_(self.config.SUPABASE_BUCKET).create_signed_url,
+                remote_path,
+                60 # 60 second expiry
             )
-            return json.loads(file_bytes)
+            signed_url = signed_url_response.get('signedURL')
+            if not signed_url:
+                log.error(f"Could not generate signed URL for '{remote_path}'. Response: {signed_url_response}")
+                return None
+
+            # 2. Prepare headers for conditional GET
+            headers = {}
+            cached_headers = self._file_cache_headers.get(remote_path, {})
+            if cached_headers.get('Last-Modified'):
+                headers['If-Modified-Since'] = cached_headers['Last-Modified']
+            if cached_headers.get('ETag'):
+                headers['If-None-Match'] = cached_headers['ETag']
+
+            log.debug(f"Downloading file: {remote_path} (URL: {signed_url[:50]}...)")
+            
+            # 3. Perform the HTTP request (blocking, run in thread)
+            # We use `requests` here as it's simpler for blocking calls
+            # in threads than managing the `aiohttp` session inside.
+            def _blocking_get():
+                return requests.get(signed_url, headers=headers, timeout=30)
+            
+            response = await asyncio.to_thread(_blocking_get)
+                
+            # 4. Handle response
+            if response.status_code == 304:
+                # 304 Not Modified
+                log.debug(f"File '{remote_path}': No change detected (304 Not Modified).")
+                if os.path.exists(local_save_path):
+                    log.debug(f"Loading from local cache: '{local_save_path}'")
+                    
+                    def _read_local():
+                        with open(local_save_path, "rb") as f:
+                            return f.read()
+                    
+                    file_bytes = await asyncio.to_thread(_read_local)
+                    return json.loads(file_bytes)
+                else:
+                    log.warning(f"File '{remote_path}' not modified, but local file '{local_save_path}' missing. Forcing re-download on next poll.")
+                    # Remove bad cache headers to force full download next time
+                    self._file_cache_headers.pop(remote_path, None)
+                    return None # Return None for this attempt
+
+            elif response.status_code == 200:
+                # 200 OK
+                log.debug(f"File '{remote_path}': File updated — new data loaded.")
+                file_bytes = response.content
+
+                # Update cache headers
+                new_last_modified = response.headers.get('Last-Modified')
+                new_etag = response.headers.get('ETag')
+                new_headers_to_cache = {}
+                if new_last_modified:
+                    new_headers_to_cache['Last-Modified'] = new_last_modified
+                if new_etag:
+                    new_headers_to_cache['ETag'] = new_etag
+                if new_headers_to_cache:
+                    self._file_cache_headers[remote_path] = new_headers_to_cache
+
+                # Save new content to local cache (blocking, run in thread)
+                def _save_local():
+                    with open(local_save_path, "wb") as f:
+                        f.write(file_bytes)
+                
+                await asyncio.to_thread(_save_local)
+                log.debug(f"Saved to local cache: '{local_save_path}'")
+                
+                return json.loads(file_bytes)
+
+            else:
+                # Handle errors
+                log.error(f"Failed to download {remote_path}: Status {response.status_code} {response.text[:200]}")
+                # Fallback to local cache if it exists
+                if os.path.exists(local_save_path):
+                     log.warning(f"Loading from local cache as fallback: '{local_save_path}'")
+                     def _read_local():
+                        with open(local_save_path, "rb") as f:
+                            return f.read()
+                     file_bytes = await asyncio.to_thread(_read_local)
+                     return json.loads(file_bytes)
+                return None
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"Requests Error downloading {remote_path}: {e}")
+        except json.JSONDecodeError as e:
+            log.error(f"Failed to decode JSON from {remote_path} (or local cache {local_save_path}): {e}")
         except Exception as e:
             if "404" in str(e) or "not_found" in str(e).lower():
                 log.debug(f"File not found: {remote_path}")
             else:
-                log.error(f"Failed to download {remote_path}: {e}")
-            return None
+                log.error(f"Failed to download {remote_path}: {e}", exc_info=True)
+        
+        # Final fallback
+        if os.path.exists(local_save_path):
+             log.warning(f"Loading from local cache as final fallback: '{local_save_path}'")
+             try:
+                 def _read_local():
+                    with open(local_save_path, "rb") as f:
+                        return f.read()
+                 file_bytes = await asyncio.to_thread(_read_local)
+                 return json.loads(file_bytes)
+             except Exception as e:
+                log.error(f"Failed to read final fallback cache {local_save_path}: {e}")
+        
+        return None
 
     async def check_file_exists(self, remote_path: str) -> bool:
         """Checks if a file already exists in Supabase storage."""
@@ -319,13 +440,24 @@ class SupabaseManager:
             raise
     
     async def upload_file(self, local_path: str, remote_path: str):
-        """Uploads a local file to Supabase storage."""
+        """Uploads a local file to Supabase storage, overwriting if exists."""
         try:
+            # 1. Remove existing file (best practice for overwrite)
+            try:
+                await asyncio.to_thread(
+                    self.client.storage.from_(self.config.SUPABASE_BUCKET).remove,
+                    [remote_path]
+                )
+                log.debug(f"Removed existing remote file: {remote_path}")
+            except Exception as e:
+                # This often fails if file doesn't exist, which is fine.
+                log.debug(f"Pre-delete failed (likely file not found, this is OK): {remote_path}, {e}")
+
+            # 2. Upload new file
             await asyncio.to_thread(
                 self.client.storage.from_(self.config.SUPABASE_BUCKET).upload,
                 remote_path,
-                local_path,
-                {"content-type": "application/octet-stream", "upsert": "true"}
+                local_path
             )
             log.debug(f"Uploaded {local_path} to {remote_path}")
         except Exception as e:
@@ -686,6 +818,7 @@ class SnapshotAggregator:
                 log.debug(f"[Cache EXPIRED] for {remote_path}")
         
         log.debug(f"[Cache MISS] for {remote_path}")
+        # Use the robust download_json_file method
         data = await self.supabase.download_json_file(remote_path)
         
         async with self._cache_lock:
@@ -720,9 +853,11 @@ class SnapshotAggregator:
             
             # Download and check if due
             remote_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename}"
+            # Use the robust download_json_file method
             snapshot = await self.supabase.download_json_file(remote_path)
             
             if not snapshot:
+                log.warning(f"Failed to download snapshot {remote_path} for aggregation check, skipping.")
                 continue
             
             finalization = snapshot.get('finalization', {})
@@ -1057,7 +1192,8 @@ class CollectorService:
         self.config = config
         self.session = session
         
-        self.supabase = SupabaseManager(config)
+        # Pass the aiohttp session to SupabaseManager
+        self.supabase = SupabaseManager(config, self.session)
         self.persistence = PersistenceManager(config, self.supabase)
         self.dex_client = DexscreenerClient(session, config)
         self.rug_client = RugCheckClient(session, config)
@@ -1131,7 +1267,7 @@ class CollectorService:
         finalize_deadline = checked_at + timedelta(hours=finalize_window_hours)
         next_check_at = checked_at + timedelta(minutes=self.config.CHECK_INTERVAL_MINUTES)
         
-        # If next_check_at is already in the past, set it to now to process immediately
+        # If next_check_at is in the past, set it to now to process immediately
         if next_check_at < datetime.now(timezone.utc):
             log.warning(f"Initial next_check_at for {filename_base} is in the past. Setting to now.")
             next_check_at = datetime.now(timezone.utc)
@@ -1332,10 +1468,18 @@ async def run_tests(config: Config, session: aiohttp.ClientSession):
     
     # 1. Supabase
     try:
-        supa = SupabaseManager(config)
+        supa = SupabaseManager(config, session) # Pass session
         log.info("Testing Supabase connection (checking for alpha file)...")
         exists = await supa.check_file_exists(config.SIGNAL_FILE_ALPHA)
         log.info(f"Supabase test: Check for {config.SIGNAL_FILE_ALPHA} -> {exists} (TEST PASSED)")
+        
+        log.info("Testing Supabase download (downloading alpha file)...")
+        data = await supa.download_json_file(config.SIGNAL_FILE_ALPHA)
+        if data:
+             log.info(f"Supabase download test: SUCCESS - downloaded {len(data)} tokens. (TEST PASSED)")
+        else:
+             log.error("Supabase download test: FAILED - no data returned.")
+            
     except Exception as e:
         log.error(f"Supabase test: FAILED - {e}")
 

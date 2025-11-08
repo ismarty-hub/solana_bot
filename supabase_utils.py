@@ -433,6 +433,17 @@ def download_overlap_results(save_path: str, bucket: str = BUCKET_NAME) -> Optio
 
 
 # -------------------
+# --- ADDED THIS FUNCTION ---
+# -------------------
+def download_alpha_overlap_results(save_path: str, bucket: str = BUCKET_NAME) -> Optional[bytes]:
+    """Download overlap_results_alpha.pkl specifically."""
+    return download_file(save_path, OVERLAP_ALPHA_FILE_NAME, bucket)
+# -------------------
+# --- END OF ADDITION ---
+# -------------------
+
+
+# -------------------
 # Dune Cache Helpers
 # -------------------
 def upload_dune_cache_file(file_path: str, bucket: str = BUCKET_NAME) -> bool:

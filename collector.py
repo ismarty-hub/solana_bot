@@ -7,7 +7,7 @@ Watches new token signals from Supabase (overlap_results.json,
 overlap_results_alpha.json), enriches each signal with live market
 data (Dexscreener), security data (RugCheck), and holiday/time context,
 computes derived features, and persists a canonical snapshot per signal
-as both .json and .pkl locally and to Supabase.
+as .json locally and to Supabase.
 
 NEW: Implements efficient, per-token aggregation. Each snapshot has a
 dynamic `finalize_deadline` based on its age at signal time. The aggregator
@@ -27,11 +27,14 @@ from 'mint_alpha') is applied to the correct snapshot (e.g.,
 (*** REVISION ***) SupabaseManager now uses private signed URLs and
 conditional GETs (ETag/Last-Modified) for all downloads, falling back
 to a local file cache.
+
+(*** MODIFIED ***) This script no longer creates or uploads .pkl files.
+It only persists .json files.
 """
 
 import os
 import json
-import pickle
+# import pickle <-- REMOVED
 import asyncio
 import aiohttp
 import logging
@@ -457,7 +460,8 @@ class SupabaseManager:
             await asyncio.to_thread(
                 self.client.storage.from_(self.config.SUPABASE_BUCKET).upload,
                 remote_path,
-                local_path
+                local_path,
+                {"content-type": "application/json"} # <-- Specify content type
             )
             log.debug(f"Uploaded {local_path} to {remote_path}")
         except Exception as e:
@@ -498,19 +502,19 @@ class PersistenceManager:
         self.supabase = supabase_manager
 
     async def save_snapshot(self, snapshot_data: Dict, filename_base: str):
-        """Saves snapshot as .json and .pkl locally, then uploads."""
+        """Saves snapshot as .json locally, then uploads."""
         json_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, f"{filename_base}.json")
-        pkl_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, f"{filename_base}.pkl")
+        # pkl_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, f"{filename_base}.pkl") # <-- REMOVED
 
         try:
             def _save_files():
                 with open(json_path, 'w', encoding='utf-8') as f:
                     json.dump(snapshot_data, f, indent=2, default=str)
-                with open(pkl_path, 'wb') as f:
-                    pickle.dump(snapshot_data, f)
+                # with open(pkl_path, 'wb') as f: # <-- REMOVED
+                #     pickle.dump(snapshot_data, f) # <-- REMOVED
             
             await asyncio.to_thread(_save_files)
-            log.debug(f"Saved snapshot locally: {filename_base}")
+            log.debug(f"Saved snapshot locally: {filename_base}.json")
 
         except Exception as e:
             log.error(f"Failed to save local snapshot {filename_base}: {e}")
@@ -518,25 +522,25 @@ class PersistenceManager:
 
         if self.config.UPLOAD_TO_SUPABASE:
             remote_json_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_base}.json"
-            remote_pkl_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_base}.pkl"
+            # remote_pkl_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_base}.pkl" # <-- REMOVED
             
             try:
                 await self.supabase.upload_file(json_path, remote_json_path)
-                await self.supabase.upload_file(pkl_path, remote_pkl_path)
-                log.info(f"Uploaded snapshot to Supabase: {filename_base}")
+                # await self.supabase.upload_file(pkl_path, remote_pkl_path) # <-- REMOVED
+                log.info(f"Uploaded snapshot to Supabase: {filename_base}.json")
             except Exception as e:
                 log.error(f"Failed to upload snapshot {filename_base}: {e}")
 
         if self.config.CLEANUP_LOCAL_FILES:
             try:
                 os.remove(json_path)
-                os.remove(pkl_path)
-                log.debug(f"Cleaned up local snapshot: {filename_base}")
+                # os.remove(pkl_path) # <-- REMOVED
+                log.debug(f"Cleaned up local snapshot: {filename_base}.json")
             except Exception as e:
                 log.warning(f"Failed to clean up local file {filename_base}: {e}")
     
     async def save_dataset(self, dataset_data: Dict, pipeline: str, date_str: str, mint: str, is_expired: bool = False):
-        """Saves labeled dataset as .json and .pkl, uploads, returns success status."""
+        """Saves labeled dataset as .json, uploads, returns success status."""
         subfolder_name = "expired_no_label" if is_expired else date_str
         dataset_dir_local = os.path.join(self.config.DATASET_DIR_LOCAL, pipeline, subfolder_name)
         os.makedirs(dataset_dir_local, exist_ok=True)
@@ -545,29 +549,29 @@ class PersistenceManager:
         filename_base = f"{mint}_{safe_timestamp}"
         
         json_path = os.path.join(dataset_dir_local, f"{filename_base}.json")
-        pkl_path = os.path.join(dataset_dir_local, f"{filename_base}.pkl")
+        # pkl_path = os.path.join(dataset_dir_local, f"{filename_base}.pkl") # <-- REMOVED
         
         try:
             def _save_files():
                 with open(json_path, 'w', encoding='utf-8') as f:
                     json.dump(dataset_data, f, indent=2, default=str)
-                with open(pkl_path, 'wb') as f:
-                    pickle.dump(dataset_data, f)
+                # with open(pkl_path, 'wb') as f: # <-- REMOVED
+                #     pickle.dump(dataset_data, f) # <-- REMOVED
             
             await asyncio.to_thread(_save_files)
-            log.debug(f"Saved dataset locally: {filename_base}")
+            log.debug(f"Saved dataset locally: {filename_base}.json")
         except Exception as e:
             log.error(f"Failed to save local dataset {filename_base}: {e}")
             return False
         
         if self.config.UPLOAD_TO_SUPABASE:
             remote_json_path = f"{self.config.DATASET_DIR_REMOTE}/{pipeline}/{subfolder_name}/{filename_base}.json"
-            remote_pkl_path = f"{self.config.DATASET_DIR_REMOTE}/{pipeline}/{subfolder_name}/{filename_base}.pkl"
+            # remote_pkl_path = f"{self.config.DATASET_DIR_REMOTE}/{pipeline}/{subfolder_name}/{filename_base}.pkl" # <-- REMOVED
             
             try:
                 await self.supabase.upload_file(json_path, remote_json_path)
-                await self.supabase.upload_file(pkl_path, remote_pkl_path)
-                log.info(f"Uploaded dataset to Supabase: {pipeline}/{subfolder_name}/{filename_base}")
+                # await self.supabase.upload_file(pkl_path, remote_pkl_path) # <-- REMOVED
+                log.info(f"Uploaded dataset to Supabase: {pipeline}/{subfolder_name}/{filename_base}.json")
             except Exception as e:
                 log.error(f"Failed to upload dataset {filename_base}: {e}")
                 return False
@@ -575,8 +579,8 @@ class PersistenceManager:
         if self.config.CLEANUP_LOCAL_FILES:
             try:
                 os.remove(json_path)
-                os.remove(pkl_path)
-                log.debug(f"Cleaned up local dataset: {filename_base}")
+                # os.remove(pkl_path) # <-- REMOVED
+                log.debug(f"Cleaned up local dataset: {filename_base}.json")
             except Exception as e:
                 log.warning(f"Failed to clean up local dataset {filename_base}: {e}")
         
@@ -1080,7 +1084,7 @@ class SnapshotAggregator:
         success = await self.persistence.save_dataset(snapshot, pipeline, date_str, mint, is_expired=False)
         
         if success:
-            # 4. Delete original snapshot (local + remote + pkl)
+            # 4. Delete original snapshot (local + remote)
             await self._delete_snapshot(filename, remote_path)
             log.info(f"Successfully aggregated {mint} ({pipeline}) to dataset {pipeline}/{date_str}")
         else:
@@ -1151,12 +1155,12 @@ class SnapshotAggregator:
         log.debug(f"Rescheduled {filename} for {next_check.isoformat()}")
     
     async def _delete_snapshot(self, filename: str, remote_path: str):
-        """Delete snapshot files (both .json and .pkl, local and remote)."""
-        base_name = filename.replace('.json', '')
+        """Delete snapshot files (.json only, local and remote)."""
+        # base_name = filename.replace('.json', '') # <-- Not needed
         
-        # Delete remote files
+        # Delete remote file
         json_remote = remote_path
-        pkl_remote = remote_path.replace('.json', '.pkl')
+        # pkl_remote = remote_path.replace('.json', '.pkl') # <-- REMOVED
         
         try:
             await self.supabase.delete_file(json_remote)
@@ -1164,24 +1168,23 @@ class SnapshotAggregator:
         except Exception as e:
             log.warning(f"Failed to delete remote {json_remote}: {e}")
         
-        try:
-            await self.supabase.delete_file(pkl_remote)
-            log.debug(f"Deleted remote {pkl_remote}")
-        except Exception as e:
-            log.warning(f"Failed to delete remote {pkl_remote}: {e}")
+        # try: # <-- REMOVED
+        #     await self.supabase.delete_file(pkl_remote)
+        #     log.debug(f"Deleted remote {pkl_remote}")
+        # except Exception as e:
+        #     log.warning(f"Failed to delete remote {pkl_remote}: {e}")
         
-        # Delete local files if they exist
+        # Delete local file if it exists
         local_json = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
-        local_pkl = local_json.replace('.json', '.pkl')
+        # local_pkl = local_json.replace('.json', '.pkl') # <-- REMOVED
         
-        for local_file in [local_json, local_pkl]:
-            if os.path.exists(local_file):
-                try:
-                    os.remove(local_file)
-                    log.debug(f"Deleted local {local_file}")
-                except Exception as e:
-                    log.warning(f"Failed to delete local {local_file}: {e}")
-        
+        if os.path.exists(local_json):
+            try:
+                os.remove(local_json)
+                log.debug(f"Deleted local {local_json}")
+            except Exception as e:
+                log.warning(f"Failed to delete local {local_json}: {e}")
+
         # Release claim
         self.claimed_snapshots.discard(filename)
 
