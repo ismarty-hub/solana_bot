@@ -1,1 +1,81 @@
-{}
+{
+  "5weo14h7pxCa8x3dZQECiBGnWF4LtmiTMFCqRVuXpump": [
+    {
+      "ts": "2025-11-10T14:47:45.584499+00:00",
+      "result": {
+        "token": "5weo14h7pxCa8x3dZQECiBGnWF4LtmiTMFCqRVuXpump",
+        "checked_at": "2025-11-10T14:47:45.418754+00:00",
+        "top_holders_checked": 47,
+        "overlap_count": 8,
+        "overlap_percentage": 17.02,
+        "concentration": 0.07,
+        "weighted_concentration": 1.03,
+        "total_winner_wallets": 10804,
+        "overlap_wallets_sample": [
+          "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+          "FrLWNNeyVVYJEFMkMGzrtaZcUNZB74vBLgPBQ2KZ2pC9",
+          "5vYeegioBiJTX3JrqU1qPeSgNMBQuqzD1KADvbQuvhXJ",
+          "4V2GpMzAdW3bqa9RU6M7wGm16h1NBYMrcMRhDV4P4dhK",
+          "4ZqLPbyfH8scmdedtxnrjj4eNPFE5QEEBm6FgRUiRDge",
+          "FTS6LTAm4zv9ZJrfW1j8DYGrttmEamRcbd3cYpPVHf3V",
+          "HUU1zY4DPr8ZbWMgavRM7S62xP5x28xiL6JmUtKTzCFe",
+          "BdQUNyUb9ZJ138HcJMu8qJNF8HTPZr4FQKLSt6c4GkLg"
+        ],
+        "grade": "LOW",
+        "detected_via": "coingecko",
+        "block_time": 1762784226,
+        "token_metadata": {
+          "name": "PLOPPER",
+          "fdv_usd": "60181.22784",
+          "volume_usd": "5304.415409706",
+          "source_dex": "pumpswap",
+          "price_change_percentage": "-16.78"
+        },
+        "dexscreener": {
+          "current_price_usd": null
+        }
+      },
+      "security": "passed",
+      "probation_meta": {
+        "probation": false,
+        "top_n_pct": 34.622587,
+        "top_n": 3,
+        "threshold_pct": 40.0,
+        "explanation": "Top 3 holders own 34.62% of supply; threshold is >40.0%. Probation=False."
+      },
+      "rugcheck": {
+        "top1_holder_pct": 26.634593959558376,
+        "holder_count": 508,
+        "has_authorities": false,
+        "creator_balance": 0,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": 100.0,
+        "total_liquidity_usd": 21717.189231749526,
+        "lp_lock_details": [
+          {
+            "market_type": "pump_fun_amm",
+            "locked_usd": 21717.189231749526,
+            "total_usd": 21717.189231749526,
+            "locked_pct": 100
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          }
+        ]
+      },
+      "dexscreener": {
+        "current_price_usd": 4.111e-05,
+        "market_cap_usd": 41112.0
+      }
+    }
+  ]
+}

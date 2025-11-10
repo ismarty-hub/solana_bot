@@ -2885,3 +2885,14 @@ Service stopped manually.
 2025-11-07 21:47:33,581 - CollectorService - INFO - Polling cycle finished in 11.14s.
 2025-11-07 21:47:33,582 - CollectorService - INFO - Sleeping for 168.86s...
 2025-11-07 21:49:11,458 - CollectorService - INFO - Service stopped manually.
+2025-11-10 15:53:01,001 - CollectorService - INFO - Supabase client initialized.
+2025-11-10 15:53:01,002 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-10 15:53:01,002 - CollectorService - INFO - CollectorService initialized.
+2025-11-10 15:53:01,002 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-10 15:53:01,003 - CollectorService - INFO - Starting new polling cycle...
+2025-11-10 15:53:01,003 - CollectorService - INFO - Updating active snapshot file cache...
+2025-11-10 15:53:03,055 - CollectorService - INFO - Cached 1084 active snapshot filenames.
+2025-11-10 15:53:05,489 - CollectorService - INFO - Found 45 total signals to check.
+2025-11-10 15:53:21,468 - CollectorService - INFO - Polling cycle finished in 20.45s.
+2025-11-10 15:53:21,468 - CollectorService - INFO - Sleeping for 159.55s...
+2025-11-10 15:53:51,587 - CollectorService - INFO - Service stopped manually.

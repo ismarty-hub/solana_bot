@@ -16,7 +16,7 @@ that are due for a recheck, rather than a full 7-day lookback.
 
 (CORRECTED) The service now extracts pre-fetched Dexscreener and RugCheck
 data from the signal files instead of making redundant live API calls.
-It only fetches live data if it's missing from the signal.
+It only fetches live data if it's missing or invalid (e.g., missing 'pairs').
 
 (*** BUGFIX ***) The SnapshotAggregator now uses a composite key
 (mint + signal_type) to look up labels, matching the logic
@@ -28,8 +28,12 @@ from 'mint_alpha') is applied to the correct snapshot (e.g.,
 conditional GETs (ETag/Last-Modified) for all downloads, falling back
 to a local file cache.
 
-(*** MODIFIED ***) This script no longer creates or uploads .pkl files.
-It only persists .json files.
+(*** MODIFIED ***) This script only creates or uploads .json files.
+No .pkl files are used.
+
+(*** MODIFIED ***) Service now checks for *active* signals. If a snapshot
+for a given (mint, signal_type) pair is already being tracked, new
+signals for that same pair are ignored until the first one is finalized.
 """
 
 import os
@@ -618,26 +622,30 @@ class FeatureComputer:
             if isinstance(obj, str): return obj
         return "UNKNOWN"
 
-    # --- (CORRECTION) ADDED HELPER FUNCTIONS ---
+    # --- (*** CORRECTION ***) ---
     def _safe_get_dex_data(self, entry: dict) -> Optional[Dict]:
-        """Safely extract Dexscreener data from a history entry."""
+        """
+        Safely extract Dexscreener data from a history entry.
+        (***CORRECTED***) Now validates data contains a 'pairs' list.
+        """
         if not isinstance(entry, dict): return None
         
         # Path 1: Top-level key (discovery-style)
         dex_data = entry.get("dexscreener")
-        if isinstance(dex_data, dict) and dex_data:
-            log.debug("Found 'dexscreener' data at top level.")
+        if isinstance(dex_data, dict) and isinstance(dex_data.get("pairs"), list):
+            log.debug("Found valid 'dexscreener' data (with 'pairs') at top level.")
             return dex_data
         
         # Path 2: Nested in result (alpha-style)
         if isinstance(entry.get("result"), dict):
             dex_data = entry["result"].get("dexscreener")
-            if isinstance(dex_data, dict) and dex_data:
-                log.debug("Found 'dexscreener' data in result.")
+            if isinstance(dex_data, dict) and isinstance(dex_data.get("pairs"), list):
+                log.debug("Found valid 'dexscreener' data (with 'pairs') in result.")
                 return dex_data
         
-        log.debug("No pre-fetched 'dexscreener' block found in history entry.")
+        log.debug("No valid (containing 'pairs') pre-fetched 'dexscreener' block found.")
         return None
+    # --- END CORRECTION ---
 
     def _safe_get_rug_data(self, entry: dict) -> Optional[Dict]:
         """Safely extract RugCheck API response from a history entry."""
@@ -666,7 +674,6 @@ class FeatureComputer:
         
         log.debug("No pre-fetched 'rugcheck_raw' or 'rugcheck' block found.")
         return None
-    # --- END CORRECTION ---
 
     def compute_features(self, signal_type: str, history_entry: Dict, 
                          dex_data: Optional[Dict], rug_data: Optional[Dict], 
@@ -704,7 +711,7 @@ class FeatureComputer:
         if dex_data and dex_data.get("pairs") and isinstance(dex_data["pairs"], list) and len(dex_data["pairs"]) > 0:
             # Find the best pair (highest liquidity) to use for creation date
             best_pair = max(
-                dex_data["pairs"], 
+                (p for p in dex_data["pairs"] if p is not None), # Filter out None entries
                 key=lambda p: float(p.get("liquidity", {}).get("usd", 0.0) or 0.0),
                 default=None
             )
@@ -735,7 +742,8 @@ class FeatureComputer:
         if market_features.get("price_usd", 0.0) == 0.0 and rug_data and rug_data.get("ok"):
             try:
                 # Path from overlap_results_alpha.json: rugcheck_raw.raw.price
-                rug_price = float(rug_data.get("raw", {}).get("price", 0.0) or 0.0)
+                # Fallback to top-level 'price'
+                rug_price = float(rug_data.get("raw", {}).get("price", 0.0) or rug_data.get("price", 0.0) or 0.0)
                 if rug_price > 0:
                     market_features["price_usd"] = rug_price
                     log.debug(f"Using fallback price from rug_data: {rug_price}")
@@ -787,11 +795,14 @@ class SnapshotAggregator:
     Uses a targeted, per-snapshot-deadline approach.
     """
     
-    def __init__(self, config: Config, supabase: SupabaseManager, persistence: 'PersistenceManager'):
+    def __init__(self, config: Config, supabase: SupabaseManager, persistence: 'PersistenceManager', active_snapshot_cache: Set[str]):
         self.config = config
         self.supabase = supabase
         self.persistence = persistence
         self.claimed_snapshots: Set[str] = set()
+        
+        # (*** NEW ***) Store reference to the main service's active snapshot cache
+        self.active_snapshot_cache = active_snapshot_cache
         
         # Caches for a single aggregation pass
         self._file_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
@@ -1187,6 +1198,13 @@ class SnapshotAggregator:
 
         # Release claim
         self.claimed_snapshots.discard(filename)
+        
+        # (*** NEW ***) Remove from the main service's active cache
+        try:
+            self.active_snapshot_cache.remove(filename)
+            log.debug(f"Removed '{filename}' from active snapshot cache.")
+        except KeyError:
+            log.warning(f"Could not remove '{filename}' from cache, not found.")
 
 # --- Main Collector Service ---
 
@@ -1202,7 +1220,12 @@ class CollectorService:
         self.rug_client = RugCheckClient(session, config)
         self.holiday_client = HolidayClient(session, config)
         self.computer = FeatureComputer()
-        self.aggregator = SnapshotAggregator(config, self.supabase, self.persistence)
+        
+        # (*** NEW ***) Cache for active snapshots to prevent duplicates
+        self.active_snapshot_files: Set[str] = set()
+        
+        # Pass the cache to the aggregator
+        self.aggregator = SnapshotAggregator(config, self.supabase, self.persistence, self.active_snapshot_files)
         
         self.process_semaphore = asyncio.Semaphore(config.PROCESSOR_CONCURRENCY)
         log.info(f"Processor concurrency limit set to: {config.PROCESSOR_CONCURRENCY}")
@@ -1313,6 +1336,8 @@ class CollectorService:
         """
         (CORRECTED) Main processing pipeline for a single signal.
         Fetches live data ONLY if it's missing from the signal file.
+        (*** NEW ***) Checks active_snapshot_files cache to prevent
+        processing a (mint, type) pair that is already active.
         """
         mint = signal['mint']
         signal_type = signal['signal_type']
@@ -1340,17 +1365,27 @@ class CollectorService:
         remote_json_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_base}.json"
 
         try:
+            # 3. Idempotency Check 1: Exact signal (fast, remote check)
             if await self.supabase.check_file_exists(remote_json_path):
-                log.debug(f"Skipping already processed signal: {filename_base}")
+                log.debug(f"Skipping already processed exact signal: {filename_base}")
                 return
         except Exception as e:
             log.error(f"Failed idempotency check for {filename_base}: {e}. Skipping.")
             return
 
-        log.info(f"Processing new signal: {filename_base}")
+        # 4. Idempotency Check 2: Active signal for same (mint, type) (local cache check)
+        # (*** THIS IS THE NEW LOGIC YOU REQUESTED ***)
+        search_prefix = f"{mint}_"
+        search_suffix = f"_{signal_type}.json"
+        for filename in self.active_snapshot_files:
+            if filename.startswith(search_prefix) and filename.endswith(search_suffix):
+                log.warning(f"Skipping new signal for ({mint}, {signal_type}) because an active snapshot is already being tracked: {filename}")
+                return
+
+        log.info(f"Processing new signal (passed active check): {filename_base}")
 
         # --- (CORRECTION) START ---
-        # 3. Fetch *only missing* external data
+        # 5. Fetch *only missing* external data
         tasks_to_run = {}
         
         if not dex_data:
@@ -1383,7 +1418,7 @@ class CollectorService:
         # --- (CORRECTION) END ---
 
 
-        # 4. Compute final features with all data
+        # 6. Compute final features with all data
         final_features, _ = self.computer.compute_features(
             signal_type, history_entry, dex_data, rug_data, is_holiday
         )
@@ -1392,12 +1427,15 @@ class CollectorService:
             log.error(f"Failed to compute final features for {filename_base}. Skipping.")
             return
 
-        # 5. Build and save snapshot with finalization metadata
+        # 7. Build and save snapshot with finalization metadata
         snapshot = self._build_canonical_snapshot(
             signal, final_features, dex_data, rug_data, is_holiday, filename_base
         )
         
         await self.persistence.save_snapshot(snapshot, filename_base)
+        
+        # (*** NEW ***) Add to the active cache *after* successful save
+        self.active_snapshot_files.add(f"{filename_base}.json")
 
     async def run_process_with_semaphore(self, signal: Dict):
         """Wrapper for process_signal that acquires the semaphore before running."""
@@ -1409,7 +1447,7 @@ class CollectorService:
             log.debug(f"Semaphore released for: {mint}")
         except Exception as e:
             log.error(f"CRITICAL error during process_signal for {mint}: {e}", exc_info=True)
-            raise
+            # Do not re-raise, allow the loop to continue
 
     async def run(self):
         """Main service loop with both signal processing and aggregation."""
@@ -1421,6 +1459,16 @@ class CollectorService:
             try:
                 start_time = time.monotonic()
                 log.info("Starting new polling cycle...")
+
+                # (*** NEW ***) Update active snapshot file cache
+                log.info("Updating active snapshot file cache...")
+                try:
+                    snapshot_files_list = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=5000) # Increased limit
+                    # Rebuild the set from scratch
+                    self.active_snapshot_files = {f['name'] for f in snapshot_files_list if f.get('name') and f['name'].endswith('.json')}
+                    log.info(f"Cached {len(self.active_snapshot_files)} active snapshot filenames.")
+                except Exception as e:
+                    log.error(f"Failed to update active snapshot cache: {e}. Proceeding with potentially stale cache.")
                 
                 # 1. Process new signals
                 signals = await self._fetch_all_signals()
