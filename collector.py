@@ -34,6 +34,17 @@ No .pkl files are used.
 (*** MODIFIED ***) Service now checks for *active* signals. If a snapshot
 for a given (mint, signal_type) pair is already being tracked, new
 signals for that same pair are ignored until the first one is finalized.
+
+(*** FIX 2025-11-11 ***) Aggregator now performs a two-stage label
+lookup. It first checks 'analytics/active_tracking.json' for any
+early 'win' labels, then scans the 'daily/' folders for all
+finalized 'win'/'loss' labels. This allows for much faster
+aggregation of successful signals.
+
+(*** FIX 2025-11-11 (v2) ***) Implements a 30-minute "grace period"
+after a snapshot's deadline passes. During this time, it re-checks
+every 1 minute to prevent a race condition with the analytics_tracker
+before moving a snapshot to 'expired_no_label'.
 """
 
 import os
@@ -846,6 +857,24 @@ class SnapshotAggregator:
         
         self._clear_caches()
         
+        # --- (*** NEW FIX ***) ---
+        # 1. Pre-populate label index with active "win" tokens
+        log.info("Loading 'active_tracking.json' to find early wins...")
+        active_tracking_data = await self.supabase.download_json_file("analytics/active_tracking.json")
+        
+        if active_tracking_data and isinstance(active_tracking_data, dict):
+            active_wins_found = 0
+            for composite_key, token_data in active_tracking_data.items():
+                if token_data.get("status") == "win":
+                    # This is an active win. We can use it.
+                    # We store the *whole* token_data as the label.
+                    self._label_index[composite_key] = token_data
+                    active_wins_found += 1
+            log.info(f"Pre-populated label index with {active_wins_found} active 'win' labels.")
+        else:
+            log.warning("Could not load or parse 'analytics/active_tracking.json'. Proceeding with daily files only.")
+        # --- (*** END NEW FIX ***) ---
+        
         # List all snapshot files
         snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=1000)
         
@@ -880,7 +909,7 @@ class SnapshotAggregator:
             next_check_str = finalization.get('next_check_at')
 
             # Skip snapshots that are already finalized
-            if finalization_status not in ("pending", "awaiting_label"):
+            if finalization_status not in ("pending", "awaiting_label", "grace_period"): # Allow grace_period
                 continue
             
             if not next_check_str:
@@ -916,7 +945,7 @@ class SnapshotAggregator:
                 finalize_deadline = parser.isoparse(snapshot['finalization']['finalize_deadline']).astimezone(timezone.utc)
                 
                 start_date = checked_at.date()
-                end_date = min(now, finalize_deadline).date()
+                end_date = min(now, finalize_deadline + timedelta(minutes=31)).date() # Scan *into* the grace period
                 
                 current_date = start_date
                 while current_date <= end_date:
@@ -941,6 +970,7 @@ class SnapshotAggregator:
         file_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
         
         # (*** MODIFIED ***) Build label index using composite key
+        finalized_labels_found = 0
         for content in file_contents:
             if isinstance(content, Exception) or not content or not isinstance(content.get("tokens"), list):
                 continue
@@ -968,17 +998,31 @@ class SnapshotAggregator:
                     continue # Bad data
                 
                 existing_label = self._label_index.get(composite_key) # Use key
+                
+                # --- (*** MODIFIED FIX ***) ---
+                # Prioritize finalized (daily file) labels over active ones
                 if not existing_label:
+                    # No label exists, add this one
                     self._label_index[composite_key] = token
+                    finalized_labels_found += 1
+                elif "tracking_completed_at" not in existing_label or not existing_label.get("tracking_completed_at"):
+                    # Existing label is from active_tracking (no completion time)
+                    # Overwrite it with this finalized label
+                    self._label_index[composite_key] = token
+                    log.debug(f"Overwriting active label with finalized label for {composite_key}")
+                    finalized_labels_found += 1 # Count as a new finalized label
                 else:
+                    # Both labels are finalized, pick the newer one
                     try:
                         existing_label_time = parser.isoparse(existing_label.get("tracking_completed_at"))
                         if new_label_time > existing_label_time:
                             self._label_index[composite_key] = token # Update with newer label
                     except Exception:
                         self._label_index[composite_key] = token # Overwrite if old label was bad
+                # --- (*** END MODIFIED FIX ***) ---
         
-        log.info(f"Built targeted label index with {len(self._label_index)} labeled token-signals.")
+        log.info(f"Found {finalized_labels_found} new finalized labels from daily files.")
+        log.info(f"Total labels indexed (active + finalized): {len(self._label_index)}")
         # (*** END MODIFICATION ***)
 
         # 4. Process due snapshots in batches
@@ -992,7 +1036,10 @@ class SnapshotAggregator:
             await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _process_snapshot(self, filename: str, snapshot: Dict, remote_path: str):
-        """Process a single snapshot: claim, check label, aggregate or reschedule."""
+        """
+        Process a single snapshot: claim, check label, aggregate or reschedule.
+        (*** MODIFIED ***) Includes 30-minute grace period logic.
+        """
         try:
             # 1. Claim the snapshot atomically
             if not await self._claim_snapshot(filename, snapshot, remote_path):
@@ -1003,31 +1050,46 @@ class SnapshotAggregator:
             pipeline = snapshot['features']['signal_source']
             now = datetime.now(timezone.utc)
             
-            # (*** MODIFIED ***) Create composite key for lookup
             composite_key = get_composite_key(mint, pipeline)
             
             finalization = snapshot['finalization']
             finalize_deadline_str = finalization['finalize_deadline']
             finalize_deadline = parser.isoparse(finalize_deadline_str).astimezone(timezone.utc)
             
-            # 2. Look up label in our targeted index using composite key
+            # 2. Look up label in our targeted index
             label_data = self._label_index.get(composite_key)
             
+            # --- (*** NEW GRACE PERIOD LOGIC ***) ---
+            
             if label_data:
-                # LABEL FOUND - Aggregate to dataset
+                # 1. LABEL FOUND - Aggregate to dataset
                 log.info(f"Label found for {composite_key}: {label_data['status']}")
                 await self._aggregate_with_label(snapshot, label_data, filename, remote_path)
                 
-            elif now >= finalize_deadline:
-                # EXPIRED - No label found before deadline
-                log.warning(f"Snapshot {filename} ({composite_key}) expired without label (Deadline: {finalize_deadline_str})")
-                await self._aggregate_expired(snapshot, filename, remote_path)
+            elif now < finalize_deadline:
+                # 2. NOT EXPIRED YET - Reschedule for normal check
+                log.debug(f"No label yet for {composite_key}, rescheduling (Deadline: {finalize_deadline_str})")
+                await self._reschedule_snapshot(snapshot, filename, remote_path, is_grace_period=False)
                 
             else:
-                # NOT YET - Reschedule for next check
-                log.debug(f"No label yet for {composite_key}, rescheduling (Deadline: {finalize_deadline_str})")
-                await self._reschedule_snapshot(snapshot, filename, remote_path)
-            # (*** END MODIFICATION ***)
+                # 3. DEADLINE PASSED - Check for grace period
+                
+                # Define the grace period (as requested by user)
+                grace_period = timedelta(minutes=30)
+                true_expiration_deadline = finalize_deadline + grace_period
+                
+                if now >= true_expiration_deadline:
+                    # 3a. GRACE PERIOD ENDED - Expire the snapshot
+                    log.warning(f"Snapshot {filename} ({composite_key}) EXPIRED. Grace period (30min) ended at {true_expiration_deadline.isoformat()}.")
+                    await self._aggregate_expired(snapshot, filename, remote_path)
+                
+                else:
+                    # 3b. IN GRACE PERIOD - Reschedule for a *fast* recheck
+                    log.info(f"Snapshot {filename} ({composite_key}) passed deadline, entering 30min grace period. Rechecking in 1 min.")
+                    # Pass a flag to reschedule for a 1-minute interval
+                    await self._reschedule_snapshot(snapshot, filename, remote_path, is_grace_period=True)
+
+            # --- (*** END NEW GRACE PERIOD LOGIC ***) ---
                 
         except Exception as e:
             log.error(f"Error processing snapshot {filename}: {e}", exc_info=True)
@@ -1054,7 +1116,10 @@ class SnapshotAggregator:
             # Update claimed_by and claimed_at
             snapshot['finalization']['claimed_by'] = 'aggregator'
             snapshot['finalization']['claimed_at'] = datetime.now(timezone.utc).isoformat()
-            snapshot['finalization']['finalization_status'] = 'awaiting_label' # Mark as actively being checked
+            
+            # Set status to 'awaiting_label', unless it's already 'grace_period'
+            if snapshot['finalization'].get('finalization_status') != 'grace_period':
+                snapshot['finalization']['finalization_status'] = 'awaiting_label'
             
             # Save locally and re-upload
             local_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
@@ -1129,14 +1194,27 @@ class SnapshotAggregator:
             log.error(f"Failed to save expired dataset for {mint} ({pipeline})")
             self.claimed_snapshots.discard(filename)
     
-    async def _reschedule_snapshot(self, snapshot: Dict, filename: str, remote_path: str):
-        """Update next_check_at and re-upload snapshot."""
+    async def _reschedule_snapshot(self, snapshot: Dict, filename: str, remote_path: str, is_grace_period: bool = False):
+        """
+        Update next_check_at and re-upload snapshot.
+        (*** MODIFIED ***) Uses a 1-minute interval if in grace period.
+        """
         now = datetime.now(timezone.utc)
-        check_interval = timedelta(minutes=self.config.CHECK_INTERVAL_MINUTES)
-        next_check = now + check_interval
+        
+        # --- (*** NEW GRACE PERIOD LOGIC ***) ---
+        if is_grace_period:
+            # During grace period, re-check every 1 minute
+            check_interval = timedelta(minutes=1)
+            next_check = now + check_interval
+            snapshot['finalization']['finalization_status'] = 'grace_period' # Mark as in grace period
+        else:
+            # Standard check interval
+            check_interval = timedelta(minutes=self.config.CHECK_INTERVAL_MINUTES)
+            next_check = now + check_interval
+            snapshot['finalization']['finalization_status'] = 'awaiting_label' # Back to normal
+        # --- (*** END NEW GRACE PERIOD LOGIC ***) ---
         
         snapshot['finalization']['next_check_at'] = next_check.isoformat()
-        # Increment check_count (as requested by 'checks_attempted')
         snapshot['finalization']['check_count'] = snapshot['finalization'].get('check_count', 0) + 1
         snapshot['finalization']['claimed_by'] = None # Release claim
         snapshot['finalization']['claimed_at'] = None
@@ -1152,7 +1230,11 @@ class SnapshotAggregator:
         await asyncio.to_thread(_save)
         
         # Delete remote and re-upload (atomic update)
-        await self.supabase.delete_file(remote_path)
+        try:
+            await self.supabase.delete_file(remote_path)
+        except Exception as e:
+            log.warning(f"Failed to delete remote file before reschedule (this is OK): {e}")
+            
         await self.supabase.upload_file(local_path, remote_path)
         
         # Cleanup local and release claim
@@ -1201,10 +1283,25 @@ class SnapshotAggregator:
         
         # (*** NEW ***) Remove from the main service's active cache
         try:
-            self.active_snapshot_cache.remove(filename)
-            log.debug(f"Removed '{filename}' from active snapshot cache.")
+            # We must remove the filename, not the composite key
+            snapshot_key = filename
+            if snapshot_key in self.active_snapshot_cache:
+                self.active_snapshot_cache.remove(snapshot_key)
+                log.debug(f"Removed '{snapshot_key}' from active snapshot cache.")
+            else:
+                # Handle cases where key might be composite
+                composite_key_guess = filename.replace(".json", "")
+                if composite_key_guess in self.active_snapshot_cache:
+                     self.active_snapshot_cache.remove(composite_key_guess)
+                     log.debug(f"Removed '{composite_key_guess}' from active snapshot cache.")
+                else:
+                    log.warning(f"Could not remove '{filename}' from cache, not found.")
+                    
         except KeyError:
-            log.warning(f"Could not remove '{filename}' from cache, not found.")
+            log.warning(f"Could not remove '{filename}' from cache, not found (KeyError).")
+        except Exception as e:
+            log.error(f"Error removing {filename} from active_snapshot_cache: {e}")
+
 
 # --- Main Collector Service ---
 
@@ -1222,6 +1319,7 @@ class CollectorService:
         self.computer = FeatureComputer()
         
         # (*** NEW ***) Cache for active snapshots to prevent duplicates
+        # This cache will store FILENAMES (e.g., "mint_timestamp_signal.json")
         self.active_snapshot_files: Set[str] = set()
         
         # Pass the cache to the aggregator
@@ -1324,7 +1422,7 @@ class CollectorService:
                 "check_interval_minutes": self.config.CHECK_INTERVAL_MINUTES,
                 "next_check_at": next_check_at.isoformat(),
                 "check_count": 0,
-                "finalization_status": "pending", # Will become 'awaiting_label' on first check
+                "finalization_status": "pending", # Will become 'awaiting_label' or 'grace_period'
                 "claimed_by": None,
                 "claimed_at": None,
                 "finalized_at": None
@@ -1366,8 +1464,16 @@ class CollectorService:
 
         try:
             # 3. Idempotency Check 1: Exact signal (fast, remote check)
+            # We use the active_snapshot_files cache for this now
+            filename_json = f"{filename_base}.json"
+            if filename_json in self.active_snapshot_files:
+                log.debug(f"Skipping already processed exact signal (from cache): {filename_base}")
+                return
+            
+            # Fallback: check Supabase directly if cache is stale
             if await self.supabase.check_file_exists(remote_json_path):
-                log.debug(f"Skipping already processed exact signal: {filename_base}")
+                log.debug(f"Skipping already processed exact signal (from Supabase): {filename_base}")
+                self.active_snapshot_files.add(filename_json) # Add to cache
                 return
         except Exception as e:
             log.error(f"Failed idempotency check for {filename_base}: {e}. Skipping.")

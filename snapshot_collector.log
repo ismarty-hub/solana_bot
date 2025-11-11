@@ -2896,3 +2896,48 @@ Service stopped manually.
 2025-11-10 15:53:21,468 - CollectorService - INFO - Polling cycle finished in 20.45s.
 2025-11-10 15:53:21,468 - CollectorService - INFO - Sleeping for 159.55s...
 2025-11-10 15:53:51,587 - CollectorService - INFO - Service stopped manually.
+2025-11-11 19:01:52,314 - CollectorService - INFO - Supabase client initialized.
+2025-11-11 19:01:52,314 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-11 19:01:52,314 - CollectorService - INFO - CollectorService initialized.
+2025-11-11 19:01:52,314 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-11 19:01:52,314 - CollectorService - INFO - Starting new polling cycle...
+2025-11-11 19:01:52,314 - CollectorService - INFO - Updating active snapshot file cache...
+2025-11-11 19:01:54,245 - CollectorService - ERROR - Failed to list files in analytics/snapshots: <ConnectionTerminated error_code:ErrorCodes.NO_ERROR, last_stream_id:1, additional_data:None>
+2025-11-11 19:01:54,247 - CollectorService - INFO - Cached 0 active snapshot filenames.
+2025-11-11 19:01:57,172 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-11 19:01:57,172 - CollectorService - INFO - Found 20 total signals to check.
+2025-11-11 19:01:57,538 - CollectorService - INFO - Processing new signal (passed active check): HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha
+2025-11-11 19:01:57,538 - CollectorService - WARNING - No pre-fetched Dex data for HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha. Fetching live.
+2025-11-11 19:01:59,293 - CollectorService - WARNING - Initial next_check_at for HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha is in the past. Setting to now.
+2025-11-11 19:02:00,789 - CollectorService - INFO - Uploaded snapshot to Supabase: HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha.json
+2025-11-11 19:02:01,147 - CollectorService - WARNING - Skipping new signal for (HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump, alpha) because an active snapshot is already being tracked: HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha.json
+2025-11-11 19:02:01,521 - CollectorService - WARNING - Skipping new signal for (HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump, alpha) because an active snapshot is already being tracked: HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha.json
+2025-11-11 19:02:01,934 - CollectorService - WARNING - Skipping new signal for (HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump, alpha) because an active snapshot is already being tracked: HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha.json
+2025-11-11 19:02:02,443 - CollectorService - WARNING - Skipping new signal for (HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump, alpha) because an active snapshot is already being tracked: HJBoRECiJddTZQZpuY8pHenf5CZ2yjju4npekmvbpump_2025-11-11T15-36-27.444383_00-00_alpha.json
+2025-11-11 19:02:02,802 - CollectorService - INFO - Processing new signal (passed active check): 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha
+2025-11-11 19:02:02,810 - CollectorService - WARNING - No pre-fetched Dex data for 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha. Fetching live.
+2025-11-11 19:02:03,002 - CollectorService - WARNING - Initial next_check_at for 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha is in the past. Setting to now.
+2025-11-11 19:02:04,289 - CollectorService - INFO - Uploaded snapshot to Supabase: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha.json
+2025-11-11 19:02:04,639 - CollectorService - WARNING - Skipping new signal for (6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS, alpha) because an active snapshot is already being tracked: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha.json
+2025-11-11 19:02:05,106 - CollectorService - WARNING - Skipping new signal for (6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS, alpha) because an active snapshot is already being tracked: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha.json
+2025-11-11 19:02:05,517 - CollectorService - WARNING - Skipping new signal for (6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS, alpha) because an active snapshot is already being tracked: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha.json
+2025-11-11 19:02:05,981 - CollectorService - WARNING - Skipping new signal for (6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS, alpha) because an active snapshot is already being tracked: 6DaSdWSu5NMtpFZkx8iBXUphCjPwPrSkXShbnqi9BAGS_2025-11-11T15-36-27.444301_00-00_alpha.json
+2025-11-11 19:02:06,337 - CollectorService - INFO - Processing new signal (passed active check): Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha
+2025-11-11 19:02:06,351 - CollectorService - WARNING - No pre-fetched Dex data for Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha. Fetching live.
+2025-11-11 19:02:06,537 - CollectorService - WARNING - Initial next_check_at for Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha is in the past. Setting to now.
+2025-11-11 19:02:07,773 - CollectorService - INFO - Uploaded snapshot to Supabase: Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha.json
+2025-11-11 19:02:08,121 - CollectorService - WARNING - Skipping new signal for (Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump, alpha) because an active snapshot is already being tracked: Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha.json
+2025-11-11 19:02:08,470 - CollectorService - WARNING - Skipping new signal for (Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump, alpha) because an active snapshot is already being tracked: Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha.json
+2025-11-11 19:02:08,833 - CollectorService - WARNING - Skipping new signal for (Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump, alpha) because an active snapshot is already being tracked: Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha.json
+2025-11-11 19:02:09,183 - CollectorService - WARNING - Skipping new signal for (Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump, alpha) because an active snapshot is already being tracked: Yd8w2KJQ7BXe6JJTxqae9eRfSXzK15poXAvRwcYpump_2025-11-11T15-36-07.735455_00-00_alpha.json
+2025-11-11 19:02:09,548 - CollectorService - INFO - Processing new signal (passed active check): DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha
+2025-11-11 19:02:09,573 - CollectorService - WARNING - No pre-fetched Dex data for DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha. Fetching live.
+2025-11-11 19:02:09,746 - CollectorService - WARNING - Initial next_check_at for DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha is in the past. Setting to now.
+2025-11-11 19:02:10,877 - CollectorService - INFO - Uploaded snapshot to Supabase: DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha.json
+2025-11-11 19:02:11,219 - CollectorService - WARNING - Skipping new signal for (DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3, alpha) because an active snapshot is already being tracked: DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha.json
+2025-11-11 19:02:11,577 - CollectorService - WARNING - Skipping new signal for (DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3, alpha) because an active snapshot is already being tracked: DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha.json
+2025-11-11 19:02:11,925 - CollectorService - WARNING - Skipping new signal for (DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3, alpha) because an active snapshot is already being tracked: DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha.json
+2025-11-11 19:02:12,270 - CollectorService - WARNING - Skipping new signal for (DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3, alpha) because an active snapshot is already being tracked: DKAN3tyxnvgUrgGHAHsorBGgVGDVt9uEiRUybHrs77P3_2025-11-11T15-36-07.735132_00-00_alpha.json
+2025-11-11 19:02:12,278 - CollectorService - INFO - Polling cycle finished in 19.97s.
+2025-11-11 19:02:12,278 - CollectorService - INFO - Sleeping for 160.03s...
+2025-11-11 19:02:23,451 - CollectorService - INFO - Service stopped manually.
