@@ -298,10 +298,14 @@ class HolidayClient(BaseAPIClient):
 # --- Supabase Manager (Async-safe) ---
 
 class SupabaseManager:
-    """Manages Supabase interactions using asyncio.to_thread for blocking calls."""
+    """
+    SupabaseManager with ZERO concurrency - fully sequential operations.
+    This fixes HTTP/2 connection pool exhaustion issues.
+    """
     def __init__(self, config: Config, session: aiohttp.ClientSession):
         self.config = config
-        self.session = session # aiohttp session for external API calls
+        self.session = session
+        
         try:
             self.client: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
             log.info("Supabase client initialized.")
@@ -309,204 +313,274 @@ class SupabaseManager:
             log.critical(f"Failed to initialize Supabase client: {e}")
             raise
         
-        # Cache for conditional GET headers (ETag, Last-Modified)
+        # Cache for conditional GET headers
         self._file_cache_headers: Dict[str, Dict[str, str]] = {}
+        
         # Local file cache directory
         self._local_cache_dir = os.path.join(config.DATASET_DIR_LOCAL, ".cache")
         os.makedirs(self._local_cache_dir, exist_ok=True)
+        
+        # CRITICAL: Single semaphore to ensure only ONE download at a time
+        self._download_lock = asyncio.Lock()
+        
+        # Backoff tracking
+        self._failed_paths: Dict[str, float] = {}
+        self._backoff_seconds = 10.0
+        
+        # Rate limiting: Minimum delay between operations
+        self._last_operation_time = 0.0
+        self._min_delay_between_ops = 0.5  # 500ms between operations
+    
+    async def _enforce_rate_limit(self):
+        """Enforce minimum delay between operations."""
+        now = time.monotonic()
+        elapsed = now - self._last_operation_time
+        if elapsed < self._min_delay_between_ops:
+            sleep_time = self._min_delay_between_ops - elapsed
+            log.debug(f"Rate limiting: sleeping {sleep_time:.2f}s")
+            await asyncio.sleep(sleep_time)
+        self._last_operation_time = time.monotonic()
     
     async def download_json_file(self, remote_path: str) -> Optional[Dict]:
         """
-        Downloads and parses a JSON file from a private Supabase storage
-        using signed URLs and conditional GETs (ETag / Last-Modified).
-        Caches file locally to read from on 304 Not Modified.
+        Downloads JSON file with STRICT sequential locking.
+        Only ONE download can happen at a time across the entire application.
         """
-        # Create a unique-ish but stable local file path
+        # Check backoff first (without locking)
+        now = time.monotonic()
+        if remote_path in self._failed_paths:
+            if now < self._failed_paths[remote_path]:
+                log.debug(f"Skipping {remote_path} (in backoff until {self._failed_paths[remote_path] - now:.1f}s)")
+                return await self._load_from_local_cache(remote_path)
+            else:
+                del self._failed_paths[remote_path]
+        
+        # Acquire the lock - this ensures ONLY ONE download at a time
+        async with self._download_lock:
+            await self._enforce_rate_limit()
+            return await self._download_json_file_impl(remote_path)
+    
+    async def _load_from_local_cache(self, remote_path: str) -> Optional[Dict]:
+        """Load file from local cache if it exists."""
         local_save_path = os.path.join(
             self._local_cache_dir, 
             remote_path.replace('/', '_').replace('\\', '_')
         )
         
+        if not os.path.exists(local_save_path):
+            return None
+        
         try:
-            # 1. Generate signed URL (blocking call, run in thread)
-            log.debug(f"Generating signed URL for: {remote_path}")
-            signed_url_response = await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).create_signed_url,
-                remote_path,
-                60 # 60 second expiry
-            )
-            signed_url = signed_url_response.get('signedURL')
-            if not signed_url:
-                log.error(f"Could not generate signed URL for '{remote_path}'. Response: {signed_url_response}")
-                return None
-
-            # 2. Prepare headers for conditional GET
-            headers = {}
-            cached_headers = self._file_cache_headers.get(remote_path, {})
-            if cached_headers.get('Last-Modified'):
-                headers['If-Modified-Since'] = cached_headers['Last-Modified']
-            if cached_headers.get('ETag'):
-                headers['If-None-Match'] = cached_headers['ETag']
-
-            log.debug(f"Downloading file: {remote_path} (URL: {signed_url[:50]}...)")
+            def _read_local():
+                with open(local_save_path, "rb") as f:
+                    return f.read()
             
-            # 3. Perform the HTTP request (blocking, run in thread)
-            # We use `requests` here as it's simpler for blocking calls
-            # in threads than managing the `aiohttp` session inside.
-            def _blocking_get():
-                return requests.get(signed_url, headers=headers, timeout=30)
-            
-            response = await asyncio.to_thread(_blocking_get)
-                
-            # 4. Handle response
-            if response.status_code == 304:
-                # 304 Not Modified
-                log.debug(f"File '{remote_path}': No change detected (304 Not Modified).")
-                if os.path.exists(local_save_path):
-                    log.debug(f"Loading from local cache: '{local_save_path}'")
-                    
-                    def _read_local():
-                        with open(local_save_path, "rb") as f:
-                            return f.read()
-                    
-                    file_bytes = await asyncio.to_thread(_read_local)
-                    return json.loads(file_bytes)
-                else:
-                    log.warning(f"File '{remote_path}' not modified, but local file '{local_save_path}' missing. Forcing re-download on next poll.")
-                    # Remove bad cache headers to force full download next time
-                    self._file_cache_headers.pop(remote_path, None)
-                    return None # Return None for this attempt
-
-            elif response.status_code == 200:
-                # 200 OK
-                log.debug(f"File '{remote_path}': File updated — new data loaded.")
-                file_bytes = response.content
-
-                # Update cache headers
-                new_last_modified = response.headers.get('Last-Modified')
-                new_etag = response.headers.get('ETag')
-                new_headers_to_cache = {}
-                if new_last_modified:
-                    new_headers_to_cache['Last-Modified'] = new_last_modified
-                if new_etag:
-                    new_headers_to_cache['ETag'] = new_etag
-                if new_headers_to_cache:
-                    self._file_cache_headers[remote_path] = new_headers_to_cache
-
-                # Save new content to local cache (blocking, run in thread)
-                def _save_local():
-                    with open(local_save_path, "wb") as f:
-                        f.write(file_bytes)
-                
-                await asyncio.to_thread(_save_local)
-                log.debug(f"Saved to local cache: '{local_save_path}'")
-                
-                return json.loads(file_bytes)
-
-            else:
-                # Handle errors
-                log.error(f"Failed to download {remote_path}: Status {response.status_code} {response.text[:200]}")
-                # Fallback to local cache if it exists
-                if os.path.exists(local_save_path):
-                     log.warning(f"Loading from local cache as fallback: '{local_save_path}'")
-                     def _read_local():
-                        with open(local_save_path, "rb") as f:
-                            return f.read()
-                     file_bytes = await asyncio.to_thread(_read_local)
-                     return json.loads(file_bytes)
-                return None
-
-        except requests.exceptions.RequestException as e:
-            log.error(f"Requests Error downloading {remote_path}: {e}")
-        except json.JSONDecodeError as e:
-            log.error(f"Failed to decode JSON from {remote_path} (or local cache {local_save_path}): {e}")
+            file_bytes = await asyncio.to_thread(_read_local)
+            return json.loads(file_bytes)
         except Exception as e:
-            if "404" in str(e) or "not_found" in str(e).lower():
-                log.debug(f"File not found: {remote_path}")
-            else:
-                log.error(f"Failed to download {remote_path}: {e}", exc_info=True)
+            log.debug(f"Failed to read cache {local_save_path}: {e}")
+            return None
+    
+    async def _download_json_file_impl(self, remote_path: str) -> Optional[Dict]:
+        """
+        Internal download implementation with retries.
+        Must be called while holding self._download_lock.
+        """
+        local_save_path = os.path.join(
+            self._local_cache_dir, 
+            remote_path.replace('/', '_').replace('\\', '_')
+        )
         
-        # Final fallback
-        if os.path.exists(local_save_path):
-             log.warning(f"Loading from local cache as final fallback: '{local_save_path}'")
-             try:
-                 def _read_local():
-                    with open(local_save_path, "rb") as f:
-                        return f.read()
-                 file_bytes = await asyncio.to_thread(_read_local)
-                 return json.loads(file_bytes)
-             except Exception as e:
-                log.error(f"Failed to read final fallback cache {local_save_path}: {e}")
+        max_retries = 3
         
-        return None
+        for attempt in range(max_retries):
+            try:
+                # Step 1: Generate signed URL (this is the bottleneck)
+                log.debug(f"[Attempt {attempt+1}/{max_retries}] Generating signed URL: {remote_path}")
+                
+                try:
+                    signed_url_response = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.client.storage.from_(self.config.SUPABASE_BUCKET).create_signed_url,
+                            remote_path,
+                            60
+                        ),
+                        timeout=15.0
+                    )
+                except asyncio.TimeoutError:
+                    log.warning(f"Timeout generating signed URL for {remote_path}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    else:
+                        self._failed_paths[remote_path] = time.monotonic() + self._backoff_seconds
+                        return await self._load_from_local_cache(remote_path)
+                except Exception as e:
+                    log.error(f"Error generating signed URL: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    else:
+                        self._failed_paths[remote_path] = time.monotonic() + self._backoff_seconds
+                        return await self._load_from_local_cache(remote_path)
+                
+                signed_url = signed_url_response.get('signedURL')
+                if not signed_url:
+                    log.error(f"No signed URL returned for {remote_path}")
+                    return await self._load_from_local_cache(remote_path)
+
+                # Step 2: Prepare conditional GET headers
+                headers = {}
+                cached_headers = self._file_cache_headers.get(remote_path, {})
+                if cached_headers.get('Last-Modified'):
+                    headers['If-Modified-Since'] = cached_headers['Last-Modified']
+                if cached_headers.get('ETag'):
+                    headers['If-None-Match'] = cached_headers['ETag']
+
+                # Step 3: Download using aiohttp
+                log.debug(f"Downloading via signed URL: {remote_path}")
+                
+                try:
+                    async with self.session.get(
+                        signed_url, 
+                        headers=headers, 
+                        timeout=aiohttp.ClientTimeout(total=30)
+                    ) as response:
+                        if response.status == 304:
+                            log.debug(f"Not modified (304): {remote_path}")
+                            return await self._load_from_local_cache(remote_path)
+                        
+                        elif response.status == 200:
+                            log.debug(f"Downloaded (200): {remote_path}")
+                            file_bytes = await response.read()
+                            
+                            # Update cache headers
+                            new_headers = {}
+                            if 'Last-Modified' in response.headers:
+                                new_headers['Last-Modified'] = response.headers['Last-Modified']
+                            if 'ETag' in response.headers:
+                                new_headers['ETag'] = response.headers['ETag']
+                            if new_headers:
+                                self._file_cache_headers[remote_path] = new_headers
+                            
+                            # Save to local cache
+                            def _save_local():
+                                os.makedirs(os.path.dirname(local_save_path), exist_ok=True)
+                                with open(local_save_path, "wb") as f:
+                                    f.write(file_bytes)
+                            
+                            await asyncio.to_thread(_save_local)
+                            return json.loads(file_bytes)
+                        
+                        elif response.status == 404:
+                            log.debug(f"File not found (404): {remote_path}")
+                            return None
+                        
+                        else:
+                            log.warning(f"Unexpected status {response.status}: {remote_path}")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(2 ** attempt)
+                                continue
+                            return await self._load_from_local_cache(remote_path)
+                
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    log.warning(f"Network error downloading {remote_path}: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    else:
+                        self._failed_paths[remote_path] = time.monotonic() + self._backoff_seconds
+                        return await self._load_from_local_cache(remote_path)
+
+            except json.JSONDecodeError as e:
+                log.error(f"JSON decode error for {remote_path}: {e}")
+                return None
+            
+            except Exception as e:
+                log.error(f"Unexpected error downloading {remote_path}: {e}", exc_info=True)
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    self._failed_paths[remote_path] = time.monotonic() + self._backoff_seconds
+                    return await self._load_from_local_cache(remote_path)
+        
+        # All retries exhausted
+        log.warning(f"All retries exhausted for {remote_path}, using cache")
+        return await self._load_from_local_cache(remote_path)
 
     async def check_file_exists(self, remote_path: str) -> bool:
-        """Checks if a file already exists in Supabase storage."""
-        try:
-            folder = os.path.dirname(remote_path)
-            filename = os.path.basename(remote_path)
-            
-            file_list = await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).list,
-                folder,
-                {"search": filename}
-            )
-            
-            return any(f['name'] == filename for f in file_list)
-        except Exception as e:
-            log.error(f"Failed to check existence of {remote_path}: {e}")
-            raise
+        """Checks if file exists with rate limiting."""
+        async with self._download_lock:
+            await self._enforce_rate_limit()
+            try:
+                folder = os.path.dirname(remote_path)
+                filename = os.path.basename(remote_path)
+                
+                file_list = await asyncio.to_thread(
+                    self.client.storage.from_(self.config.SUPABASE_BUCKET).list,
+                    folder,
+                    {"search": filename}
+                )
+                
+                return any(f['name'] == filename for f in file_list)
+            except Exception as e:
+                log.error(f"Failed to check existence of {remote_path}: {e}")
+                raise
     
     async def upload_file(self, local_path: str, remote_path: str):
-        """Uploads a local file to Supabase storage, overwriting if exists."""
-        try:
-            # 1. Remove existing file (best practice for overwrite)
+        """Uploads file with rate limiting."""
+        async with self._download_lock:
+            await self._enforce_rate_limit()
+            try:
+                # Remove existing
+                try:
+                    await asyncio.to_thread(
+                        self.client.storage.from_(self.config.SUPABASE_BUCKET).remove,
+                        [remote_path]
+                    )
+                except Exception:
+                    pass
+
+                # Upload new
+                await asyncio.to_thread(
+                    self.client.storage.from_(self.config.SUPABASE_BUCKET).upload,
+                    remote_path,
+                    local_path,
+                    {"content-type": "application/json"}
+                )
+                log.debug(f"Uploaded {local_path} to {remote_path}")
+            except Exception as e:
+                log.error(f"Failed to upload {local_path}: {e}")
+                raise
+    
+    async def delete_file(self, remote_path: str):
+        """Deletes file with rate limiting."""
+        async with self._download_lock:
+            await self._enforce_rate_limit()
             try:
                 await asyncio.to_thread(
                     self.client.storage.from_(self.config.SUPABASE_BUCKET).remove,
                     [remote_path]
                 )
-                log.debug(f"Removed existing remote file: {remote_path}")
+                log.debug(f"Deleted {remote_path}")
             except Exception as e:
-                # This often fails if file doesn't exist, which is fine.
-                log.debug(f"Pre-delete failed (likely file not found, this is OK): {remote_path}, {e}")
-
-            # 2. Upload new file
-            await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).upload,
-                remote_path,
-                local_path,
-                {"content-type": "application/json"} # <-- Specify content type
-            )
-            log.debug(f"Uploaded {local_path} to {remote_path}")
-        except Exception as e:
-            log.error(f"Failed to upload {local_path}: {e}")
-            raise
-    
-    async def delete_file(self, remote_path: str):
-        """Deletes a file from Supabase storage."""
-        try:
-            await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).remove,
-                [remote_path]
-            )
-            log.debug(f"Deleted {remote_path}")
-        except Exception as e:
-            log.error(f"Failed to delete {remote_path}: {e}")
-            raise
+                log.error(f"Failed to delete {remote_path}: {e}")
+                raise
     
     async def list_files(self, folder: str, limit: int = 1000) -> List[Dict]:
-        """Lists files in a Supabase storage folder."""
-        try:
-            files = await asyncio.to_thread(
-                self.client.storage.from_(self.config.SUPABASE_BUCKET).list,
-                folder,
-                {"limit": limit, "sortBy": {"column": "created_at", "order": "desc"}}
-            )
-            return files if files else []
-        except Exception as e:
-            log.error(f"Failed to list files in {folder}: {e}")
-            return []
+        """Lists files with rate limiting."""
+        async with self._download_lock:
+            await self._enforce_rate_limit()
+            try:
+                files = await asyncio.to_thread(
+                    self.client.storage.from_(self.config.SUPABASE_BUCKET).list,
+                    folder,
+                    {"limit": limit, "sortBy": {"column": "created_at", "order": "desc"}}
+                )
+                return files if files else []
+            except Exception as e:
+                log.error(f"Failed to list files in {folder}: {e}")
+                return []
 
 # --- Persistence Manager ---
 
@@ -1012,18 +1086,20 @@ class SnapshotAggregator:
             except Exception as e:
                 log.error(f"Error in _should_process_snapshot_immediately: {e}")
                 return (False, "error_in_evaluation")
-
     async def scan_and_aggregate(self):
         """
-        Main aggregation loop: scan snapshots, check labels, aggregate or reschedule.
-        NOW WITH: Intelligent daily folder checking.
+        Fully sequential aggregator - processes files ONE AT A TIME.
+        No concurrent downloads, no batching - just pure sequential processing.
         """
-        log.info("Starting snapshot aggregation scan...")
+        log.info("Starting sequential snapshot aggregation scan...")
         
         self._clear_caches()
+        now = datetime.now(timezone.utc)
         
-        # 1. Pre-populate label index with active "win" tokens
-        log.info("Loading 'active_tracking.json' to find early wins...")
+        # --- Stage 1: Build the "Answer Index" (SEQUENTIAL) ---
+        
+        # 1a. Load active tracking
+        log.info("Loading 'active_tracking.json'...")
         active_tracking_data = await self.supabase.download_json_file("analytics/active_tracking.json")
         
         if active_tracking_data and isinstance(active_tracking_data, dict):
@@ -1032,207 +1108,175 @@ class SnapshotAggregator:
                 if token_data.get("status") == "win":
                     self._label_index[composite_key] = token_data
                     active_wins_found += 1
-            log.info(f"Pre-populated label index with {active_wins_found} active 'win' labels.")
+            log.info(f"Found {active_wins_found} active 'win' labels.")
         else:
-            log.warning("Could not load or parse 'analytics/active_tracking.json'. Proceeding with daily files only.")
+            log.warning("Could not load 'analytics/active_tracking.json'.")
         
-        # 2. List all snapshot files
-        snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=1000)
+        # Small delay
+        await asyncio.sleep(1.0)
+            
+        # 1b. Discover pipelines
+        pipelines_to_scan: Set[str] = set()
+        
+        try:
+            log.info("Listing analytics folders...")
+            analytics_folders = await self.supabase.list_files("analytics/")
+            pipelines_to_scan = {
+                f['name'] for f in analytics_folders 
+                if f['name'] not in ('snapshots', 'overall', 'active_tracking.json')
+            }
+            log.info(f"Found pipelines: {pipelines_to_scan}")
+        except Exception as e:
+            log.error(f"Failed to discover pipelines: {e}")
+            pipelines_to_scan = set()
+        
+        await asyncio.sleep(1.0)
+
+        # 1c. Collect daily file paths
+        daily_file_paths = []
+        for pipeline in pipelines_to_scan:
+            daily_folder_path = f"analytics/{pipeline}/daily"
+            try:
+                log.info(f"Listing daily files for pipeline: {pipeline}")
+                files = await self.supabase.list_files(daily_folder_path, limit=2000)
+                for file_info in files:
+                    filename = file_info.get('name', '')
+                    if filename.endswith('.json'):
+                        daily_file_paths.append(f"{daily_folder_path}/{filename}")
+                await asyncio.sleep(0.5)  # Small delay between pipeline listings
+            except Exception as e:
+                log.error(f"Failed to list daily files for {pipeline}: {e}")
+
+        log.info(f"Found {len(daily_file_paths)} daily files. Processing sequentially...")
+
+        # 1d. Download daily files ONE AT A TIME
+        finalized_labels_found = 0
+        
+        for i, file_path in enumerate(daily_file_paths):
+            if i > 0 and i % 10 == 0:
+                log.info(f"Progress: {i}/{len(daily_file_paths)} daily files processed")
+            
+            try:
+                content = await self.supabase.download_json_file(file_path)
+                
+                if not content or not isinstance(content.get("tokens"), list):
+                    continue
+                
+                for token in content["tokens"]:
+                    if not isinstance(token, dict):
+                        continue
+                        
+                    mint = token.get("mint")
+                    signal_type = token.get("signal_type")
+                    
+                    if not mint or not signal_type or token.get("status") not in ("win", "loss"):
+                        continue
+                    
+                    composite_key = get_composite_key(mint, signal_type)
+                    self._label_index[composite_key] = token
+                    finalized_labels_found += 1
+            
+            except Exception as e:
+                log.warning(f"Failed to process daily file {file_path}: {e}")
+
+        log.info(f"Found {finalized_labels_found} finalized labels from daily files.")
+        log.info(f"Total labels indexed: {len(self._label_index)}")
+
+        if not self._label_index:
+            log.info("No labels found. Nothing to aggregate.")
+            return
+
+        await asyncio.sleep(1.0)
+
+        # --- Stage 2: Match Snapshots ---
+        
+        log.info("Listing snapshot files...")
+        snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=5000)
         
         if not snapshot_files:
             log.info("No snapshot files found.")
             return
-        
-        now = datetime.now(timezone.utc)
-        # 3. Download all snapshots first (to determine pipelines and date ranges)
-        log.info(f"Analyzing {len(snapshot_files)} snapshot file headers...")
-        
-        # (*** NEW ***) Build a list of download tasks
-        download_tasks = []
-        file_infos_to_process = []
-        
+
+        log.info(f"Found {len(snapshot_files)} snapshot files. Matching against labels...")
+
+        snapshots_to_process = []
+
         for file_info in snapshot_files:
             filename = file_info.get('name', '')
             if not filename.endswith('.json'):
                 continue
             
-            if filename in self.claimed_snapshots:
-                continue
-            
-            remote_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename}"
-            
-            # Add file info and task to their respective lists
-            file_infos_to_process.append((filename, remote_path))
-            download_tasks.append(self.supabase.download_json_file(remote_path))
-
-        log.info(f"Concurrently downloading {len(download_tasks)} snapshot files...")
-        
-        snapshot_results = await asyncio.gather(*download_tasks, return_exceptions=True)
-        
-        log.info(f"Downloads complete. Processing {len(snapshot_results)} results...")
-
-        all_snapshots = []
-        for i, snapshot_data in enumerate(snapshot_results):
-            filename, remote_path = file_infos_to_process[i]
-            
-            if isinstance(snapshot_data, Exception):
-                log.error(f"Failed to download snapshot {remote_path}: {snapshot_data}")
-                continue
-            
-            if not snapshot_data:
-                log.warning(f"Failed to download snapshot {remote_path} (no data), skipping.")
-                continue
-
-            # (*** This is the original logic, now applied *after* download ***)
-            finalization = snapshot_data.get('finalization', {})
-            finalization_status = finalization.get("finalization_status", "pending")
-            
-            # Skip ONLY snapshots that are already fully finalized (labeled or expired)
-            if finalization_status in ("labeled", "expired_no_label"):
-                log.debug(f"Skipping finalized snapshot: {filename} (status: {finalization_status})")
-                continue
-            
-            all_snapshots.append((filename, snapshot_data, remote_path))
-        
-        if not all_snapshots:
-            log.info("No unfinalized snapshots found (all are either 'labeled' or 'expired_no_label').")
-            return
-        
-        log.info(f"Found {len(all_snapshots)} unfinalized snapshots to evaluate.")
-        
-        # 4. NEW: Discover existing daily folders
-        pipelines_to_scan: Set[str] = set()
-        for _, snapshot, _ in all_snapshots:
             try:
-                pipeline = snapshot['features']['signal_source']
-                pipelines_to_scan.add(pipeline)
-            except Exception as e:
-                log.error(f"Error extracting pipeline from snapshot: {e}")
-        
-        await self._discover_existing_daily_folders(pipelines_to_scan)
-        
-        # 5. Filter snapshots that should be processed immediately
-        snapshots_to_process = []
-        skipped_reasons = {}
-        
-        for filename, snapshot, remote_path in all_snapshots:
-            should_process, reason = self._should_process_snapshot_immediately(snapshot, now)
-            
-            if should_process:
-                snapshots_to_process.append((filename, snapshot, remote_path, reason))
-                log.debug(f"Snapshot {filename} marked for processing: {reason}")
-            else:
-                # Track why snapshots are being skipped
-                skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-        
-        if not snapshots_to_process:
-            log.info("No snapshots are due for checking (after intelligent filtering).")
-            if skipped_reasons:
-                log.info("Breakdown of skipped snapshots:")
-                for reason, count in sorted(skipped_reasons.items()):
-                    log.info(f"  - {reason}: {count} snapshots")
-            return
-        
-        log.info(f"Found {len(snapshots_to_process)} snapshots due for checking:")
-        # Log breakdown by reason
-        reason_counts = {}
-        for _, _, _, reason in snapshots_to_process:
-            reason_counts[reason] = reason_counts.get(reason, 0) + 1
-        for reason, count in sorted(reason_counts.items()):
-            log.info(f"  - {reason}: {count} snapshots")
-        
-        # 6. Build the set of *required* analytics files to download
-        dates_to_scan: Set[str] = set()
-
-        for _, snapshot, _, _ in snapshots_to_process:
-            try:
-                pipeline = snapshot['features']['signal_source']
-                
-                checked_at = parser.isoparse(snapshot['features']['checked_at_utc']).astimezone(timezone.utc)
-                finalize_deadline = parser.isoparse(snapshot['finalization']['finalize_deadline']).astimezone(timezone.utc)
-                
-                start_date = checked_at.date()
-                # Scan up to deadline + 2 days buffer (for late finalizations)
-                end_date = min(now, finalize_deadline + timedelta(days=2)).date()
-                
-                current_date = start_date
-                while current_date <= end_date:
-                    dates_to_scan.add(current_date.strftime('%Y-%m-%d'))
-                    current_date += timedelta(days=1)
-            except Exception as e:
-                log.error(f"Error calculating date range for snapshot {snapshot.get('snapshot_id')}: {e}")
-        
-        if not dates_to_scan or not pipelines_to_scan:
-            log.warning("No valid dates or pipelines to scan. Aborting aggregation pass.")
-            return
-
-        log.info(f"Scanning {len(dates_to_scan)} unique dates ({min(dates_to_scan)} to {max(dates_to_scan)}) and {len(pipelines_to_scan)} pipelines.")
-        
-        # 7. Download required files and build targeted label index
-        fetch_tasks = []
-        for pipeline in pipelines_to_scan:
-            for date_str in dates_to_scan:
-                remote_path = f"analytics/{pipeline}/daily/{date_str}.json"
-                fetch_tasks.append(self._fetch_analytics_file(remote_path))
-        
-        file_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-        
-        # Build label index using composite key
-        finalized_labels_found = 0
-        for content in file_contents:
-            if isinstance(content, Exception) or not content or not isinstance(content.get("tokens"), list):
-                continue
-            
-            for token in content["tokens"]:
-                if not isinstance(token, dict): continue
-                mint = token.get("mint")
-                signal_type = token.get("signal_type")
-                
-                if not mint or not signal_type or token.get("status") not in ("win", "loss"):
+                # Parse filename: MINT_TIMESTAMP_SIGNALTYPE.json
+                parts = filename.replace('.json', '').split('_')
+                if len(parts) < 3:
                     continue
                 
+                mint = parts[0]
+                signal_type = parts[-1]
                 composite_key = get_composite_key(mint, signal_type)
                 
-                tracking_completed_at_str = token.get("tracking_completed_at")
-                if not tracking_completed_at_str:
-                    continue
-                
-                try:
-                    new_label_time = parser.isoparse(tracking_completed_at_str)
-                except Exception:
-                    log.warning(f"Could not parse tracking_completed_at for {composite_key}: {tracking_completed_at_str}")
-                    continue
-                
-                existing_label = self._label_index.get(composite_key)
-                
-                # Prioritize finalized labels over active ones
-                if not existing_label:
-                    self._label_index[composite_key] = token
-                    finalized_labels_found += 1
-                elif "tracking_completed_at" not in existing_label or not existing_label.get("tracking_completed_at"):
-                    self._label_index[composite_key] = token
-                    log.debug(f"Overwriting active label with finalized label for {composite_key}")
-                    finalized_labels_found += 1
-                else:
-                    try:
-                        existing_label_time = parser.isoparse(existing_label.get("tracking_completed_at"))
-                        if new_label_time > existing_label_time:
-                            self._label_index[composite_key] = token
-                    except Exception:
-                        self._label_index[composite_key] = token
+                if composite_key in self._label_index:
+                    remote_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename}"
+                    snapshots_to_process.append((filename, remote_path, composite_key))
+                    
+            except Exception as e:
+                log.warning(f"Error parsing filename {filename}: {e}")
         
-        log.info(f"Found {finalized_labels_found} new finalized labels from daily files.")
-        log.info(f"Total labels indexed (active + finalized): {len(self._label_index)}")
-
-        # 8. Process due snapshots in batches
-        batch_size = self.config.AGGREGATOR_BATCH_SIZE
-        for i in range(0, len(snapshots_to_process), batch_size):
-            batch = snapshots_to_process[i:i+batch_size]
-            tasks = []
-            for filename, snapshot, remote_path, reason in batch:
-                tasks.append(self._process_snapshot(filename, snapshot, remote_path))
+        if not snapshots_to_process:
+            log.info("No snapshots match the label index.")
+            return
             
-            await asyncio.gather(*tasks, return_exceptions=True)
+        log.info(f"Found {len(snapshots_to_process)} snapshots with labels.")
+        
+        await asyncio.sleep(1.0)
+
+        # --- Stage 3: Process Snapshots ONE AT A TIME ---
+        
+        processed_count = 0
+        failed_count = 0
+        
+        for i, (filename, remote_path, composite_key) in enumerate(snapshots_to_process):
+            try:
+                # Progress logging
+                if i > 0 and i % 10 == 0:
+                    log.info(f"Progress: {i}/{len(snapshots_to_process)} snapshots processed "
+                            f"({processed_count} successful, {failed_count} failed)")
+                
+                # Download snapshot
+                log.debug(f"[{i+1}/{len(snapshots_to_process)}] Downloading: {filename}")
+                snapshot_data = await self.supabase.download_json_file(remote_path)
+                
+                if not snapshot_data:
+                    log.warning(f"No data for {remote_path}")
+                    failed_count += 1
+                    continue
+                
+                # Get label
+                label_data = self._label_index.get(composite_key)
+                if not label_data:
+                    log.warning(f"Label disappeared for {composite_key}")
+                    failed_count += 1
+                    continue
+                
+                # Check if already finalized
+                finalization_status = snapshot_data.get('finalization', {}).get("finalization_status", "pending")
+                if finalization_status in ("labeled", "expired_no_label"):
+                    log.warning(f"Snapshot {filename} already finalized. Deleting.")
+                    await self._delete_snapshot(filename, remote_path)
+                    continue
+
+                # Aggregate
+                log.info(f"[{i+1}/{len(snapshots_to_process)}] Aggregating {filename} with label '{label_data.get('status')}'")
+                await self._aggregate_with_label(snapshot_data, label_data, filename, remote_path)
+                processed_count += 1
+                
+            except Exception as e:
+                log.error(f"Failed to aggregate {filename}: {e}", exc_info=True)
+                failed_count += 1
+        
+        log.info(f"Aggregation complete: {processed_count} successful, {failed_count} failed, "
+                f"{len(snapshots_to_process)} total")
     
     async def _process_snapshot(self, filename: str, snapshot: Dict, remote_path: str):
         """
