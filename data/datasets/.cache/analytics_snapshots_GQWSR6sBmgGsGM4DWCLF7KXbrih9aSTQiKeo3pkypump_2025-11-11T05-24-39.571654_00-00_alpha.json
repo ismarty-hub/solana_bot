@@ -1,0 +1,1529 @@
+{
+  "snapshot_id": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump_2025-11-11T05-24-39.571654_00-00_alpha",
+  "generated_at_utc": "2025-11-11T05:29:16.932527+00:00",
+  "inputs": {
+    "signal_data": {
+      "ts": "2025-11-11T05:24:39.571654+00:00",
+      "result": {
+        "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+        "checked_at": "2025-11-11T05:24:39.130232+00:00",
+        "overlap_count": 17,
+        "overlap_percentage": 27.87,
+        "concentration": 0.16,
+        "weighted_concentration": 0.18,
+        "total_winner_wallets": 10460,
+        "grade": "MEDIUM",
+        "overlap_wallets_sample": [
+          "ACjtaBVhbHdt2tBuYbRWk6WsFrfqmxoLEiRShYYkCiV7",
+          "CkUZV387xnoGpF7wC2moMa6mPmAgCvTT4pWgzq4M9fCD",
+          "BKYYNoYNEmDNB4kgqQ12jHHEmGpLFK9hgjsBUjt3Cu6i",
+          "9ihdDgE8VVDmtCFZBc5KgC6bcDtBZzWr3iLXZ78v38ok",
+          "2q8mLo4wAGn4R1GxvD4Bh5pFYT7q7eSZyoSjvtFAvNAf",
+          "HvyWj1HpkPNiBUgT76921zpwKxJwFEMtqQ8gtti75rxu",
+          "C9acVNtta41oJjQMbye5W7hqEzZ9uK9cGAQASCBKKMWi",
+          "AvGQNqcVWpEwvHdLVqLbM4ZCcL1Ash1zV4Dafiue4WJM",
+          "86a1DTKh4qc2wezN45WfMVTfth3N6aFftz53ZiXS1EZ4",
+          "3pCdgi5jbuTLs3CG43uqX58yLxzbBmFHZjjQnX3JT2KX",
+          "DxM1hfY8FQ8dNGrucuJzhJcF8KRbjk8WBwrgKvQ9spPv",
+          "9gDKRTozNd9d41VoYv1MWhRYHYuqr5RufoAymeDaaJz5",
+          "GkPG5Exq8RfTdsyFAAKoMGma64yQDb7KwXdMKtvDhvCN",
+          "nSu6b3NgTMSSGgqqWag58DqFUaNVUdB13sX1jtePPcf",
+          "6ivKY4P9BU2SBqHVndAaHDWWzrnv3ntWt7styFAo2qzw",
+          "GijFWw4oNyh9ko3FaZforNsi3jk6wDovARpkKahPD4o5",
+          "5gyGxtHtfV6iKLPuj6mgkWsKMgwdbizNiUuSbTxMkA9v"
+        ],
+        "security": {
+          "rugcheck_passed": true,
+          "probation": false,
+          "probation_reason": null,
+          "rugcheck": {
+            "rugged": false,
+            "top1_holder_pct": 19.404554052119366,
+            "holder_count": 1013,
+            "has_authorities": false,
+            "creator_balance": 0,
+            "freeze_authority": null,
+            "mint_authority": null,
+            "transfer_fee_pct": 0,
+            "lp_locked_pct": 100.0,
+            "total_liquidity_usd": 35384.20403616131
+          },
+          "rugcheck_raw": {
+            "ok": true,
+            "rugged": false,
+            "total_holders": 1013,
+            "top1_holder_pct": 19.404554052119366,
+            "creator_balance": 0,
+            "freeze_authority": null,
+            "mint_authority": null,
+            "has_authorities": false,
+            "transfer_fee_pct": 0,
+            "total_lp_usd": 35384.20403616131,
+            "overall_lp_locked_pct": 100.0,
+            "lp_lock_sufficient": true,
+            "probation": false,
+            "probation_meta": {
+              "probation": false,
+              "top_n_pct": 24.387937,
+              "top_n": 3,
+              "threshold_pct": 40.0,
+              "explanation": "Top 3 holders own 24.39% of supply; threshold is >40.0%. Probation=False."
+            },
+            "raw": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+              "creator": "8Y1V8Ekg6JRDXpt1SsBvkYeh3UXYH89dtW4bU4FkGS6U",
+              "creatorBalance": 0,
+              "token": {
+                "mintAuthority": null,
+                "supply": 999741118512800,
+                "decimals": 6,
+                "isInitialized": true,
+                "freezeAuthority": null
+              },
+              "token_extensions": null,
+              "tokenMeta": {
+                "name": "Break The Ceiling",
+                "symbol": "BTC",
+                "uri": "https://metadata.rapidlaunch.io/metadata/97b9d269-6280-4394-a736-6089321beb53.json",
+                "mutable": false,
+                "updateAuthority": "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM"
+              },
+              "topHolders": [
+                {
+                  "address": "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY",
+                  "amount": 193995305723079,
+                  "decimals": 6,
+                  "pct": 19.404554052119366,
+                  "uiAmount": 193995305.723079,
+                  "uiAmountString": "193995305.723079",
+                  "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+                  "insider": false
+                },
+                {
+                  "address": "8u7Yn1yzpjrPB6nuLVBvcycQG3RfrZAjDVL9VAwvuajQ",
+                  "amount": 25386018136314,
+                  "decimals": 6,
+                  "pct": 2.539259180824518,
+                  "uiAmount": 25386018.136314,
+                  "uiAmountString": "25386018.136314",
+                  "owner": "5YPo7LuXZuS2PtfLGhJGZsr2PU6bLgzRDgYwVfTrPKME",
+                  "insider": false
+                },
+                {
+                  "address": "9u1AUYhoXrRRR17G2jeJusL8f85VyPVGGPQFw4rBj5bt",
+                  "amount": 24434909270914,
+                  "decimals": 6,
+                  "pct": 2.444123665460815,
+                  "uiAmount": 24434909.270914,
+                  "uiAmountString": "24434909.270914",
+                  "owner": "5qWge4zUyQenk53EhAAQ5yP4LWxuvdqJpRBZZbGd4tv9",
+                  "insider": false
+                },
+                {
+                  "address": "5zNBYuaZXyY3HxBZ6QypPP169j9MRmrxHsYx9Vg6uD4k",
+                  "amount": 21783447973075,
+                  "decimals": 6,
+                  "pct": 2.178908876477916,
+                  "uiAmount": 21783447.973075,
+                  "uiAmountString": "21783447.973075",
+                  "owner": "2ZauLiumZKpQe9TBz5wNZEJ142Su3tkxqPDHvXxN3rXR",
+                  "insider": false
+                },
+                {
+                  "address": "Gs7mya4q82S7TrfvXbfn1N5k9Ei7VK5swntd4E2WiCZ3",
+                  "amount": 20782896111564,
+                  "decimals": 6,
+                  "pct": 2.0788277811840254,
+                  "uiAmount": 20782896.111564,
+                  "uiAmountString": "20782896.111564",
+                  "owner": "5rxjtTmv1e7WrS8BSaRijVYGAD2ZZpDVb64YDyWrSFj6",
+                  "insider": false
+                },
+                {
+                  "address": "7GL1LQ4SfAEqsMeNrRAv5tp8NqQZEqeV5oVnfwysMTgg",
+                  "amount": 19738416577611,
+                  "decimals": 6,
+                  "pct": 1.9743527811453405,
+                  "uiAmount": 19738416.577611,
+                  "uiAmountString": "19738416.577611",
+                  "owner": "2q8mLo4wAGn4R1GxvD4Bh5pFYT7q7eSZyoSjvtFAvNAf",
+                  "insider": false
+                },
+                {
+                  "address": "DADPiUQXG7knh34CQPoX1fVNbPdHyHya1B77cQ5MBAhf",
+                  "amount": 19081328467647,
+                  "decimals": 6,
+                  "pct": 1.9086269549493071,
+                  "uiAmount": 19081328.467647,
+                  "uiAmountString": "19081328.467647",
+                  "owner": "URjS4UeWKJpqBXubhynD2WgmdXy7GBv7PHt5sjSufsE",
+                  "insider": false
+                },
+                {
+                  "address": "6ANN76PekVAF83LJuJa4gVbVaxTssephJLbjfXovUFEA",
+                  "amount": 17344853784323,
+                  "decimals": 6,
+                  "pct": 1.7349345208612552,
+                  "uiAmount": 17344853.784323,
+                  "uiAmountString": "17344853.784323",
+                  "owner": "7WpUUSnZ9BkfLv5XJ2CHVU4uuPrnxC9tH5tDP8gbSxRF",
+                  "insider": false
+                },
+                {
+                  "address": "CmzgFBub9ZmeLu1JA3ayXsbZVrGge1zrSocR4NmwuZ9j",
+                  "amount": 17270725447130,
+                  "decimals": 6,
+                  "pct": 1.7275197675996037,
+                  "uiAmount": 17270725.44713,
+                  "uiAmountString": "17270725.44713",
+                  "owner": "2Ju1JhcvpaPDL8r7n7P1hdXM8n8sQGgKsybpUv4S8sEg",
+                  "insider": false
+                },
+                {
+                  "address": "BuuAQJiL6WwpobmSoq3Jg9mvvxDYyAVH2UN8hsNCA2Rn",
+                  "amount": 16515354363785,
+                  "decimals": 6,
+                  "pct": 1.6519630990423795,
+                  "uiAmount": 16515354.363785,
+                  "uiAmountString": "16515354.363785",
+                  "owner": "5RMUeDQyFA2z9vKAD3mE5kKeGPRvaqS4LJ6aji6F1v8R",
+                  "insider": false
+                },
+                {
+                  "address": "6eCh2AQG5rgWLQbyApyMg2u9pZ1uycKvL1CMHzMHfsVj",
+                  "amount": 16399845995882,
+                  "decimals": 6,
+                  "pct": 1.6404092711799396,
+                  "uiAmount": 16399845.995882,
+                  "uiAmountString": "16399845.995882",
+                  "owner": "AvGQNqcVWpEwvHdLVqLbM4ZCcL1Ash1zV4Dafiue4WJM",
+                  "insider": false
+                },
+                {
+                  "address": "7q6aeRNqkWT2qfTN32y1PbaWd3AhheQHNv6zJf8ZNwiY",
+                  "amount": 14775504841773,
+                  "decimals": 6,
+                  "pct": 1.4779330936945778,
+                  "uiAmount": 14775504.841773,
+                  "uiAmountString": "14775504.841773",
+                  "owner": "HL4ZnUDyo9rAacaGVtyL6cpX6zZAwJ96xsTWHuuUY7NE",
+                  "insider": false
+                },
+                {
+                  "address": "7w8W5MvJCJQg7NWz1u1dn4i2RUCdRpchh3eK9bNNNkMA",
+                  "amount": 14372545593187,
+                  "decimals": 6,
+                  "pct": 1.4376267342657052,
+                  "uiAmount": 14372545.593187,
+                  "uiAmountString": "14372545.593187",
+                  "owner": "BKYYNoYNEmDNB4kgqQ12jHHEmGpLFK9hgjsBUjt3Cu6i",
+                  "insider": false
+                },
+                {
+                  "address": "7Ut479XKajyhAkGTfvgvhkQ39UGacofycQ184s8U4Vvr",
+                  "amount": 13711885779562,
+                  "decimals": 6,
+                  "pct": 1.3715436452148329,
+                  "uiAmount": 13711885.779562,
+                  "uiAmountString": "13711885.779562",
+                  "owner": "Fevc2xaJhjHShpVpRYpWKgfG1j8MBUU45ZDPHZMNSV9b",
+                  "insider": false
+                },
+                {
+                  "address": "4H7YFWQYXpyKpCFGmQ2XCUKSffRx2J36ZX4xsLSCqnaY",
+                  "amount": 13061056284212,
+                  "decimals": 6,
+                  "pct": 1.3064438425461016,
+                  "uiAmount": 13061056.284212,
+                  "uiAmountString": "13061056.284212",
+                  "owner": "CSa4uimiuo4Ykjd8b7AeM2LLn3SjxSPH1H37gnBfGVbV",
+                  "insider": false
+                },
+                {
+                  "address": "AiFmvZmmKK8uJnzHEdUn4gKqctDxBYw5h3WBYqtCX5zS",
+                  "amount": 12994148724968,
+                  "decimals": 6,
+                  "pct": 1.2997513540603294,
+                  "uiAmount": 12994148.724968,
+                  "uiAmountString": "12994148.724968",
+                  "owner": "ps4FvdRBVaij5HuUXKk9aZ1H3NofAHeVLd83GTipURb",
+                  "insider": false
+                },
+                {
+                  "address": "BJLnBUzipAs6yRw3Yu925RSc5L2aGF1CHNB7Y7ZuB9oC",
+                  "amount": 12555655555207,
+                  "decimals": 6,
+                  "pct": 1.2558906823683123,
+                  "uiAmount": 12555655.555207,
+                  "uiAmountString": "12555655.555207",
+                  "owner": "3pCdgi5jbuTLs3CG43uqX58yLxzbBmFHZjjQnX3JT2KX",
+                  "insider": false
+                },
+                {
+                  "address": "DHeXhHESXUEELnvbBsYvD1oMfBMs4iVsia94yq6fbKYh",
+                  "amount": 11849542876843,
+                  "decimals": 6,
+                  "pct": 1.1852611298483156,
+                  "uiAmount": 11849542.876843,
+                  "uiAmountString": "11849542.876843",
+                  "owner": "nSu6b3NgTMSSGgqqWag58DqFUaNVUdB13sX1jtePPcf",
+                  "insider": false
+                },
+                {
+                  "address": "FWu4ETQ5qfVfZeCpXSixmPHEKSGBu5bNPmczUqxgi3E2",
+                  "amount": 11765676585210,
+                  "decimals": 6,
+                  "pct": 1.176872328979771,
+                  "uiAmount": 11765676.58521,
+                  "uiAmountString": "11765676.58521",
+                  "owner": "HkUH3VBkmVxnFmfxGvcjE4dXFqGkNRGF9LqZG836coUG",
+                  "insider": false
+                },
+                {
+                  "address": "Gh2FKZexQWQCgHg1GYur541BamNEJr6AgENStiUh6gta",
+                  "amount": 11719154894807,
+                  "decimals": 6,
+                  "pct": 1.1722189552671636,
+                  "uiAmount": 11719154.894807,
+                  "uiAmountString": "11719154.894807",
+                  "owner": "DxM1hfY8FQ8dNGrucuJzhJcF8KRbjk8WBwrgKvQ9spPv",
+                  "insider": false
+                }
+              ],
+              "freezeAuthority": null,
+              "mintAuthority": null,
+              "risks": [],
+              "score": 1,
+              "score_normalised": 1,
+              "fileMeta": {
+                "description": "",
+                "name": "Break The Ceiling",
+                "symbol": "BTC",
+                "image": "https://metadata.rapidlaunch.io/images/97b9d269-6280-4394-a736-6089321beb53.png"
+              },
+              "lockerOwners": {},
+              "lockers": {},
+              "markets": [
+                {
+                  "pubkey": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+                  "marketType": "pump_fun_amm",
+                  "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                  "mintB": "So11111111111111111111111111111111111111112",
+                  "mintLP": "FT2C7Pq3xb2bmrHHzBBTRcVWSD6gG34pGzjq3xKuo1r2",
+                  "liquidityA": "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY",
+                  "liquidityB": "HHoky3qq1xeen9gk1dGi3F5M7JKPqgpCKHC6rCGXRjZk",
+                  "mintAAccount": {
+                    "mintAuthority": null,
+                    "supply": 999741118512800,
+                    "decimals": 6,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintBAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintLPAccount": {
+                    "mintAuthority": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "liquidityAAccount": {
+                    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+                    "amount": 190197160843090,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "liquidityBAccount": {
+                    "mint": "So11111111111111111111111111111111111111112",
+                    "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+                    "amount": 103634841510,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "lp": {
+                    "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "quoteMint": "So11111111111111111111111111111111111111112",
+                    "lpMint": "FT2C7Pq3xb2bmrHHzBBTRcVWSD6gG34pGzjq3xKuo1r2",
+                    "quotePrice": 165.56753727415344,
+                    "basePrice": 9.582497693847964e-05,
+                    "base": 190197160.84309,
+                    "quote": 103.63484151,
+                    "reserveSupply": 4193388290228,
+                    "currentSupply": 0,
+                    "quoteUSD": 17158.56548460791,
+                    "baseUSD": 18225.638551553402,
+                    "pctReserve": 0,
+                    "pctSupply": 0,
+                    "holders": null,
+                    "totalTokensUnlocked": 0,
+                    "tokenSupply": 0,
+                    "lpLocked": 4193388290228,
+                    "lpUnlocked": 0,
+                    "lpLockedPct": 100,
+                    "lpLockedUSD": 35384.20403616131,
+                    "lpMaxSupply": 0,
+                    "lpCurrentSupply": 0,
+                    "lpTotalSupply": 4193388290228
+                  }
+                },
+                {
+                  "pubkey": "8hKDjjL7UQvv94vKadAsXH8xBe4z6DvkzdQci5wgtDUR",
+                  "marketType": "meteora_damm_v2",
+                  "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                  "mintB": "So11111111111111111111111111111111111111112",
+                  "mintLP": "11111111111111111111111111111111",
+                  "liquidityA": "FNEdKeN7D7rtMjEzmz9HwJ8fzHUoqq1PSzstHgsRCC1V",
+                  "liquidityB": "3rtcrNZ5ErYqRV6EHnuCLSkdPUR2tVBtMrWSBafu9StT",
+                  "mintAAccount": {
+                    "mintAuthority": null,
+                    "supply": 999741118512800,
+                    "decimals": 6,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintBAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintLPAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 0,
+                    "isInitialized": false,
+                    "freezeAuthority": null
+                  },
+                  "liquidityAAccount": {
+                    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 140866606304,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "liquidityBAccount": {
+                    "mint": "So11111111111111111111111111111111111111112",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 78381959,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "lp": {
+                    "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "quoteMint": "So11111111111111111111111111111111111111112",
+                    "lpMint": "11111111111111111111111111111111",
+                    "quotePrice": 165.56753727415344,
+                    "basePrice": 9.582497693847964e-05,
+                    "base": 140866.606304,
+                    "quote": 0.078381959,
+                    "reserveSupply": 0,
+                    "currentSupply": 0,
+                    "quoteUSD": 12.977507918353666,
+                    "baseUSD": 13.498539300482689,
+                    "pctReserve": 0,
+                    "pctSupply": 0,
+                    "holders": null,
+                    "totalTokensUnlocked": 0,
+                    "tokenSupply": 0,
+                    "lpLocked": 0,
+                    "lpUnlocked": 0,
+                    "lpLockedPct": 0,
+                    "lpLockedUSD": 0,
+                    "lpMaxSupply": 0,
+                    "lpCurrentSupply": 0,
+                    "lpTotalSupply": 0
+                  }
+                },
+                {
+                  "pubkey": "9vHG6HWuhTZsJsJMVRkTqXmWRLZj3wpK6oywCuKCBogG",
+                  "marketType": "meteora_damm_v2",
+                  "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                  "mintB": "So11111111111111111111111111111111111111112",
+                  "mintLP": "11111111111111111111111111111111",
+                  "liquidityA": "61EoCFDffP6kcGQeyR1ivtmxqymXNnnrEwaL51ZJZ5Wp",
+                  "liquidityB": "ELYfw1iMhhNXtYjQYUwfa9YVFVYor1PuG3jcnPRuJdnc",
+                  "mintAAccount": {
+                    "mintAuthority": null,
+                    "supply": 999741118512800,
+                    "decimals": 6,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintBAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintLPAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 0,
+                    "isInitialized": false,
+                    "freezeAuthority": null
+                  },
+                  "liquidityAAccount": {
+                    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 6682175312,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "liquidityBAccount": {
+                    "mint": "So11111111111111111111111111111111111111112",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 61727677,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "lp": {
+                    "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "quoteMint": "So11111111111111111111111111111111111111112",
+                    "lpMint": "11111111111111111111111111111111",
+                    "quotePrice": 165.56753727415344,
+                    "basePrice": 9.582497693847964e-05,
+                    "base": 6682.175312,
+                    "quote": 0.061727677,
+                    "reserveSupply": 0,
+                    "currentSupply": 0,
+                    "quoteUSD": 10.220099462544404,
+                    "baseUSD": 0.6403192951712781,
+                    "pctReserve": 0,
+                    "pctSupply": 0,
+                    "holders": null,
+                    "totalTokensUnlocked": 0,
+                    "tokenSupply": 0,
+                    "lpLocked": 0,
+                    "lpUnlocked": 0,
+                    "lpLockedPct": 0,
+                    "lpLockedUSD": 0,
+                    "lpMaxSupply": 0,
+                    "lpCurrentSupply": 0,
+                    "lpTotalSupply": 0
+                  }
+                },
+                {
+                  "pubkey": "2bLseW9mktZDS8A25MxaWnKusLuNdfwuJvZZ4rQsYvEQ",
+                  "marketType": "meteora_damm_v2",
+                  "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                  "mintB": "So11111111111111111111111111111111111111112",
+                  "mintLP": "11111111111111111111111111111111",
+                  "liquidityA": "FzYJYHNNGog2s5yDkUgGaSNpUqLsySUMz8dm6qXSMpkN",
+                  "liquidityB": "CXf2oeVVgtAcJFUq9KhGrAuLEZ9WgvPa6ZN2B9kJm1HU",
+                  "mintAAccount": {
+                    "mintAuthority": null,
+                    "supply": 999741118512800,
+                    "decimals": 6,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintBAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintLPAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 0,
+                    "isInitialized": false,
+                    "freezeAuthority": null
+                  },
+                  "liquidityAAccount": {
+                    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 39644575085,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "liquidityBAccount": {
+                    "mint": "So11111111111111111111111111111111111111112",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 28543676,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "lp": {
+                    "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "quoteMint": "So11111111111111111111111111111111111111112",
+                    "lpMint": "11111111111111111111111111111111",
+                    "quotePrice": 165.56753727415344,
+                    "basePrice": 9.582497693847964e-05,
+                    "base": 39644.575085,
+                    "quote": 0.028543676,
+                    "reserveSupply": 0,
+                    "currentSupply": 0,
+                    "quoteUSD": 4.725906140071359,
+                    "baseUSD": 3.7989404932559494,
+                    "pctReserve": 0,
+                    "pctSupply": 0,
+                    "holders": null,
+                    "totalTokensUnlocked": 0,
+                    "tokenSupply": 0,
+                    "lpLocked": 0,
+                    "lpUnlocked": 0,
+                    "lpLockedPct": 0,
+                    "lpLockedUSD": 0,
+                    "lpMaxSupply": 0,
+                    "lpCurrentSupply": 0,
+                    "lpTotalSupply": 0
+                  }
+                },
+                {
+                  "pubkey": "2S28vVw6VpGhcCN8kw9cWyo9uKW1wvUu7HHGot7GSQZY",
+                  "marketType": "meteora_damm_v2",
+                  "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                  "mintB": "So11111111111111111111111111111111111111112",
+                  "mintLP": "11111111111111111111111111111111",
+                  "liquidityA": "F24dXk15SBScMdKRp539S5XBKmJoiN4vfN7B5DfDoZss",
+                  "liquidityB": "fANSHBRxZxSUJrFdpQvJRhTkmXWrcLbWRsJfYmvKpZ3",
+                  "mintAAccount": {
+                    "mintAuthority": null,
+                    "supply": 999741118512800,
+                    "decimals": 6,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintBAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 9,
+                    "isInitialized": true,
+                    "freezeAuthority": null
+                  },
+                  "mintLPAccount": {
+                    "mintAuthority": null,
+                    "supply": 0,
+                    "decimals": 0,
+                    "isInitialized": false,
+                    "freezeAuthority": null
+                  },
+                  "liquidityAAccount": {
+                    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 1,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "liquidityBAccount": {
+                    "mint": "So11111111111111111111111111111111111111112",
+                    "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+                    "amount": 1954997,
+                    "delegate": null,
+                    "state": 1,
+                    "delegatedAmount": 0,
+                    "closeAuthority": null
+                  },
+                  "lp": {
+                    "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+                    "quoteMint": "So11111111111111111111111111111111111111112",
+                    "lpMint": "11111111111111111111111111111111",
+                    "quotePrice": 165.56753727415344,
+                    "basePrice": 9.582497693847964e-05,
+                    "base": 1e-06,
+                    "quote": 0.001954997,
+                    "reserveSupply": 0,
+                    "currentSupply": 0,
+                    "quoteUSD": 0.32368403866835815,
+                    "baseUSD": 9.582497693847964e-11,
+                    "pctReserve": 0,
+                    "pctSupply": 0,
+                    "holders": null,
+                    "totalTokensUnlocked": 0,
+                    "tokenSupply": 0,
+                    "lpLocked": 0,
+                    "lpUnlocked": 0,
+                    "lpLockedPct": 0,
+                    "lpLockedUSD": 0,
+                    "lpMaxSupply": 0,
+                    "lpCurrentSupply": 0,
+                    "lpTotalSupply": 0
+                  }
+                }
+              ],
+              "totalMarketLiquidity": 35430.38903280995,
+              "totalStableLiquidity": 17186.812682167547,
+              "totalLPProviders": 0,
+              "totalHolders": 1013,
+              "price": 8.579470439866586e-05,
+              "rugged": false,
+              "tokenType": "",
+              "transferFee": {
+                "pct": 0,
+                "maxAmount": 0,
+                "authority": "11111111111111111111111111111111"
+              },
+              "knownAccounts": {
+                "3rtcrNZ5ErYqRV6EHnuCLSkdPUR2tVBtMrWSBafu9StT": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "5BuNabJ5MHnaDyyicuG1VB8ypYYKNhJjEWrgmfQQPoBE": {
+                  "name": "Pump Fun",
+                  "type": "AMM"
+                },
+                "61EoCFDffP6kcGQeyR1ivtmxqymXNnnrEwaL51ZJZ5Wp": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT": {
+                  "name": "Pump Fun AMM",
+                  "type": "AMM"
+                },
+                "8Y1V8Ekg6JRDXpt1SsBvkYeh3UXYH89dtW4bU4FkGS6U": {
+                  "name": "Creator",
+                  "type": "CREATOR"
+                },
+                "CXf2oeVVgtAcJFUq9KhGrAuLEZ9WgvPa6ZN2B9kJm1HU": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "EHXK2bQDZGbKknh5uYJBbfnbqBmmVkSwsAdtf4Sc8qXX": {
+                  "name": "Pump Fun",
+                  "type": "AMM"
+                },
+                "ELYfw1iMhhNXtYjQYUwfa9YVFVYor1PuG3jcnPRuJdnc": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "F24dXk15SBScMdKRp539S5XBKmJoiN4vfN7B5DfDoZss": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "FNEdKeN7D7rtMjEzmz9HwJ8fzHUoqq1PSzstHgsRCC1V": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "FzYJYHNNGog2s5yDkUgGaSNpUqLsySUMz8dm6qXSMpkN": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                },
+                "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY": {
+                  "name": "Pump Fun AMM",
+                  "type": "AMM"
+                },
+                "HHoky3qq1xeen9gk1dGi3F5M7JKPqgpCKHC6rCGXRjZk": {
+                  "name": "Pump Fun AMM",
+                  "type": "AMM"
+                },
+                "fANSHBRxZxSUJrFdpQvJRhTkmXWrcLbWRsJfYmvKpZ3": {
+                  "name": "Meteora DAMM v2 Pool",
+                  "type": "AMM"
+                }
+              },
+              "events": [],
+              "verification": null,
+              "graphInsidersDetected": 0,
+              "insiderNetworks": null,
+              "detectedAt": "2025-11-11T00:01:00.209578324Z",
+              "creatorTokens": null,
+              "launchpad": {
+                "name": "Pump.Fun",
+                "logo": "https://api.rugcheck.xyz/public/logos/pump_fun.png",
+                "url": "https://x.com/moonshot",
+                "platform": "pump_fun"
+              },
+              "deployPlatform": "rapidlaunch"
+            }
+          }
+        },
+        "needs_monitoring": false,
+        "skip_reason": null,
+        "dexscreener": {
+          "current_price_usd": 0.0001372
+        }
+      },
+      "check_type": "new_discovery",
+      "security": "passed"
+    },
+    "dexscreener_raw": {
+      "error": "not_fetched_or_failed"
+    },
+    "rugcheck_raw": {
+      "ok": true,
+      "rugged": false,
+      "total_holders": 1013,
+      "top1_holder_pct": 19.404554052119366,
+      "creator_balance": 0,
+      "freeze_authority": null,
+      "mint_authority": null,
+      "has_authorities": false,
+      "transfer_fee_pct": 0,
+      "total_lp_usd": 35384.20403616131,
+      "overall_lp_locked_pct": 100.0,
+      "lp_lock_sufficient": true,
+      "probation": false,
+      "probation_meta": {
+        "probation": false,
+        "top_n_pct": 24.387937,
+        "top_n": 3,
+        "threshold_pct": 40.0,
+        "explanation": "Top 3 holders own 24.39% of supply; threshold is >40.0%. Probation=False."
+      },
+      "raw": {
+        "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+        "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "creator": "8Y1V8Ekg6JRDXpt1SsBvkYeh3UXYH89dtW4bU4FkGS6U",
+        "creatorBalance": 0,
+        "token": {
+          "mintAuthority": null,
+          "supply": 999741118512800,
+          "decimals": 6,
+          "isInitialized": true,
+          "freezeAuthority": null
+        },
+        "token_extensions": null,
+        "tokenMeta": {
+          "name": "Break The Ceiling",
+          "symbol": "BTC",
+          "uri": "https://metadata.rapidlaunch.io/metadata/97b9d269-6280-4394-a736-6089321beb53.json",
+          "mutable": false,
+          "updateAuthority": "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM"
+        },
+        "topHolders": [
+          {
+            "address": "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY",
+            "amount": 193995305723079,
+            "decimals": 6,
+            "pct": 19.404554052119366,
+            "uiAmount": 193995305.723079,
+            "uiAmountString": "193995305.723079",
+            "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+            "insider": false
+          },
+          {
+            "address": "8u7Yn1yzpjrPB6nuLVBvcycQG3RfrZAjDVL9VAwvuajQ",
+            "amount": 25386018136314,
+            "decimals": 6,
+            "pct": 2.539259180824518,
+            "uiAmount": 25386018.136314,
+            "uiAmountString": "25386018.136314",
+            "owner": "5YPo7LuXZuS2PtfLGhJGZsr2PU6bLgzRDgYwVfTrPKME",
+            "insider": false
+          },
+          {
+            "address": "9u1AUYhoXrRRR17G2jeJusL8f85VyPVGGPQFw4rBj5bt",
+            "amount": 24434909270914,
+            "decimals": 6,
+            "pct": 2.444123665460815,
+            "uiAmount": 24434909.270914,
+            "uiAmountString": "24434909.270914",
+            "owner": "5qWge4zUyQenk53EhAAQ5yP4LWxuvdqJpRBZZbGd4tv9",
+            "insider": false
+          },
+          {
+            "address": "5zNBYuaZXyY3HxBZ6QypPP169j9MRmrxHsYx9Vg6uD4k",
+            "amount": 21783447973075,
+            "decimals": 6,
+            "pct": 2.178908876477916,
+            "uiAmount": 21783447.973075,
+            "uiAmountString": "21783447.973075",
+            "owner": "2ZauLiumZKpQe9TBz5wNZEJ142Su3tkxqPDHvXxN3rXR",
+            "insider": false
+          },
+          {
+            "address": "Gs7mya4q82S7TrfvXbfn1N5k9Ei7VK5swntd4E2WiCZ3",
+            "amount": 20782896111564,
+            "decimals": 6,
+            "pct": 2.0788277811840254,
+            "uiAmount": 20782896.111564,
+            "uiAmountString": "20782896.111564",
+            "owner": "5rxjtTmv1e7WrS8BSaRijVYGAD2ZZpDVb64YDyWrSFj6",
+            "insider": false
+          },
+          {
+            "address": "7GL1LQ4SfAEqsMeNrRAv5tp8NqQZEqeV5oVnfwysMTgg",
+            "amount": 19738416577611,
+            "decimals": 6,
+            "pct": 1.9743527811453405,
+            "uiAmount": 19738416.577611,
+            "uiAmountString": "19738416.577611",
+            "owner": "2q8mLo4wAGn4R1GxvD4Bh5pFYT7q7eSZyoSjvtFAvNAf",
+            "insider": false
+          },
+          {
+            "address": "DADPiUQXG7knh34CQPoX1fVNbPdHyHya1B77cQ5MBAhf",
+            "amount": 19081328467647,
+            "decimals": 6,
+            "pct": 1.9086269549493071,
+            "uiAmount": 19081328.467647,
+            "uiAmountString": "19081328.467647",
+            "owner": "URjS4UeWKJpqBXubhynD2WgmdXy7GBv7PHt5sjSufsE",
+            "insider": false
+          },
+          {
+            "address": "6ANN76PekVAF83LJuJa4gVbVaxTssephJLbjfXovUFEA",
+            "amount": 17344853784323,
+            "decimals": 6,
+            "pct": 1.7349345208612552,
+            "uiAmount": 17344853.784323,
+            "uiAmountString": "17344853.784323",
+            "owner": "7WpUUSnZ9BkfLv5XJ2CHVU4uuPrnxC9tH5tDP8gbSxRF",
+            "insider": false
+          },
+          {
+            "address": "CmzgFBub9ZmeLu1JA3ayXsbZVrGge1zrSocR4NmwuZ9j",
+            "amount": 17270725447130,
+            "decimals": 6,
+            "pct": 1.7275197675996037,
+            "uiAmount": 17270725.44713,
+            "uiAmountString": "17270725.44713",
+            "owner": "2Ju1JhcvpaPDL8r7n7P1hdXM8n8sQGgKsybpUv4S8sEg",
+            "insider": false
+          },
+          {
+            "address": "BuuAQJiL6WwpobmSoq3Jg9mvvxDYyAVH2UN8hsNCA2Rn",
+            "amount": 16515354363785,
+            "decimals": 6,
+            "pct": 1.6519630990423795,
+            "uiAmount": 16515354.363785,
+            "uiAmountString": "16515354.363785",
+            "owner": "5RMUeDQyFA2z9vKAD3mE5kKeGPRvaqS4LJ6aji6F1v8R",
+            "insider": false
+          },
+          {
+            "address": "6eCh2AQG5rgWLQbyApyMg2u9pZ1uycKvL1CMHzMHfsVj",
+            "amount": 16399845995882,
+            "decimals": 6,
+            "pct": 1.6404092711799396,
+            "uiAmount": 16399845.995882,
+            "uiAmountString": "16399845.995882",
+            "owner": "AvGQNqcVWpEwvHdLVqLbM4ZCcL1Ash1zV4Dafiue4WJM",
+            "insider": false
+          },
+          {
+            "address": "7q6aeRNqkWT2qfTN32y1PbaWd3AhheQHNv6zJf8ZNwiY",
+            "amount": 14775504841773,
+            "decimals": 6,
+            "pct": 1.4779330936945778,
+            "uiAmount": 14775504.841773,
+            "uiAmountString": "14775504.841773",
+            "owner": "HL4ZnUDyo9rAacaGVtyL6cpX6zZAwJ96xsTWHuuUY7NE",
+            "insider": false
+          },
+          {
+            "address": "7w8W5MvJCJQg7NWz1u1dn4i2RUCdRpchh3eK9bNNNkMA",
+            "amount": 14372545593187,
+            "decimals": 6,
+            "pct": 1.4376267342657052,
+            "uiAmount": 14372545.593187,
+            "uiAmountString": "14372545.593187",
+            "owner": "BKYYNoYNEmDNB4kgqQ12jHHEmGpLFK9hgjsBUjt3Cu6i",
+            "insider": false
+          },
+          {
+            "address": "7Ut479XKajyhAkGTfvgvhkQ39UGacofycQ184s8U4Vvr",
+            "amount": 13711885779562,
+            "decimals": 6,
+            "pct": 1.3715436452148329,
+            "uiAmount": 13711885.779562,
+            "uiAmountString": "13711885.779562",
+            "owner": "Fevc2xaJhjHShpVpRYpWKgfG1j8MBUU45ZDPHZMNSV9b",
+            "insider": false
+          },
+          {
+            "address": "4H7YFWQYXpyKpCFGmQ2XCUKSffRx2J36ZX4xsLSCqnaY",
+            "amount": 13061056284212,
+            "decimals": 6,
+            "pct": 1.3064438425461016,
+            "uiAmount": 13061056.284212,
+            "uiAmountString": "13061056.284212",
+            "owner": "CSa4uimiuo4Ykjd8b7AeM2LLn3SjxSPH1H37gnBfGVbV",
+            "insider": false
+          },
+          {
+            "address": "AiFmvZmmKK8uJnzHEdUn4gKqctDxBYw5h3WBYqtCX5zS",
+            "amount": 12994148724968,
+            "decimals": 6,
+            "pct": 1.2997513540603294,
+            "uiAmount": 12994148.724968,
+            "uiAmountString": "12994148.724968",
+            "owner": "ps4FvdRBVaij5HuUXKk9aZ1H3NofAHeVLd83GTipURb",
+            "insider": false
+          },
+          {
+            "address": "BJLnBUzipAs6yRw3Yu925RSc5L2aGF1CHNB7Y7ZuB9oC",
+            "amount": 12555655555207,
+            "decimals": 6,
+            "pct": 1.2558906823683123,
+            "uiAmount": 12555655.555207,
+            "uiAmountString": "12555655.555207",
+            "owner": "3pCdgi5jbuTLs3CG43uqX58yLxzbBmFHZjjQnX3JT2KX",
+            "insider": false
+          },
+          {
+            "address": "DHeXhHESXUEELnvbBsYvD1oMfBMs4iVsia94yq6fbKYh",
+            "amount": 11849542876843,
+            "decimals": 6,
+            "pct": 1.1852611298483156,
+            "uiAmount": 11849542.876843,
+            "uiAmountString": "11849542.876843",
+            "owner": "nSu6b3NgTMSSGgqqWag58DqFUaNVUdB13sX1jtePPcf",
+            "insider": false
+          },
+          {
+            "address": "FWu4ETQ5qfVfZeCpXSixmPHEKSGBu5bNPmczUqxgi3E2",
+            "amount": 11765676585210,
+            "decimals": 6,
+            "pct": 1.176872328979771,
+            "uiAmount": 11765676.58521,
+            "uiAmountString": "11765676.58521",
+            "owner": "HkUH3VBkmVxnFmfxGvcjE4dXFqGkNRGF9LqZG836coUG",
+            "insider": false
+          },
+          {
+            "address": "Gh2FKZexQWQCgHg1GYur541BamNEJr6AgENStiUh6gta",
+            "amount": 11719154894807,
+            "decimals": 6,
+            "pct": 1.1722189552671636,
+            "uiAmount": 11719154.894807,
+            "uiAmountString": "11719154.894807",
+            "owner": "DxM1hfY8FQ8dNGrucuJzhJcF8KRbjk8WBwrgKvQ9spPv",
+            "insider": false
+          }
+        ],
+        "freezeAuthority": null,
+        "mintAuthority": null,
+        "risks": [],
+        "score": 1,
+        "score_normalised": 1,
+        "fileMeta": {
+          "description": "",
+          "name": "Break The Ceiling",
+          "symbol": "BTC",
+          "image": "https://metadata.rapidlaunch.io/images/97b9d269-6280-4394-a736-6089321beb53.png"
+        },
+        "lockerOwners": {},
+        "lockers": {},
+        "markets": [
+          {
+            "pubkey": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+            "marketType": "pump_fun_amm",
+            "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+            "mintB": "So11111111111111111111111111111111111111112",
+            "mintLP": "FT2C7Pq3xb2bmrHHzBBTRcVWSD6gG34pGzjq3xKuo1r2",
+            "liquidityA": "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY",
+            "liquidityB": "HHoky3qq1xeen9gk1dGi3F5M7JKPqgpCKHC6rCGXRjZk",
+            "mintAAccount": {
+              "mintAuthority": null,
+              "supply": 999741118512800,
+              "decimals": 6,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintBAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintLPAccount": {
+              "mintAuthority": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "liquidityAAccount": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+              "amount": 190197160843090,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "liquidityBAccount": {
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT",
+              "amount": 103634841510,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "lp": {
+              "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "quoteMint": "So11111111111111111111111111111111111111112",
+              "lpMint": "FT2C7Pq3xb2bmrHHzBBTRcVWSD6gG34pGzjq3xKuo1r2",
+              "quotePrice": 165.56753727415344,
+              "basePrice": 9.582497693847964e-05,
+              "base": 190197160.84309,
+              "quote": 103.63484151,
+              "reserveSupply": 4193388290228,
+              "currentSupply": 0,
+              "quoteUSD": 17158.56548460791,
+              "baseUSD": 18225.638551553402,
+              "pctReserve": 0,
+              "pctSupply": 0,
+              "holders": null,
+              "totalTokensUnlocked": 0,
+              "tokenSupply": 0,
+              "lpLocked": 4193388290228,
+              "lpUnlocked": 0,
+              "lpLockedPct": 100,
+              "lpLockedUSD": 35384.20403616131,
+              "lpMaxSupply": 0,
+              "lpCurrentSupply": 0,
+              "lpTotalSupply": 4193388290228
+            }
+          },
+          {
+            "pubkey": "8hKDjjL7UQvv94vKadAsXH8xBe4z6DvkzdQci5wgtDUR",
+            "marketType": "meteora_damm_v2",
+            "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+            "mintB": "So11111111111111111111111111111111111111112",
+            "mintLP": "11111111111111111111111111111111",
+            "liquidityA": "FNEdKeN7D7rtMjEzmz9HwJ8fzHUoqq1PSzstHgsRCC1V",
+            "liquidityB": "3rtcrNZ5ErYqRV6EHnuCLSkdPUR2tVBtMrWSBafu9StT",
+            "mintAAccount": {
+              "mintAuthority": null,
+              "supply": 999741118512800,
+              "decimals": 6,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintBAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintLPAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 0,
+              "isInitialized": false,
+              "freezeAuthority": null
+            },
+            "liquidityAAccount": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 140866606304,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "liquidityBAccount": {
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 78381959,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "lp": {
+              "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "quoteMint": "So11111111111111111111111111111111111111112",
+              "lpMint": "11111111111111111111111111111111",
+              "quotePrice": 165.56753727415344,
+              "basePrice": 9.582497693847964e-05,
+              "base": 140866.606304,
+              "quote": 0.078381959,
+              "reserveSupply": 0,
+              "currentSupply": 0,
+              "quoteUSD": 12.977507918353666,
+              "baseUSD": 13.498539300482689,
+              "pctReserve": 0,
+              "pctSupply": 0,
+              "holders": null,
+              "totalTokensUnlocked": 0,
+              "tokenSupply": 0,
+              "lpLocked": 0,
+              "lpUnlocked": 0,
+              "lpLockedPct": 0,
+              "lpLockedUSD": 0,
+              "lpMaxSupply": 0,
+              "lpCurrentSupply": 0,
+              "lpTotalSupply": 0
+            }
+          },
+          {
+            "pubkey": "9vHG6HWuhTZsJsJMVRkTqXmWRLZj3wpK6oywCuKCBogG",
+            "marketType": "meteora_damm_v2",
+            "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+            "mintB": "So11111111111111111111111111111111111111112",
+            "mintLP": "11111111111111111111111111111111",
+            "liquidityA": "61EoCFDffP6kcGQeyR1ivtmxqymXNnnrEwaL51ZJZ5Wp",
+            "liquidityB": "ELYfw1iMhhNXtYjQYUwfa9YVFVYor1PuG3jcnPRuJdnc",
+            "mintAAccount": {
+              "mintAuthority": null,
+              "supply": 999741118512800,
+              "decimals": 6,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintBAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintLPAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 0,
+              "isInitialized": false,
+              "freezeAuthority": null
+            },
+            "liquidityAAccount": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 6682175312,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "liquidityBAccount": {
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 61727677,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "lp": {
+              "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "quoteMint": "So11111111111111111111111111111111111111112",
+              "lpMint": "11111111111111111111111111111111",
+              "quotePrice": 165.56753727415344,
+              "basePrice": 9.582497693847964e-05,
+              "base": 6682.175312,
+              "quote": 0.061727677,
+              "reserveSupply": 0,
+              "currentSupply": 0,
+              "quoteUSD": 10.220099462544404,
+              "baseUSD": 0.6403192951712781,
+              "pctReserve": 0,
+              "pctSupply": 0,
+              "holders": null,
+              "totalTokensUnlocked": 0,
+              "tokenSupply": 0,
+              "lpLocked": 0,
+              "lpUnlocked": 0,
+              "lpLockedPct": 0,
+              "lpLockedUSD": 0,
+              "lpMaxSupply": 0,
+              "lpCurrentSupply": 0,
+              "lpTotalSupply": 0
+            }
+          },
+          {
+            "pubkey": "2bLseW9mktZDS8A25MxaWnKusLuNdfwuJvZZ4rQsYvEQ",
+            "marketType": "meteora_damm_v2",
+            "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+            "mintB": "So11111111111111111111111111111111111111112",
+            "mintLP": "11111111111111111111111111111111",
+            "liquidityA": "FzYJYHNNGog2s5yDkUgGaSNpUqLsySUMz8dm6qXSMpkN",
+            "liquidityB": "CXf2oeVVgtAcJFUq9KhGrAuLEZ9WgvPa6ZN2B9kJm1HU",
+            "mintAAccount": {
+              "mintAuthority": null,
+              "supply": 999741118512800,
+              "decimals": 6,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintBAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintLPAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 0,
+              "isInitialized": false,
+              "freezeAuthority": null
+            },
+            "liquidityAAccount": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 39644575085,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "liquidityBAccount": {
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 28543676,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "lp": {
+              "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "quoteMint": "So11111111111111111111111111111111111111112",
+              "lpMint": "11111111111111111111111111111111",
+              "quotePrice": 165.56753727415344,
+              "basePrice": 9.582497693847964e-05,
+              "base": 39644.575085,
+              "quote": 0.028543676,
+              "reserveSupply": 0,
+              "currentSupply": 0,
+              "quoteUSD": 4.725906140071359,
+              "baseUSD": 3.7989404932559494,
+              "pctReserve": 0,
+              "pctSupply": 0,
+              "holders": null,
+              "totalTokensUnlocked": 0,
+              "tokenSupply": 0,
+              "lpLocked": 0,
+              "lpUnlocked": 0,
+              "lpLockedPct": 0,
+              "lpLockedUSD": 0,
+              "lpMaxSupply": 0,
+              "lpCurrentSupply": 0,
+              "lpTotalSupply": 0
+            }
+          },
+          {
+            "pubkey": "2S28vVw6VpGhcCN8kw9cWyo9uKW1wvUu7HHGot7GSQZY",
+            "marketType": "meteora_damm_v2",
+            "mintA": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+            "mintB": "So11111111111111111111111111111111111111112",
+            "mintLP": "11111111111111111111111111111111",
+            "liquidityA": "F24dXk15SBScMdKRp539S5XBKmJoiN4vfN7B5DfDoZss",
+            "liquidityB": "fANSHBRxZxSUJrFdpQvJRhTkmXWrcLbWRsJfYmvKpZ3",
+            "mintAAccount": {
+              "mintAuthority": null,
+              "supply": 999741118512800,
+              "decimals": 6,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintBAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 9,
+              "isInitialized": true,
+              "freezeAuthority": null
+            },
+            "mintLPAccount": {
+              "mintAuthority": null,
+              "supply": 0,
+              "decimals": 0,
+              "isInitialized": false,
+              "freezeAuthority": null
+            },
+            "liquidityAAccount": {
+              "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 1,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "liquidityBAccount": {
+              "mint": "So11111111111111111111111111111111111111112",
+              "owner": "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC",
+              "amount": 1954997,
+              "delegate": null,
+              "state": 1,
+              "delegatedAmount": 0,
+              "closeAuthority": null
+            },
+            "lp": {
+              "baseMint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+              "quoteMint": "So11111111111111111111111111111111111111112",
+              "lpMint": "11111111111111111111111111111111",
+              "quotePrice": 165.56753727415344,
+              "basePrice": 9.582497693847964e-05,
+              "base": 1e-06,
+              "quote": 0.001954997,
+              "reserveSupply": 0,
+              "currentSupply": 0,
+              "quoteUSD": 0.32368403866835815,
+              "baseUSD": 9.582497693847964e-11,
+              "pctReserve": 0,
+              "pctSupply": 0,
+              "holders": null,
+              "totalTokensUnlocked": 0,
+              "tokenSupply": 0,
+              "lpLocked": 0,
+              "lpUnlocked": 0,
+              "lpLockedPct": 0,
+              "lpLockedUSD": 0,
+              "lpMaxSupply": 0,
+              "lpCurrentSupply": 0,
+              "lpTotalSupply": 0
+            }
+          }
+        ],
+        "totalMarketLiquidity": 35430.38903280995,
+        "totalStableLiquidity": 17186.812682167547,
+        "totalLPProviders": 0,
+        "totalHolders": 1013,
+        "price": 8.579470439866586e-05,
+        "rugged": false,
+        "tokenType": "",
+        "transferFee": {
+          "pct": 0,
+          "maxAmount": 0,
+          "authority": "11111111111111111111111111111111"
+        },
+        "knownAccounts": {
+          "3rtcrNZ5ErYqRV6EHnuCLSkdPUR2tVBtMrWSBafu9StT": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "5BuNabJ5MHnaDyyicuG1VB8ypYYKNhJjEWrgmfQQPoBE": {
+            "name": "Pump Fun",
+            "type": "AMM"
+          },
+          "61EoCFDffP6kcGQeyR1ivtmxqymXNnnrEwaL51ZJZ5Wp": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "6HHcbLGHkAtsNzQLpFReinoMDnewcoQphth5wa54cjGT": {
+            "name": "Pump Fun AMM",
+            "type": "AMM"
+          },
+          "8Y1V8Ekg6JRDXpt1SsBvkYeh3UXYH89dtW4bU4FkGS6U": {
+            "name": "Creator",
+            "type": "CREATOR"
+          },
+          "CXf2oeVVgtAcJFUq9KhGrAuLEZ9WgvPa6ZN2B9kJm1HU": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "EHXK2bQDZGbKknh5uYJBbfnbqBmmVkSwsAdtf4Sc8qXX": {
+            "name": "Pump Fun",
+            "type": "AMM"
+          },
+          "ELYfw1iMhhNXtYjQYUwfa9YVFVYor1PuG3jcnPRuJdnc": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "F24dXk15SBScMdKRp539S5XBKmJoiN4vfN7B5DfDoZss": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "FNEdKeN7D7rtMjEzmz9HwJ8fzHUoqq1PSzstHgsRCC1V": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "FzYJYHNNGog2s5yDkUgGaSNpUqLsySUMz8dm6qXSMpkN": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          },
+          "GAgLUqkmtxe6i3VQE3hEtjCqjfHd3aUoVSvzkfzp68oY": {
+            "name": "Pump Fun AMM",
+            "type": "AMM"
+          },
+          "HHoky3qq1xeen9gk1dGi3F5M7JKPqgpCKHC6rCGXRjZk": {
+            "name": "Pump Fun AMM",
+            "type": "AMM"
+          },
+          "fANSHBRxZxSUJrFdpQvJRhTkmXWrcLbWRsJfYmvKpZ3": {
+            "name": "Meteora DAMM v2 Pool",
+            "type": "AMM"
+          }
+        },
+        "events": [],
+        "verification": null,
+        "graphInsidersDetected": 0,
+        "insiderNetworks": null,
+        "detectedAt": "2025-11-11T00:01:00.209578324Z",
+        "creatorTokens": null,
+        "launchpad": {
+          "name": "Pump.Fun",
+          "logo": "https://api.rugcheck.xyz/public/logos/pump_fun.png",
+          "url": "https://x.com/moonshot",
+          "platform": "pump_fun"
+        },
+        "deployPlatform": "rapidlaunch"
+      }
+    },
+    "holiday_check": {
+      "countries": [
+        "US",
+        "GB",
+        "DE",
+        "JP",
+        "SG",
+        "KR",
+        "CN",
+        "CA",
+        "AU"
+      ],
+      "is_holiday": true
+    }
+  },
+  "features": {
+    "mint": "GQWSR6sBmgGsGM4DWCLF7KXbrih9aSTQiKeo3pkypump",
+    "checked_at_utc": "2025-11-11T05:24:39.571654+00:00",
+    "checked_at_timestamp": 1762838679,
+    "time_of_day_utc": 5,
+    "day_of_week_utc": 1,
+    "is_weekend_utc": false,
+    "is_public_holiday_any": true,
+    "signal_source": "alpha",
+    "grade": "MEDIUM",
+    "price_usd": 8.579470439866586e-05,
+    "rugcheck_risk_level": "unknown",
+    "is_rugged": false,
+    "has_mint_authority": false,
+    "has_freeze_authority": false,
+    "creator_balance_pct": 0.0,
+    "top_10_holders_pct": 37.643070679664525,
+    "is_lp_locked_95_plus": false,
+    "total_lp_locked_usd": 35384.20403616131
+  },
+  "finalization": {
+    "token_age_hours_at_signal": null,
+    "is_new_token": false,
+    "finalize_window_hours": 168,
+    "finalize_deadline": "2025-11-18T05:24:39.571654+00:00",
+    "check_interval_minutes": 30,
+    "next_check_at": "2025-11-11T05:54:39.571654+00:00",
+    "check_count": 0,
+    "finalization_status": "pending",
+    "claimed_by": null,
+    "claimed_at": null,
+    "finalized_at": null
+  },
+  "label": null
+}

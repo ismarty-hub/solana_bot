@@ -501,7 +501,7 @@ class SupabaseManager:
             files = await asyncio.to_thread(
                 self.client.storage.from_(self.config.SUPABASE_BUCKET).list,
                 folder,
-                {"limit": limit, "sortBy": {"column": "created_at", "order": "asc"}}
+                {"limit": limit, "sortBy": {"column": "created_at", "order": "desc"}}
             )
             return files if files else []
         except Exception as e:
@@ -800,10 +800,13 @@ class FeatureComputer:
 
 # --- Snapshot Aggregator ---
 
+# --- Snapshot Aggregator (FIXED VERSION) ---
+
 class SnapshotAggregator:
     """
     Handles efficient aggregation of snapshots with labels from analytics tracker.
-    Uses a targeted, per-snapshot-deadline approach.
+    NOW INCLUDES: Intelligence to check for daily folder existence and process
+    snapshots immediately if their tracking_end_time matches an existing daily folder.
     """
     
     def __init__(self, config: Config, supabase: SupabaseManager, persistence: 'PersistenceManager', active_snapshot_cache: Set[str]):
@@ -812,20 +815,22 @@ class SnapshotAggregator:
         self.persistence = persistence
         self.claimed_snapshots: Set[str] = set()
         
-        # (*** NEW ***) Store reference to the main service's active snapshot cache
         self.active_snapshot_cache = active_snapshot_cache
         
         # Caches for a single aggregation pass
         self._file_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
         self._cache_lock = asyncio.Lock()
-        # (*** MODIFIED ***) Label index is keyed by composite_key
         self._label_index: Dict[str, Dict] = {} # {composite_key: {latest_label_data}}
+        
+        # NEW: Cache for existing daily folders
+        self._existing_daily_folders: Dict[str, Set[str]] = {} # {pipeline: {set of date strings}}
 
     def _clear_caches(self):
         """Clears caches at the start of a scan."""
-        log.debug("Clearing aggregator pass caches (files, labels).")
+        log.debug("Clearing aggregator pass caches (files, labels, daily folders).")
         self._file_cache.clear()
         self._label_index.clear()
+        self._existing_daily_folders.clear()
 
     async def _fetch_analytics_file(self, remote_path: str) -> Optional[Dict]:
         """
@@ -844,20 +849,179 @@ class SnapshotAggregator:
                 log.debug(f"[Cache EXPIRED] for {remote_path}")
         
         log.debug(f"[Cache MISS] for {remote_path}")
-        # Use the robust download_json_file method
         data = await self.supabase.download_json_file(remote_path)
         
         async with self._cache_lock:
             self._file_cache[remote_path] = (data, now + ttl)
         return data
 
+    async def _discover_existing_daily_folders(self, pipelines: Set[str]):
+        """
+        NEW METHOD: Discovers all existing daily folder dates for each pipeline.
+        This tells us which tracking periods have completed.
+        """
+        log.info("Discovering existing daily folders to identify completed tracking periods...")
+        
+        for pipeline in pipelines:
+            daily_folder_path = f"analytics/{pipeline}/daily"
+            
+            try:
+                # List all files in the daily folder
+                files = await self.supabase.list_files(daily_folder_path, limit=1000)
+                
+                # Extract date strings from filenames (e.g., "2025-11-12.json" -> "2025-11-12")
+                date_strings = set()
+                for file_info in files:
+                    filename = file_info.get('name', '')
+                    if filename.endswith('.json'):
+                        date_str = filename.replace('.json', '')
+                        # Validate it's a date format (YYYY-MM-DD)
+                        try:
+                            datetime.strptime(date_str, '%Y-%m-%d')
+                            date_strings.add(date_str)
+                        except ValueError:
+                            log.debug(f"Skipping non-date file in daily folder: {filename}")
+                            continue
+                
+                self._existing_daily_folders[pipeline] = date_strings
+                log.info(f"Found {len(date_strings)} daily folders for pipeline '{pipeline}': {sorted(date_strings)[-5:] if date_strings else '[]'} (showing last 5)")
+                
+            except Exception as e:
+                log.error(f"Failed to discover daily folders for pipeline '{pipeline}': {e}")
+                self._existing_daily_folders[pipeline] = set()
+                
+    def _calculate_tracking_entry_date(self, snapshot: Dict) -> Optional[str]:
+        """
+        (*** NEW ***)
+        Calculate the tracking_entry_time date for a snapshot.
+        This is based on the signal time ('checked_at_utc') and
+        matches the date `analytics_tracker.py` uses for its daily file.
+        
+        Returns: Date string in 'YYYY-MM-DD' format, or None if cannot calculate.
+        """
+        try:
+            checked_at_str = snapshot.get('features', {}).get('checked_at_utc')
+            
+            if not checked_at_str:
+                log.warning(f"Snapshot {snapshot.get('snapshot_id')} missing checked_at_utc")
+                return None
+            
+            # Parse the signal timestamp
+            entry_datetime = parser.isoparse(checked_at_str).astimezone(timezone.utc)
+            
+            # The tracking_entry_date is the date of this timestamp
+            tracking_entry_date = entry_datetime.strftime('%Y-%m-%d')
+            
+            return tracking_entry_date
+            
+        except Exception as e:
+            log.error(f"Failed to calculate tracking_entry_date for snapshot {snapshot.get('snapshot_id')}: {e}")
+            return None
+
+    def _calculate_tracking_end_date(self, snapshot: Dict) -> Optional[str]:
+        """
+        NEW METHOD: Calculate the tracking_end_time date for a snapshot.
+        This is when the analytics tracker would finalize the label.
+        
+        Returns: Date string in 'YYYY-MM-DD' format, or None if cannot calculate.
+        """
+        try:
+            finalization = snapshot.get('finalization', {})
+            finalize_deadline_str = finalization.get('finalize_deadline')
+            
+            if not finalize_deadline_str:
+                log.warning(f"Snapshot {snapshot.get('snapshot_id')} missing finalize_deadline")
+                return None
+            
+            # Parse the deadline
+            finalize_deadline = parser.isoparse(finalize_deadline_str).astimezone(timezone.utc)
+            
+            # The tracking_end_date is the date of the finalize_deadline
+            tracking_end_date = finalize_deadline.strftime('%Y-%m-%d')
+            
+            return tracking_end_date
+            
+        except Exception as e:
+            log.error(f"Failed to calculate tracking_end_date for snapshot {snapshot.get('snapshot_id')}: {e}")
+            return None
+
+    def _should_process_snapshot_immediately(self, snapshot: Dict, now: datetime) -> Tuple[bool, str]:
+            """
+            (*** CORRECTED ***)
+            Determine if a snapshot should be processed immediately.
+            Fixes the bug by checking for the daily folder using the
+            token's ENTRY DATE, not its end date.
+            
+            Returns: (should_process, reason)
+            """
+            try:
+                mint = snapshot['features']['mint']
+                pipeline = snapshot['features']['signal_source']
+                composite_key = get_composite_key(mint, pipeline)
+                
+                finalization = snapshot.get('finalization', {})
+                finalization_status = finalization.get("finalization_status", "pending")
+                next_check_str = finalization.get('next_check_at')
+                
+                # Reason 1: Label exists in active_tracking.json (Early Win)
+                # This logic was already correct.
+                if composite_key in self._label_index:
+                    return (True, "label_in_active_tracking")
+                
+                # (*** THIS IS THE FIX ***)
+                # Reason 2: Daily file exists (Finalized Token)
+                # We check for the *entry date* folder, which is what analytics_tracker creates.
+                tracking_entry_date = self._calculate_tracking_entry_date(snapshot)
+                if tracking_entry_date:
+                    pipeline_folders = self._existing_daily_folders.get(pipeline, set())
+                    if tracking_entry_date in pipeline_folders:
+                        # The daily file for this token's *start date* exists.
+                        # This means it has almost certainly been finalized.
+                        return (True, f"daily_folder_exists_{tracking_entry_date}")
+                
+                # Reason 3: Tracking deadline has passed (Fallback)
+                # This checks if today is on or after the day it *should* have finished.
+                tracking_end_date_str = self._calculate_tracking_end_date(snapshot)
+                if tracking_end_date_str:
+                    tracking_end_dt = datetime.strptime(tracking_end_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    if now.date() >= tracking_end_dt.date():
+                        # Today is on or after the finalization date.
+                        # We should process this to see if the label exists,
+                        # or move it to grace period/expired.
+                        return (True, "past_tracking_end_date")
+                
+                # Reason 4: Regular scheduled check time has arrived
+                if not next_check_str:
+                    log.warning(f"Snapshot {snapshot.get('snapshot_id')} missing next_check_at, processing immediately")
+                    return (True, "missing_next_check_at")
+                
+                try:
+                    next_check_dt = parser.isoparse(next_check_str).astimezone(timezone.utc)
+                    if now >= next_check_dt:
+                        return (True, "scheduled_check_time")
+                except Exception as e:
+                    log.error(f"Failed to parse next_check_at for {snapshot.get('snapshot_id')}: {e}")
+                    return (True, "invalid_next_check_at")
+                
+                # Reason 5: In grace period (legacy logic)
+                if finalization_status == "grace_period":
+                    return (True, "in_grace_period")
+                
+                return (False, "not_due")
+                
+            except Exception as e:
+                log.error(f"Error in _should_process_snapshot_immediately: {e}")
+                return (False, "error_in_evaluation")
+
     async def scan_and_aggregate(self):
-        """Main aggregation loop: scan snapshots, check labels, aggregate or reschedule."""
+        """
+        Main aggregation loop: scan snapshots, check labels, aggregate or reschedule.
+        NOW WITH: Intelligent daily folder checking.
+        """
         log.info("Starting snapshot aggregation scan...")
         
         self._clear_caches()
         
-        # --- (*** NEW FIX ***) ---
         # 1. Pre-populate label index with active "win" tokens
         log.info("Loading 'active_tracking.json' to find early wins...")
         active_tracking_data = await self.supabase.download_json_file("analytics/active_tracking.json")
@@ -866,16 +1030,13 @@ class SnapshotAggregator:
             active_wins_found = 0
             for composite_key, token_data in active_tracking_data.items():
                 if token_data.get("status") == "win":
-                    # This is an active win. We can use it.
-                    # We store the *whole* token_data as the label.
                     self._label_index[composite_key] = token_data
                     active_wins_found += 1
             log.info(f"Pre-populated label index with {active_wins_found} active 'win' labels.")
         else:
             log.warning("Could not load or parse 'analytics/active_tracking.json'. Proceeding with daily files only.")
-        # --- (*** END NEW FIX ***) ---
         
-        # List all snapshot files
+        # 2. List all snapshot files
         snapshot_files = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=1000)
         
         if not snapshot_files:
@@ -883,69 +1044,116 @@ class SnapshotAggregator:
             return
         
         now = datetime.now(timezone.utc)
-        due_snapshots = []
+        # 3. Download all snapshots first (to determine pipelines and date ranges)
+        log.info(f"Analyzing {len(snapshot_files)} snapshot file headers...")
         
-        # 1. Filter for .json files that are due for checking
+        # (*** NEW ***) Build a list of download tasks
+        download_tasks = []
+        file_infos_to_process = []
+        
         for file_info in snapshot_files:
             filename = file_info.get('name', '')
             if not filename.endswith('.json'):
                 continue
             
-            # Skip if already claimed in this batch
             if filename in self.claimed_snapshots:
                 continue
             
-            # Download and check if due
             remote_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename}"
-            # Use the robust download_json_file method
-            snapshot = await self.supabase.download_json_file(remote_path)
             
-            if not snapshot:
-                log.warning(f"Failed to download snapshot {remote_path} for aggregation check, skipping.")
+            # Add file info and task to their respective lists
+            file_infos_to_process.append((filename, remote_path))
+            download_tasks.append(self.supabase.download_json_file(remote_path))
+
+        log.info(f"Concurrently downloading {len(download_tasks)} snapshot files...")
+        
+        snapshot_results = await asyncio.gather(*download_tasks, return_exceptions=True)
+        
+        log.info(f"Downloads complete. Processing {len(snapshot_results)} results...")
+
+        all_snapshots = []
+        for i, snapshot_data in enumerate(snapshot_results):
+            filename, remote_path = file_infos_to_process[i]
+            
+            if isinstance(snapshot_data, Exception):
+                log.error(f"Failed to download snapshot {remote_path}: {snapshot_data}")
                 continue
             
-            finalization = snapshot.get('finalization', {})
+            if not snapshot_data:
+                log.warning(f"Failed to download snapshot {remote_path} (no data), skipping.")
+                continue
+
+            # (*** This is the original logic, now applied *after* download ***)
+            finalization = snapshot_data.get('finalization', {})
             finalization_status = finalization.get("finalization_status", "pending")
-            next_check_str = finalization.get('next_check_at')
-
-            # Skip snapshots that are already finalized
-            if finalization_status not in ("pending", "awaiting_label", "grace_period"): # Allow grace_period
+            
+            # Skip ONLY snapshots that are already fully finalized (labeled or expired)
+            if finalization_status in ("labeled", "expired_no_label"):
+                log.debug(f"Skipping finalized snapshot: {filename} (status: {finalization_status})")
                 continue
             
-            if not next_check_str:
-                log.warning(f"Snapshot {filename} missing next_check_at, skipping")
-                continue
-            
-            try:
-                next_check_dt = parser.isoparse(next_check_str).astimezone(timezone.utc)
-            except Exception as e:
-                log.error(f"Failed to parse next_check_at for {filename}: {e}")
-                continue
-            
-            if now >= next_check_dt:
-                due_snapshots.append((filename, snapshot, remote_path))
+            all_snapshots.append((filename, snapshot_data, remote_path))
         
-        
-        if not due_snapshots:
-            log.info("No snapshots are due for checking.")
+        if not all_snapshots:
+            log.info("No unfinalized snapshots found (all are either 'labeled' or 'expired_no_label').")
             return
-
-        log.info(f"Found {len(due_snapshots)} snapshots due for checking")
         
-        # 2. Build the set of *required* analytics files to download
-        dates_to_scan: Set[str] = set()
+        log.info(f"Found {len(all_snapshots)} unfinalized snapshots to evaluate.")
+        
+        # 4. NEW: Discover existing daily folders
         pipelines_to_scan: Set[str] = set()
-
-        for _, snapshot, _ in due_snapshots:
+        for _, snapshot, _ in all_snapshots:
             try:
                 pipeline = snapshot['features']['signal_source']
                 pipelines_to_scan.add(pipeline)
+            except Exception as e:
+                log.error(f"Error extracting pipeline from snapshot: {e}")
+        
+        await self._discover_existing_daily_folders(pipelines_to_scan)
+        
+        # 5. Filter snapshots that should be processed immediately
+        snapshots_to_process = []
+        skipped_reasons = {}
+        
+        for filename, snapshot, remote_path in all_snapshots:
+            should_process, reason = self._should_process_snapshot_immediately(snapshot, now)
+            
+            if should_process:
+                snapshots_to_process.append((filename, snapshot, remote_path, reason))
+                log.debug(f"Snapshot {filename} marked for processing: {reason}")
+            else:
+                # Track why snapshots are being skipped
+                skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
+        
+        if not snapshots_to_process:
+            log.info("No snapshots are due for checking (after intelligent filtering).")
+            if skipped_reasons:
+                log.info("Breakdown of skipped snapshots:")
+                for reason, count in sorted(skipped_reasons.items()):
+                    log.info(f"  - {reason}: {count} snapshots")
+            return
+        
+        log.info(f"Found {len(snapshots_to_process)} snapshots due for checking:")
+        # Log breakdown by reason
+        reason_counts = {}
+        for _, _, _, reason in snapshots_to_process:
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        for reason, count in sorted(reason_counts.items()):
+            log.info(f"  - {reason}: {count} snapshots")
+        
+        # 6. Build the set of *required* analytics files to download
+        dates_to_scan: Set[str] = set()
+
+        for _, snapshot, _, _ in snapshots_to_process:
+            try:
+                pipeline = snapshot['features']['signal_source']
                 
                 checked_at = parser.isoparse(snapshot['features']['checked_at_utc']).astimezone(timezone.utc)
                 finalize_deadline = parser.isoparse(snapshot['finalization']['finalize_deadline']).astimezone(timezone.utc)
                 
                 start_date = checked_at.date()
-                end_date = min(now, finalize_deadline + timedelta(minutes=31)).date() # Scan *into* the grace period
+                # Scan up to deadline + 2 days buffer (for late finalizations)
+                end_date = min(now, finalize_deadline + timedelta(days=2)).date()
                 
                 current_date = start_date
                 while current_date <= end_date:
@@ -960,7 +1168,7 @@ class SnapshotAggregator:
 
         log.info(f"Scanning {len(dates_to_scan)} unique dates ({min(dates_to_scan)} to {max(dates_to_scan)}) and {len(pipelines_to_scan)} pipelines.")
         
-        # 3. Download required files and build targeted label index
+        # 7. Download required files and build targeted label index
         fetch_tasks = []
         for pipeline in pipelines_to_scan:
             for date_str in dates_to_scan:
@@ -969,7 +1177,7 @@ class SnapshotAggregator:
         
         file_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
         
-        # (*** MODIFIED ***) Build label index using composite key
+        # Build label index using composite key
         finalized_labels_found = 0
         for content in file_contents:
             if isinstance(content, Exception) or not content or not isinstance(content.get("tokens"), list):
@@ -978,59 +1186,50 @@ class SnapshotAggregator:
             for token in content["tokens"]:
                 if not isinstance(token, dict): continue
                 mint = token.get("mint")
-                signal_type = token.get("signal_type") # Get signal_type
+                signal_type = token.get("signal_type")
                 
-                # Check for both mint and signal_type
                 if not mint or not signal_type or token.get("status") not in ("win", "loss"):
                     continue
                 
-                composite_key = get_composite_key(mint, signal_type) # Create key
+                composite_key = get_composite_key(mint, signal_type)
                 
-                # Check for latest tracking_completed_at
                 tracking_completed_at_str = token.get("tracking_completed_at")
                 if not tracking_completed_at_str:
-                    continue # Need this for comparison
+                    continue
                 
                 try:
                     new_label_time = parser.isoparse(tracking_completed_at_str)
                 except Exception:
                     log.warning(f"Could not parse tracking_completed_at for {composite_key}: {tracking_completed_at_str}")
-                    continue # Bad data
+                    continue
                 
-                existing_label = self._label_index.get(composite_key) # Use key
+                existing_label = self._label_index.get(composite_key)
                 
-                # --- (*** MODIFIED FIX ***) ---
-                # Prioritize finalized (daily file) labels over active ones
+                # Prioritize finalized labels over active ones
                 if not existing_label:
-                    # No label exists, add this one
                     self._label_index[composite_key] = token
                     finalized_labels_found += 1
                 elif "tracking_completed_at" not in existing_label or not existing_label.get("tracking_completed_at"):
-                    # Existing label is from active_tracking (no completion time)
-                    # Overwrite it with this finalized label
                     self._label_index[composite_key] = token
                     log.debug(f"Overwriting active label with finalized label for {composite_key}")
-                    finalized_labels_found += 1 # Count as a new finalized label
+                    finalized_labels_found += 1
                 else:
-                    # Both labels are finalized, pick the newer one
                     try:
                         existing_label_time = parser.isoparse(existing_label.get("tracking_completed_at"))
                         if new_label_time > existing_label_time:
-                            self._label_index[composite_key] = token # Update with newer label
+                            self._label_index[composite_key] = token
                     except Exception:
-                        self._label_index[composite_key] = token # Overwrite if old label was bad
-                # --- (*** END MODIFIED FIX ***) ---
+                        self._label_index[composite_key] = token
         
         log.info(f"Found {finalized_labels_found} new finalized labels from daily files.")
         log.info(f"Total labels indexed (active + finalized): {len(self._label_index)}")
-        # (*** END MODIFICATION ***)
 
-        # 4. Process due snapshots in batches
+        # 8. Process due snapshots in batches
         batch_size = self.config.AGGREGATOR_BATCH_SIZE
-        for i in range(0, len(due_snapshots), batch_size):
-            batch = due_snapshots[i:i+batch_size]
+        for i in range(0, len(snapshots_to_process), batch_size):
+            batch = snapshots_to_process[i:i+batch_size]
             tasks = []
-            for filename, snapshot, remote_path in batch:
+            for filename, snapshot, remote_path, reason in batch:
                 tasks.append(self._process_snapshot(filename, snapshot, remote_path))
             
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -1038,7 +1237,7 @@ class SnapshotAggregator:
     async def _process_snapshot(self, filename: str, snapshot: Dict, remote_path: str):
         """
         Process a single snapshot: claim, check label, aggregate or reschedule.
-        (*** MODIFIED ***) Includes 30-minute grace period logic.
+        Includes 30-minute grace period logic.
         """
         try:
             # 1. Claim the snapshot atomically
@@ -1059,8 +1258,6 @@ class SnapshotAggregator:
             # 2. Look up label in our targeted index
             label_data = self._label_index.get(composite_key)
             
-            # --- (*** NEW GRACE PERIOD LOGIC ***) ---
-            
             if label_data:
                 # 1. LABEL FOUND - Aggregate to dataset
                 log.info(f"Label found for {composite_key}: {label_data['status']}")
@@ -1073,8 +1270,6 @@ class SnapshotAggregator:
                 
             else:
                 # 3. DEADLINE PASSED - Check for grace period
-                
-                # Define the grace period (as requested by user)
                 grace_period = timedelta(minutes=30)
                 true_expiration_deadline = finalize_deadline + grace_period
                 
@@ -1086,14 +1281,10 @@ class SnapshotAggregator:
                 else:
                     # 3b. IN GRACE PERIOD - Reschedule for a *fast* recheck
                     log.info(f"Snapshot {filename} ({composite_key}) passed deadline, entering 30min grace period. Rechecking in 1 min.")
-                    # Pass a flag to reschedule for a 1-minute interval
                     await self._reschedule_snapshot(snapshot, filename, remote_path, is_grace_period=True)
-
-            # --- (*** END NEW GRACE PERIOD LOGIC ***) ---
                 
         except Exception as e:
             log.error(f"Error processing snapshot {filename}: {e}", exc_info=True)
-            # Release claim on error
             self.claimed_snapshots.discard(filename)
     
     async def _claim_snapshot(self, filename: str, snapshot: Dict, remote_path: str) -> bool:
@@ -1107,21 +1298,15 @@ class SnapshotAggregator:
         Returns True if claim successful, False otherwise.
         """
         try:
-            # Mark as claimed
             self.claimed_snapshots.add(filename)
-            
-            # Delete remote (this "locks" it)
             await self.supabase.delete_file(remote_path)
             
-            # Update claimed_by and claimed_at
             snapshot['finalization']['claimed_by'] = 'aggregator'
             snapshot['finalization']['claimed_at'] = datetime.now(timezone.utc).isoformat()
             
-            # Set status to 'awaiting_label', unless it's already 'grace_period'
             if snapshot['finalization'].get('finalization_status') != 'grace_period':
                 snapshot['finalization']['finalization_status'] = 'awaiting_label'
             
-            # Save locally and re-upload
             local_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
             
             def _save():
@@ -1139,9 +1324,9 @@ class SnapshotAggregator:
             log.error(f"Failed to claim snapshot {filename}: {e}")
             self.claimed_snapshots.discard(filename)
             return False
-    
+        
     async def _aggregate_with_label(self, snapshot: Dict, label_data: Dict, 
-                                   filename: str, remote_path: str):
+                                filename: str, remote_path: str):
         """Aggregate snapshot with label to dataset, then delete original."""
         mint = snapshot['features']['mint']
         pipeline = snapshot['features']['signal_source']
@@ -1152,9 +1337,23 @@ class SnapshotAggregator:
         snapshot['finalization']['finalized_at'] = datetime.now(timezone.utc).isoformat()
         
         # 2. Determine date for dataset folder
-        checked_at_str = snapshot['features']['checked_at_utc']
-        checked_at = parser.isoparse(checked_at_str)
-        date_str = checked_at.strftime('%Y-%m-%d')
+        tracking_completed_str = label_data.get('tracking_completed_at')
+        if tracking_completed_str:
+            try:
+                tracking_completed = parser.isoparse(tracking_completed_str)
+                date_str = tracking_completed.strftime('%Y-%m-%d')
+                log.debug(f"Using tracking completion date for dataset folder: {date_str}")
+            except Exception as e:
+                log.warning(f"Failed to parse tracking_completed_at '{tracking_completed_str}': {e}. "
+                        f"Falling back to signal date.")
+                checked_at_str = snapshot['features']['checked_at_utc']
+                checked_at = parser.isoparse(checked_at_str)
+                date_str = checked_at.strftime('%Y-%m-%d')
+        else:
+            log.warning(f"Label missing tracking_completed_at. Using signal date for dataset folder.")
+            checked_at_str = snapshot['features']['checked_at_utc']
+            checked_at = parser.isoparse(checked_at_str)
+            date_str = checked_at.strftime('%Y-%m-%d')
         
         # 3. Save as dataset
         success = await self.persistence.save_dataset(snapshot, pipeline, date_str, mint, is_expired=False)
@@ -1165,7 +1364,6 @@ class SnapshotAggregator:
             log.info(f"Successfully aggregated {mint} ({pipeline}) to dataset {pipeline}/{date_str}")
         else:
             log.error(f"Failed to save dataset for {mint} ({pipeline}), keeping snapshot")
-            # Release claim but don't delete
             self.claimed_snapshots.discard(filename)
     
     async def _aggregate_expired(self, snapshot: Dict, filename: str, remote_path: str):
@@ -1173,21 +1371,17 @@ class SnapshotAggregator:
         mint = snapshot['features']['mint']
         pipeline = snapshot['features']['signal_source']
         
-        # 1. Mark as expired
         snapshot['label'] = None
         snapshot['finalization']['finalization_status'] = 'expired_no_label'
         snapshot['finalization']['finalized_at'] = datetime.now(timezone.utc).isoformat()
         
-        # 2. Use signal date for folder structure, not current date
         checked_at_str = snapshot['features']['checked_at_utc']
         checked_at = parser.isoparse(checked_at_str)
         date_str = checked_at.strftime('%Y-%m-%d')
         
-        # 3. Save to expired dataset
         success = await self.persistence.save_dataset(snapshot, pipeline, date_str, mint, is_expired=True)
         
         if success:
-            # 4. Delete original snapshot
             await self._delete_snapshot(filename, remote_path)
             log.info(f"Moved expired snapshot {mint} ({pipeline}) to {pipeline}/expired_no_label/{filename}")
         else:
@@ -1197,29 +1391,24 @@ class SnapshotAggregator:
     async def _reschedule_snapshot(self, snapshot: Dict, filename: str, remote_path: str, is_grace_period: bool = False):
         """
         Update next_check_at and re-upload snapshot.
-        (*** MODIFIED ***) Uses a 1-minute interval if in grace period.
+        Uses a 1-minute interval if in grace period.
         """
         now = datetime.now(timezone.utc)
         
-        # --- (*** NEW GRACE PERIOD LOGIC ***) ---
         if is_grace_period:
-            # During grace period, re-check every 1 minute
             check_interval = timedelta(minutes=1)
             next_check = now + check_interval
-            snapshot['finalization']['finalization_status'] = 'grace_period' # Mark as in grace period
+            snapshot['finalization']['finalization_status'] = 'grace_period'
         else:
-            # Standard check interval
             check_interval = timedelta(minutes=self.config.CHECK_INTERVAL_MINUTES)
             next_check = now + check_interval
-            snapshot['finalization']['finalization_status'] = 'awaiting_label' # Back to normal
-        # --- (*** END NEW GRACE PERIOD LOGIC ***) ---
+            snapshot['finalization']['finalization_status'] = 'awaiting_label'
         
         snapshot['finalization']['next_check_at'] = next_check.isoformat()
         snapshot['finalization']['check_count'] = snapshot['finalization'].get('check_count', 0) + 1
-        snapshot['finalization']['claimed_by'] = None # Release claim
+        snapshot['finalization']['claimed_by'] = None
         snapshot['finalization']['claimed_at'] = None
         
-        # Save locally
         local_path = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
         
         def _save():
@@ -1229,7 +1418,6 @@ class SnapshotAggregator:
         
         await asyncio.to_thread(_save)
         
-        # Delete remote and re-upload (atomic update)
         try:
             await self.supabase.delete_file(remote_path)
         except Exception as e:
@@ -1237,7 +1425,6 @@ class SnapshotAggregator:
             
         await self.supabase.upload_file(local_path, remote_path)
         
-        # Cleanup local and release claim
         if self.config.CLEANUP_LOCAL_FILES:
             try:
                 os.remove(local_path)
@@ -1249,11 +1436,7 @@ class SnapshotAggregator:
     
     async def _delete_snapshot(self, filename: str, remote_path: str):
         """Delete snapshot files (.json only, local and remote)."""
-        # base_name = filename.replace('.json', '') # <-- Not needed
-        
-        # Delete remote file
         json_remote = remote_path
-        # pkl_remote = remote_path.replace('.json', '.pkl') # <-- REMOVED
         
         try:
             await self.supabase.delete_file(json_remote)
@@ -1261,15 +1444,7 @@ class SnapshotAggregator:
         except Exception as e:
             log.warning(f"Failed to delete remote {json_remote}: {e}")
         
-        # try: # <-- REMOVED
-        #     await self.supabase.delete_file(pkl_remote)
-        #     log.debug(f"Deleted remote {pkl_remote}")
-        # except Exception as e:
-        #     log.warning(f"Failed to delete remote {pkl_remote}: {e}")
-        
-        # Delete local file if it exists
         local_json = os.path.join(self.config.SNAPSHOT_DIR_LOCAL, filename)
-        # local_pkl = local_json.replace('.json', '.pkl') # <-- REMOVED
         
         if os.path.exists(local_json):
             try:
@@ -1278,18 +1453,14 @@ class SnapshotAggregator:
             except Exception as e:
                 log.warning(f"Failed to delete local {local_json}: {e}")
 
-        # Release claim
         self.claimed_snapshots.discard(filename)
         
-        # (*** NEW ***) Remove from the main service's active cache
         try:
-            # We must remove the filename, not the composite key
             snapshot_key = filename
             if snapshot_key in self.active_snapshot_cache:
                 self.active_snapshot_cache.remove(snapshot_key)
                 log.debug(f"Removed '{snapshot_key}' from active snapshot cache.")
             else:
-                # Handle cases where key might be composite
                 composite_key_guess = filename.replace(".json", "")
                 if composite_key_guess in self.active_snapshot_cache:
                      self.active_snapshot_cache.remove(composite_key_guess)
@@ -1300,10 +1471,7 @@ class SnapshotAggregator:
         except KeyError:
             log.warning(f"Could not remove '{filename}' from cache, not found (KeyError).")
         except Exception as e:
-            log.error(f"Error removing {filename} from active_snapshot_cache: {e}")
-
-
-# --- Main Collector Service ---
+            log.error(f"Error removing {filename} from active_snapshot_cache: {e}")# --- Main Collector Service ---
 
 class CollectorService:
     def __init__(self, config: Config, session: aiohttp.ClientSession):
@@ -1556,65 +1724,68 @@ class CollectorService:
             # Do not re-raise, allow the loop to continue
 
     async def run(self):
-        """Main service loop with both signal processing and aggregation."""
-        log.info(f"Starting collector service. Poll interval: {self.config.POLL_INTERVAL}s, Aggregator interval: {self.config.AGGREGATOR_INTERVAL}s")
-        
-        last_aggregation = time.monotonic()
-        
-        while True:
-            try:
-                start_time = time.monotonic()
-                log.info("Starting new polling cycle...")
-
-                # (*** NEW ***) Update active snapshot file cache
-                log.info("Updating active snapshot file cache...")
+            """Main service loop with both signal processing and aggregation."""
+            log.info(f"Starting collector service. Poll interval: {self.config.POLL_INTERVAL}s, Aggregator interval: {self.config.AGGREGATOR_INTERVAL}s")
+            
+            # FIX: Initialize last_aggregation to a time in the past so aggregator runs on first cycle
+            last_aggregation = time.monotonic() - self.config.AGGREGATOR_INTERVAL - 1
+            
+            while True:
                 try:
-                    snapshot_files_list = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=5000) # Increased limit
-                    # Rebuild the set from scratch
-                    self.active_snapshot_files = {f['name'] for f in snapshot_files_list if f.get('name') and f['name'].endswith('.json')}
-                    log.info(f"Cached {len(self.active_snapshot_files)} active snapshot filenames.")
-                except Exception as e:
-                    log.error(f"Failed to update active snapshot cache: {e}. Proceeding with potentially stale cache.")
-                
-                # 1. Process new signals
-                signals = await self._fetch_all_signals()
-                log.info(f"Found {len(signals)} total signals to check.")
-                
-                if signals:
-                    tasks = [self.run_process_with_semaphore(sig) for sig in signals]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    
-                    exceptions = [r for r in results if isinstance(r, Exception)]
-                    if exceptions:
-                        log.error(f"{len(exceptions)} signals failed during processing:")
-                        unique_errors = set(str(ex) for ex in exceptions)
-                        for i, ex_str in enumerate(list(unique_errors)[:5]):
-                            log.error(f"  - Unique Error {i+1}: {ex_str}")
+                    start_time = time.monotonic()
+                    log.info("Starting new polling cycle...")
 
-                # 2. Run aggregator if interval elapsed
-                if (start_time - last_aggregation) >= self.config.AGGREGATOR_INTERVAL:
-                    log.info("Running snapshot aggregation...")
+                    # (*** NEW ***) Update active snapshot file cache
+                    log.info("Updating active snapshot file cache...")
                     try:
-                        await self.aggregator.scan_and_aggregate()
-                        last_aggregation = time.monotonic() # Reset timer *after* completion
+                        snapshot_files_list = await self.supabase.list_files(self.config.SNAPSHOT_DIR_REMOTE, limit=5000)
+                        self.active_snapshot_files = {f['name'] for f in snapshot_files_list if f.get('name') and f['name'].endswith('.json')}
+                        log.info(f"Cached {len(self.active_snapshot_files)} active snapshot filenames.")
                     except Exception as e:
-                        log.error(f"Aggregator failed: {e}", exc_info=True)
-                        last_aggregation = time.monotonic() # Reset timer even on failure to avoid spam
-                else:
-                    log.debug(f"Skipping aggregation, {time.monotonic() - last_aggregation:.0f}s / {self.config.AGGREGATOR_INTERVAL}s elapsed.")
+                        log.error(f"Failed to update active snapshot cache: {e}. Proceeding with potentially stale cache.")
+                    
+                    # 1. Process new signals
+                    signals = await self._fetch_all_signals()
+                    log.info(f"Found {len(signals)} total signals to check.")
+                    
+                    if signals:
+                        tasks = [self.run_process_with_semaphore(sig) for sig in signals]
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                        
+                        exceptions = [r for r in results if isinstance(r, Exception)]
+                        if exceptions:
+                            log.error(f"{len(exceptions)} signals failed during processing:")
+                            unique_errors = set(str(ex) for ex in exceptions)
+                            for i, ex_str in enumerate(list(unique_errors)[:5]):
+                                log.error(f"  - Unique Error {i+1}: {ex_str}")
 
+                    # 2. Run aggregator if interval elapsed
+                    elapsed_since_last_agg = start_time - last_aggregation
+                    log.info(f"Time since last aggregation: {elapsed_since_last_agg:.1f}s (threshold: {self.config.AGGREGATOR_INTERVAL}s)")
+                    
+                    if elapsed_since_last_agg >= self.config.AGGREGATOR_INTERVAL:
+                        log.info("Running snapshot aggregation...")
+                        try:
+                            await self.aggregator.scan_and_aggregate()
+                            last_aggregation = time.monotonic()
+                            log.info("Aggregation completed successfully.")
+                        except Exception as e:
+                            log.error(f"Aggregator failed: {e}", exc_info=True)
+                            last_aggregation = time.monotonic()
+                    else:
+                        log.debug(f"Skipping aggregation, {elapsed_since_last_agg:.0f}s / {self.config.AGGREGATOR_INTERVAL}s elapsed.")
 
-                cycle_duration = time.monotonic() - start_time
-                log.info(f"Polling cycle finished in {cycle_duration:.2f}s.")
-                
-                sleep_time = max(0, self.config.POLL_INTERVAL - cycle_duration)
-                log.info(f"Sleeping for {sleep_time:.2f}s...")
-                await asyncio.sleep(sleep_time)
-                
-            except Exception as e:
-                log.critical(f"CRITICAL ERROR in main loop: {e}", exc_info=True)
-                log.info("Restarting loop after 60s...")
-                await asyncio.sleep(60)
+                    cycle_duration = time.monotonic() - start_time
+                    log.info(f"Polling cycle finished in {cycle_duration:.2f}s.")
+                    
+                    sleep_time = max(0, self.config.POLL_INTERVAL - cycle_duration)
+                    log.info(f"Sleeping for {sleep_time:.2f}s...")
+                    await asyncio.sleep(sleep_time)
+                    
+                except Exception as e:
+                    log.critical(f"CRITICAL ERROR in main loop: {e}", exc_info=True)
+                    log.info("Restarting loop after 60s...")
+                    await asyncio.sleep(60)
 
 # --- CLI and Test Functions ---
 
