@@ -210,6 +210,8 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         freeze_authority = rugcheck.get("freeze_authority")
         mint_authority = rugcheck.get("mint_authority")
         score_normalised = rugcheck_raw.get("score_normalised", -1)
+
+        ml_win_probability = result.get("ml_win_probability", 0) * 100  # Convert to percentage
         
         # Get ALL risks
         risks = sorted(
@@ -290,6 +292,9 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 --- ⚠️ <b>Top Risks</b> ---
 {risk_str}
 
+--- ML PREDICTION ---
+<b>🤖 ML win Confidence:</b> {ml_win_probability:.2f}%
+
 --- 🔗 <b>Links</b> ---
 <a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
 
@@ -331,7 +336,6 @@ async def format_alpha_refresh(mint: str, initial_state: Dict[str, Any]) -> str:
         try:
             initial_mc = float(initial_state.get("initial_market_cap", 0) or 0)
             initial_liq = float(initial_state.get("initial_liquidity", 0) or 0)
-            initial_holders = int(initial_state.get("initial_holders", 0) or 0)
             first_alert_at_str = initial_state.get("first_alert_at")
             first_alert_at_dt = datetime.fromisoformat(first_alert_at_str.replace('Z', '+00:00'))
         except Exception as e:
@@ -418,10 +422,6 @@ def format_alert_html(
     grade = token_data.get("grade", "NONE")
     mint = token_meta.get("mint", "") or token_data.get("token", "")
 
-    # --- (CORRECTION) REMOVED LIVE FETCH ---
-    # current_mc, current_fdv, current_liquidity = fetch_marketcap_and_fdv(mint)
-    
-    # --- (CORRECTION) ADDED: Get data from token_data ---
     dex_data = token_data.get("dexscreener", {})
     rugcheck_data = token_data.get("rugcheck", {})
 
@@ -431,10 +431,11 @@ def format_alert_html(
     # Use RugCheck's aggregated liquidity
     current_liquidity = rugcheck_data.get("total_liquidity_usd")
     
+    # ML prediction (if available)
+    ml_win_probability = token_data.get("ml_win_probability", None)
+
     # We will use 'current_mc' for both MC and FDV display.
     current_fdv = current_mc 
-    # --- END CORRECTION ---
-
 
     # Build Market Cap / FDV line based on alert_type
     mc_line = ""
@@ -478,6 +479,11 @@ def format_alert_html(
     if mint:
         # Wrap the address in <code> tags to make it tappable/copyable
         lines.append(f"<b>Token: (tap to copy)</b> <code>{mint}</code>")
+
+        # Ml prediction
+        if ml_win_probability is not None:
+            lines.append(f"🤖 <b>ML Win Confidence:</b> {ml_win_probability*100:.2f}%")
+
         lines.append(
             f'<a href="https://solscan.io/token/{mint}">Solscan</a> | '
             f'<a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | '
