@@ -835,28 +835,35 @@ class FeatureComputer:
             except Exception:
                 pass # Ignore if price isn't there or invalid
 
-        security_features = {}
-        if rug_data and rug_data.get("ok"):
-            # (CORRECTION) Handle both 'data' (v2) and 'raw' (v1) structures
-            data = rug_data.get("data", rug_data.get("raw", {})) # Fallback to 'raw'
-            if not isinstance(data, dict):
-                data = {}
+            security_features = {}
+            if rug_data and rug_data.get("ok"):
+                # Handle both 'data' (v2) and 'raw' (v1) structures
+                data = rug_data.get("data", rug_data.get("raw", {})) # Fallback to 'raw'
+                if not isinstance(data, dict):
+                    data = {}
 
-            top_holders = data.get("topHolders", []) or []
-            markets = data.get("markets", []) or []
+                top_holders = data.get("topHolders", []) or []
+                markets = data.get("markets", []) or []
 
-            total_lp_locked_usd = sum(float(m.get("lp", {}).get("lpLockedUSD", 0.0) or 0.0) for m in markets)
-            
-            security_features = {
-                "rugcheck_risk_level": (data.get('risk', {}) or {}).get('level', 'unknown'),
-                "is_rugged": data.get('rugged', False),
-                "has_mint_authority": bool(data.get('mintAuthority')),
-                "has_freeze_authority": bool(data.get('freezeAuthority')),
-                "creator_balance_pct": float((data.get('creatorBalance', {}) or {}).get('pct', 0.0) or 0.0),
-                "top_10_holders_pct": sum(float(h.get('pct', 0.0) or 0.0) for h in top_holders[:10]),
-                "is_lp_locked_95_plus": any(float(m.get("lp", {}).get("lockedPct", 0.0) or 0.0) >= 95.0 for m in markets),
-                "total_lp_locked_usd": total_lp_locked_usd,
-            }
+                total_lp_locked_usd = sum(float(m.get("lp", {}).get("lpLockedUSD", 0.0) or 0.0) for m in markets)
+                
+                # --- Handle inconsistent creatorBalance type ---
+                creator_balance_raw = data.get('creatorBalance')
+                creator_balance_pct_val = 0.0
+                if isinstance(creator_balance_raw, dict):
+                    creator_balance_pct_val = float(creator_balance_raw.get('pct', 0.0) or 0.0)
+                # If it's an int (e.g., 0) or None, the value remains 0.0
+                
+                security_features = {
+                    "rugcheck_risk_level": (data.get('risk', {}) or {}).get('level', 'unknown'),
+                    "is_rugged": data.get('rugged', False),
+                    "has_mint_authority": bool(data.get('mintAuthority')),
+                    "has_freeze_authority": bool(data.get('freezeAuthority')),
+                    "creator_balance_pct": creator_balance_pct_val, # Use the fixed value
+                    "top_10_holders_pct": sum(float(h.get('pct', 0.0) or 0.0) for h in top_holders[:10]),
+                    "is_lp_locked_95_plus": any(float(m.get("lp", {}).get("lockedPct", 0.0) or 0.0) >= 95.0 for m in markets),
+                    "total_lp_locked_usd": total_lp_locked_usd,
+                }
         
         derived_features = {}
         if pair_created_at_timestamp:

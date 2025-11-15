@@ -32335,3 +32335,50 @@ httpx.RemoteProtocolError: Server disconnected
 2025-11-13 11:13:11,740 - CollectorService - INFO - Listing daily files for pipeline: active_tracking_.json
 2025-11-13 11:13:12,592 - CollectorService - INFO - Found 24 daily files. Processing sequentially...
 2025-11-13 11:13:21,759 - CollectorService - INFO - Service stopped manually.
+2025-11-14 02:18:09,110 - CollectorService - INFO - Supabase client initialized.
+2025-11-14 02:18:09,110 - CollectorService - INFO - Processor concurrency limit set to: 1
+2025-11-14 02:18:09,124 - CollectorService - INFO - CollectorService initialized.
+2025-11-14 02:18:09,125 - CollectorService - INFO - Starting collector service. Poll interval: 180s, Aggregator interval: 60s
+2025-11-14 02:18:09,125 - CollectorService - INFO - Starting new polling cycle...
+2025-11-14 02:18:09,125 - CollectorService - INFO - Updating active snapshot file cache...
+2025-11-14 02:18:12,083 - CollectorService - INFO - Cached 221 active snapshot filenames.
+2025-11-14 02:18:15,080 - CollectorService - WARNING - No valid data found for discovery signals.
+2025-11-14 02:18:15,086 - CollectorService - INFO - Found 5 total signals to check.
+2025-11-14 02:18:15,087 - CollectorService - INFO - Time since last aggregation: 61.0s (threshold: 60s)
+2025-11-14 02:18:15,093 - CollectorService - INFO - Running snapshot aggregation...
+2025-11-14 02:18:15,095 - CollectorService - INFO - Starting sequential snapshot aggregation scan...
+2025-11-14 02:18:15,096 - CollectorService - INFO - Loading 'active_tracking.json'...
+2025-11-14 02:18:16,527 - CollectorService - INFO - Found 82 active 'win' labels.
+2025-11-14 02:18:17,528 - CollectorService - INFO - Listing analytics folders...
+2025-11-14 02:18:17,881 - CollectorService - INFO - Found pipelines: {'discovery', 'alpha', 'active_tracking_.json'}
+2025-11-14 02:18:18,895 - CollectorService - INFO - Listing daily files for pipeline: discovery
+2025-11-14 02:18:19,769 - CollectorService - INFO - Listing daily files for pipeline: alpha
+2025-11-14 02:18:20,629 - CollectorService - INFO - Listing daily files for pipeline: active_tracking_.json
+2025-11-14 02:18:21,504 - CollectorService - INFO - Found 24 daily files. Processing sequentially...
+2025-11-14 02:18:32,355 - CollectorService - INFO - Progress: 10/24 daily files processed
+2025-11-14 02:18:43,881 - CollectorService - INFO - Progress: 20/24 daily files processed
+2025-11-14 02:18:48,385 - CollectorService - INFO - Found 423 finalized labels from daily files.
+2025-11-14 02:18:48,385 - CollectorService - INFO - Total labels indexed: 431
+2025-11-14 02:18:49,388 - CollectorService - INFO - Listing snapshot files...
+2025-11-14 02:18:49,821 - CollectorService - INFO - Found 1309 snapshot files. Matching against labels...
+2025-11-14 02:18:49,821 - CollectorService - INFO - Found 3 snapshots with labels.
+2025-11-14 02:18:51,968 - CollectorService - INFO - [1/3] Aggregating 3XzNoCvGon8xFphusCcuFEZyMPuvzfESrwEBEMHSpump_2025-11-13T23-25-06.615379_00-00_alpha.json with label 'win'
+2025-11-14 02:18:51,968 - CollectorService - WARNING - Label missing tracking_completed_at. Using signal date for dataset folder.
+2025-11-14 02:18:53,244 - CollectorService - INFO - Uploaded dataset to Supabase: alpha/2025-11-13/3XzNoCvGon8xFphusCcuFEZyMPuvzfESrwEBEMHSpump_2025-11-13T23-25-06.615379_00-00.json
+2025-11-14 02:18:53,628 - CollectorService - WARNING - Could not remove '3XzNoCvGon8xFphusCcuFEZyMPuvzfESrwEBEMHSpump_2025-11-13T23-25-06.615379_00-00_alpha.json' from cache, not found.
+2025-11-14 02:18:53,709 - CollectorService - INFO - Successfully aggregated 3XzNoCvGon8xFphusCcuFEZyMPuvzfESrwEBEMHSpump (alpha) to dataset alpha/2025-11-13
+2025-11-14 02:18:55,183 - CollectorService - INFO - [2/3] Aggregating DA1qLpgD1M7TNNRPycizyQCoRLCt7GAx1YTeVrfYpump_2025-11-13T23-31-24.052779_00-00_alpha.json with label 'win'
+2025-11-14 02:18:55,184 - CollectorService - WARNING - Label missing tracking_completed_at. Using signal date for dataset folder.
+2025-11-14 02:18:56,357 - CollectorService - INFO - Uploaded dataset to Supabase: alpha/2025-11-13/DA1qLpgD1M7TNNRPycizyQCoRLCt7GAx1YTeVrfYpump_2025-11-13T23-31-24.052779_00-00.json
+2025-11-14 02:18:56,727 - CollectorService - WARNING - Could not remove 'DA1qLpgD1M7TNNRPycizyQCoRLCt7GAx1YTeVrfYpump_2025-11-13T23-31-24.052779_00-00_alpha.json' from cache, not found.
+2025-11-14 02:18:56,728 - CollectorService - INFO - Successfully aggregated DA1qLpgD1M7TNNRPycizyQCoRLCt7GAx1YTeVrfYpump (alpha) to dataset alpha/2025-11-13
+2025-11-14 02:18:58,200 - CollectorService - INFO - [3/3] Aggregating Ge8baxy8SCtTNumMTeHXULrguEpTDaoVYuPL2AGipump_2025-11-13T23-34-48.081209_00-00_alpha.json with label 'win'
+2025-11-14 02:18:58,200 - CollectorService - WARNING - Label missing tracking_completed_at. Using signal date for dataset folder.
+2025-11-14 02:18:59,440 - CollectorService - INFO - Uploaded dataset to Supabase: alpha/2025-11-13/Ge8baxy8SCtTNumMTeHXULrguEpTDaoVYuPL2AGipump_2025-11-13T23-34-48.081209_00-00.json
+2025-11-14 02:18:59,828 - CollectorService - WARNING - Could not remove 'Ge8baxy8SCtTNumMTeHXULrguEpTDaoVYuPL2AGipump_2025-11-13T23-34-48.081209_00-00_alpha.json' from cache, not found.
+2025-11-14 02:18:59,829 - CollectorService - INFO - Successfully aggregated Ge8baxy8SCtTNumMTeHXULrguEpTDaoVYuPL2AGipump (alpha) to dataset alpha/2025-11-13
+2025-11-14 02:18:59,830 - CollectorService - INFO - Aggregation complete: 3 successful, 0 failed, 3 total
+2025-11-14 02:18:59,831 - CollectorService - INFO - Aggregation completed successfully.
+2025-11-14 02:18:59,832 - CollectorService - INFO - Polling cycle finished in 50.72s.
+2025-11-14 02:18:59,832 - CollectorService - INFO - Sleeping for 129.28s...
+2025-11-14 02:20:03,751 - CollectorService - INFO - Service stopped manually.

@@ -226,7 +226,7 @@ async def send_alert_to_subscribers(
         return
 
     message = format_alert_html(
-        token_data, # This token_data now contains the dexscreener/rugcheck keys
+        token_data, 
         "CHANGE" if previous_grade else "NEW",
         previous_grade,
         initial_mc=initial_mc,
