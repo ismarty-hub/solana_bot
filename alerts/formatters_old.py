@@ -13,7 +13,6 @@ Recent fixes:
 - Shows ALL risks for alpha alerts
 - Fixed refresh button functionality
 - (CORRECTION) Removed live data fetch from format_alert_html, uses pre-fetched data instead.
-- (ML V2) Added "ML Insight" section to both alert types
 """
 
 from typing import Optional, Dict, Any, Tuple
@@ -144,11 +143,7 @@ def format_alpha_alert(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str,
         loop = asyncio.get_event_loop()
         if loop.is_running():
             # If loop is already running, we need to create task
-            # This path is tricky, but the caller (alpha_monitoring.py) manages the loop.
-            # Let's assume the caller handles the await.
-            # A cleaner way is to make the *caller* async, but we stick to the file.
-            # We return the coroutine itself to be awaited.
-            return _format_alpha_alert_async(mint, entry)
+            return asyncio.create_task(_format_alpha_alert_async(mint, entry))
         else:
             return loop.run_until_complete(_format_alpha_alert_async(mint, entry))
     except RuntimeError:
@@ -216,7 +211,7 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         mint_authority = rugcheck.get("mint_authority")
         score_normalised = rugcheck_raw.get("score_normalised", -1)
 
-        # --- ML V2: Removed old ml_win_probability line ---
+        ml_win_probability = result.get("ml_win_probability", 0) * 100  # Convert to percentage
         
         # Get ALL risks
         risks = sorted(
@@ -268,32 +263,6 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         
         risk_str = "\n".join(risk_lines) if risk_lines else "✅ No significant risks"
 
-        # --- ML Insight (NEW) ---
-        ml_insight_lines = []
-        # Data from winner_monitor.py is at: result -> ml_prediction
-        ml_data = result.get("ml_prediction") 
-        if ml_data and isinstance(ml_data, dict):
-            prob = ml_data.get("probability")
-            confidence = ml_data.get("confidence")
-            risk_tier = ml_data.get("risk_tier")
-
-            # Check if at least one value is present
-            if prob is not None or confidence or risk_tier:
-                ml_insight_lines.append("--- <b>ML Insight</b> ---")
-                if prob is not None:
-                    try:
-                        ml_insight_lines.append(f"<b>🤖 Win Probability:</b> {float(prob)*100:.2f}%")
-                    except Exception:
-                        pass
-                if confidence:
-                    ml_insight_lines.append(f"<b>📈 Confidence:</b> {html.escape(str(confidence))}")
-                if risk_tier:
-                    ml_insight_lines.append(f"<b>🛡️ Risk Tier:</b> {html.escape(str(risk_tier))}")
-        
-        ml_insight_str = "\n".join(ml_insight_lines)
-        if ml_insight_str:
-            ml_insight_str = "\n" + ml_insight_str # Add preceding newline
-
         # Build the message - THIS MUST RETURN A PLAIN STRING
         msg = f"""🚀 <b>Alpha Alert: ${esc_symbol}</b> 🚀
 
@@ -322,7 +291,9 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 
 --- ⚠️ <b>Top Risks</b> ---
 {risk_str}
-{ml_insight_str}
+
+--- ML PREDICTION ---
+<b>🤖 ML win Confidence:</b> {ml_win_probability:.2f}%
 
 --- 🔗 <b>Links</b> ---
 <a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
@@ -460,8 +431,8 @@ def format_alert_html(
     # Use RugCheck's aggregated liquidity
     current_liquidity = rugcheck_data.get("total_liquidity_usd")
     
-    # --- ML V2: Removed old ml_win_probability line ---
-    # We will get this from the ml_prediction dict later
+    # ML prediction (if available)
+    ml_win_probability = token_data.get("ml_win_probability", None)
 
     # We will use 'current_mc' for both MC and FDV display.
     current_fdv = current_mc 
@@ -509,30 +480,9 @@ def format_alert_html(
         # Wrap the address in <code> tags to make it tappable/copyable
         lines.append(f"<b>Token: (tap to copy)</b> <code>{mint}</code>")
 
-        # --- ML Insight ---
-        # Data from token_monitor.py is at: token_data -> ml_prediction
-        ml_data = token_data.get("ml_prediction")
-        if ml_data and isinstance(ml_data, dict):
-            prob = ml_data.get("probability")
-            confidence = ml_data.get("confidence")
-            risk_tier = ml_data.get("risk_tier")
-
-            # Check if at least one value is present
-            if prob is not None or confidence or risk_tier:
-                lines.append("") # Add a newline separator
-                lines.append("--- <b>ML Insight</b> ---")
-                if prob is not None:
-                    try:
-                        lines.append(f"<b>🤖 Win Probability:</b> {float(prob)*100:.2f}%")
-                    except Exception:
-                        pass # fail silently if conversion fails
-                if confidence:
-                    lines.append(f"<b>📈 Confidence:</b> {html.escape(str(confidence))}")
-                if risk_tier:
-                    lines.append(f"<b>🛡️ Risk Tier:</b> {html.escape(str(risk_tier))}")
-        
-        # Add a newline before the links
-        lines.append("") 
+        # Ml prediction
+        if ml_win_probability is not None:
+            lines.append(f"🤖 <b>ML Win Confidence:</b> {ml_win_probability*100:.2f}%")
 
         lines.append(
             f'<a href="https://solscan.io/token/{mint}">Solscan</a> | '
