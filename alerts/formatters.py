@@ -511,8 +511,8 @@ def format_alert_html(
 
         # --- ML Insight ---
         # Data from token_monitor.py is at: token_data -> ml_prediction
-        ml_data = token_data.get("ml_prediction")
-        if ml_data and isinstance(ml_data, dict):
+        ml_data = token_data.get("ml_prediction", {})
+        if ml_data: # and isinstance(ml_data, dict):
             prob = ml_data.get("probability")
             confidence = ml_data.get("confidence")
             risk_tier = ml_data.get("risk_tier")
