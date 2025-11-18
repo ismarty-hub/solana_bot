@@ -12,7 +12,7 @@ This script:
 3.  Fetches token age, entry price, mcap, and liquidity from the JSON data.
 4.  Tracks prices asynchronously (Jupiter -> Dexscreener verification).
 5.  VALIDATES SUSPICIOUS PUMPS:
-    - If Jupiter price implies Mcap/Liquidity ratio > 50x, triggers verification.
+    - If Jupiter price implies Mcap/Liquidity ratio > 10x, triggers verification.
     - Verifies via Dexscreener with exponential backoff for 429s.
     - Validates against CURRENT liquidity and minimum 5m volume ($500).
 6.  Calculates ROI, ATH, and win/loss status (win >= 45% ROI).
@@ -47,7 +47,7 @@ TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
 TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days
 
 # Validation Thresholds (*** NEW ***)
-MCAP_LIQUIDITY_RATIO_THRESHOLD = 50.0 # If Mcap / Liquidity > 50, verify
+MCAP_LIQUIDITY_RATIO_THRESHOLD = 10.0 # If Mcap / Liquidity > 10, verify
 MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious pump
 
 # Retry Logic
