@@ -52,6 +52,12 @@ if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is required")
 
 # ----------------------
+# ML API Configuration (NEW)
+# ----------------------
+FASTAPI_ML_URL = os.getenv("ML_API_URL")
+ML_API_TIMEOUT = int(os.getenv("ML_API_TIMEOUT", "30"))  # seconds
+
+# ----------------------
 # Alert Grades
 # ----------------------
 ALL_GRADES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
@@ -92,3 +98,4 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
 print(f"✅ Config loaded: IS_RENDER={IS_RENDER}, DATA_DIR={DATA_DIR}, POLL={POLL_INTERVAL_SECS}s")
+print(f"🤖 ML API configured: {FASTAPI_ML_URL}")

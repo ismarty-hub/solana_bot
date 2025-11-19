@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 """
-alerts/formatters.py - Alert formatting functions
+alerts/formatters.py - Alert formatting functions with enhanced ML insights
 
 Contains formatters for:
 1. ALPHA ALERTS - High-priority overlap alerts with detailed security analysis
 2. REGULAR ALERTS - Standard token overlap alerts (NEW/CHANGE)
 
-Recent fixes:
-- Fixed raw \n characters showing instead of line breaks
-- Removed debug data from messages
-- Proper HTML formatting for Telegram
-- Shows ALL risks for alpha alerts
-- Fixed refresh button functionality
-- (CORRECTION) Removed live data fetch from format_alert_html, uses pre-fetched data instead.
-- (ML V2) Added "ML Insight" section to both alert types
+Enhanced ML insights with beautiful UX
 """
 
 from typing import Optional, Dict, Any, Tuple
@@ -21,20 +14,13 @@ import aiohttp
 import asyncio
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 import html
-from config import DATA_DIR
+
+from config import DATA_DIR, ALPHA_ALERTS_STATE_FILE
 from shared.file_io import safe_load, safe_save
-# (CORRECTION) Removed fetch_marketcap_and_fdv, it's no longer called
 from shared.utils import format_marketcap_display, truncate_address
 
-# Define state file path
-ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
 logger = logging.getLogger(__name__)
-
-# ============================================================================
-# ALPHA ALERTS - High-priority overlap alerts with security analysis
-# ============================================================================
 
 # Global HTTP session
 _http_session = None
@@ -50,6 +36,112 @@ async def _close_http_session():
     if _http_session:
         await _http_session.close()
         _http_session = None
+
+
+# ============================================================================
+# ML INSIGHT FORMATTING (SHARED)
+# ============================================================================
+
+def format_ml_insight_for_alert(ml_data: Dict[str, Any]) -> str:
+    """
+    Format ML prediction data as a beautiful, compact section for alerts.
+    
+    Args:
+        ml_data: ML prediction data from API/monitoring
+    
+    Returns:
+        Formatted HTML string for inclusion in alerts
+    """
+    if not ml_data or not isinstance(ml_data, dict):
+        return ""
+    
+    # Extract values
+    prob = ml_data.get("probability")
+    confidence = ml_data.get("confidence")
+    risk_tier = ml_data.get("risk_tier")
+    action = ml_data.get("action")
+    
+    # If no data, return empty
+    if prob is None and not confidence and not risk_tier:
+        return ""
+    
+    # Action emoji mapping
+    action_styles = {
+        "BUY": ("🟢", "STRONG BUY"),
+        "CONSIDER": ("🟡", "CONSIDER"),
+        "SKIP": ("🟠", "SKIP"),
+        "AVOID": ("🔴", "AVOID")
+    }
+    
+    # Build ML insight section
+    lines = ["", "--- 🤖 <b>ML Insight</b> ---"]
+    
+    # Win probability with visual bar
+    if prob is not None:
+        try:
+            prob_pct = float(prob) * 100
+            
+            # Visual progress bar
+            filled = int(prob_pct / 20)  # 0-5 blocks
+            bar = "█" * filled + "░" * (5 - filled)
+            
+            # Color based on probability
+            if prob_pct >= 70:
+                color = "🟢"
+            elif prob_pct >= 60:
+                color = "🟡"
+            elif prob_pct >= 45:
+                color = "🟠"
+            else:
+                color = "🔴"
+            
+            lines.append(f"{color} <b>Win Chance:</b> {prob_pct:.1f}% {bar}")
+        except Exception:
+            pass
+    
+    # Action recommendation with styled text
+    if action:
+        action_emoji, action_text = action_styles.get(action, ("⚪", action))
+        lines.append(f"{action_emoji} <b>Signal:</b> {action_text}")
+    
+    # Confidence level
+    if confidence:
+        # Emoji based on confidence
+        if confidence == "HIGH":
+            conf_emoji = "🎯"
+        elif confidence == "MEDIUM":
+            conf_emoji = "📊"
+        else:
+            conf_emoji = "📉"
+        
+        lines.append(f"{conf_emoji} <b>Confidence:</b> {html.escape(str(confidence))}")
+    
+    # Risk tier with clear interpretation
+    if risk_tier:
+        risk_tier_str = str(risk_tier)
+        
+        # Emoji and styling based on risk
+        if "LOW" in risk_tier_str.upper():
+            risk_emoji = "🛡️"
+            risk_label = "Low Risk"
+        elif "MEDIUM" in risk_tier_str.upper():
+            risk_emoji = "⚠️"
+            risk_label = "Moderate Risk"
+        elif "HIGH" in risk_tier_str.upper() and "VERY" not in risk_tier_str.upper():
+            risk_emoji = "🚨"
+            risk_label = "High Risk"
+        else:
+            risk_emoji = "☠️"
+            risk_label = "Very High Risk"
+        
+        lines.append(f"{risk_emoji} <b>Risk:</b> {risk_label}")
+    
+    return "\n".join(lines)
+
+
+# ============================================================================
+# ALPHA ALERTS - High-priority overlap alerts with security analysis
+# ============================================================================
 
 async def _get_dexscreener_data(mint: str) -> Dict[str, Any]:
     """Fetch token data from DexScreener API."""
@@ -70,7 +162,6 @@ async def _get_dexscreener_data(mint: str) -> Dict[str, Any]:
         logger.exception(f"Error fetching DexScreener for {mint}: {e}")
         return {}
 
-# Formatting helpers
 
 def _format_time_ago(dt: datetime) -> str:
     """Format datetime as 'Xd ago' or 'Xh ago'."""
@@ -133,32 +224,21 @@ def _get_graduation_status(markets: list, market_cap: float) -> str:
 
 
 def format_alpha_alert(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    """
-    SYNCHRONOUS version - returns (message_string, metadata_dict)
-    This must be called with asyncio.run() or await if needed.
-    """
-    # This is a wrapper that will be called by monitoring loop
-    # The actual async work is done in _format_alpha_alert_async
+    """Wrapper for async alpha alert formatting."""
     import asyncio
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # If loop is already running, we need to create task
-            # This path is tricky, but the caller (alpha_monitoring.py) manages the loop.
-            # Let's assume the caller handles the await.
-            # A cleaner way is to make the *caller* async, but we stick to the file.
-            # We return the coroutine itself to be awaited.
             return _format_alpha_alert_async(mint, entry)
         else:
             return loop.run_until_complete(_format_alpha_alert_async(mint, entry))
     except RuntimeError:
-        # No loop exists, create one
         return asyncio.run(_format_alpha_alert_async(mint, entry))
 
 
 async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """
-    Format alpha alert - ASYNC version that does the actual work.
+    Format alpha alert with enhanced ML insights.
     Returns (message_html_string, initial_state_dict)
     """
     try:
@@ -215,8 +295,6 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         freeze_authority = rugcheck.get("freeze_authority")
         mint_authority = rugcheck.get("mint_authority")
         score_normalised = rugcheck_raw.get("score_normalised", -1)
-
-        # --- ML V2: Removed old ml_win_probability line ---
         
         # Get ALL risks
         risks = sorted(
@@ -238,7 +316,7 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         
         lp_mc_ratio = (liquidity_usd / market_cap * 100) if market_cap > 0 else 0
 
-        # Get risk score assessment
+        # Risk score assessment
         if score_normalised <= 10:
             score_text = f"EXCELLENT ✅ ({score_normalised}/100)"
         elif score_normalised <= 30:
@@ -248,17 +326,17 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         else:
             score_text = f"HIGH RISK ❌ ({score_normalised}/100)"
 
-        # Escape HTML for safe display
+        # Escape HTML
         esc_name = html.escape(str(name))
         esc_symbol = html.escape(str(symbol))
         esc_mint = html.escape(str(mint))
 
-        # Format ALL risks
+        # Format risks (show top 5)
         risk_lines = []
-        for risk in risks:
+        for risk in risks[:5]:
             level = risk.get('level', 'info')
             if level == 'danger':
-                emoji = "⚠️"
+                emoji = "🔴"
             elif level == 'warn':
                 emoji = "⚠️"
             else:
@@ -268,33 +346,11 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         
         risk_str = "\n".join(risk_lines) if risk_lines else "✅ No significant risks"
 
-        # --- ML Insight (NEW) ---
-        ml_insight_lines = []
-        # Data from winner_monitor.py is at: result -> ml_prediction
-        ml_data = result.get("ml_prediction") 
-        if ml_data and isinstance(ml_data, dict):
-            prob = ml_data.get("probability")
-            confidence = ml_data.get("confidence")
-            risk_tier = ml_data.get("risk_tier")
+        # Get ML prediction data
+        ml_data = result.get("ml_prediction", {})
+        ml_section = format_ml_insight_for_alert(ml_data)
 
-            # Check if at least one value is present
-            if prob is not None or confidence or risk_tier:
-                ml_insight_lines.append("--- <b>ML Insight</b> ---")
-                if prob is not None:
-                    try:
-                        ml_insight_lines.append(f"<b>🤖 Win Probability:</b> {float(prob)*100:.2f}%")
-                    except Exception:
-                        pass
-                if confidence:
-                    ml_insight_lines.append(f"<b>📈 Confidence:</b> {html.escape(str(confidence))}")
-                if risk_tier:
-                    ml_insight_lines.append(f"<b>🛡️ Risk Tier:</b> {html.escape(str(risk_tier))}")
-        
-        ml_insight_str = "\n".join(ml_insight_lines)
-        if ml_insight_str:
-            ml_insight_str = "\n" + ml_insight_str # Add preceding newline
-
-        # Build the message - THIS MUST RETURN A PLAIN STRING
+        # Build the message
         msg = f"""🚀 <b>Alpha Alert: ${esc_symbol}</b> 🚀
 
 <b>{esc_name}</b>
@@ -304,30 +360,30 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 <b>Overlap Grade:</b> <b>{html.escape(str(overlap_grade).upper())}</b>
 
 --- 📈 <b>Market Data</b> ---
-<b>Price:</b> ${price_usd:.8f}
-<b>Market Cap:</b> {_format_usd(market_cap)}
-<b>Liquidity:</b> {_format_usd(liquidity_usd)}
-<b>LP / MC Ratio:</b> {lp_mc_ratio:.2f}%
-<b>Age:</b> {age_str}
+<b>💰 Price:</b> ${price_usd:.8f}
+<b>📊 Market Cap:</b> {_format_usd(market_cap)}
+<b>💧 Liquidity:</b> {_format_usd(liquidity_usd)}
+<b>📉 LP/MC Ratio:</b> {lp_mc_ratio:.2f}%
+<b>⏰ Age:</b> {age_str}
 
---- 📊 <b>Volume &amp; Holders</b> ---
-<b>Buy/Sell (24h):</b> {buy_pct:.2f}% / {sell_pct:.2f}%
-<b>Total Holders:</b> {int(holder_count):,}
+--- 📊 <b>Activity</b> ---
+<b>Buy/Sell:</b> {buy_pct:.0f}% / {sell_pct:.0f}%
+<b>👥 Holders:</b> {int(holder_count):,}
 
---- 🛡️ <b>Safety Check</b> ---
+--- 🛡️ <b>Safety</b> ---
 <b>Score:</b> {score_text}
-<b>LP Locked:</b> {_format_pct(lp_locked_pct)}
-<b>Mint Authority:</b> {'RENOUNCED ✅' if not mint_authority else 'ACTIVE ❌'}
-<b>Freeze Authority:</b> {'RENOUNCED ✅' if not freeze_authority else 'ACTIVE ❌'}
+<b>🔒 LP Locked:</b> {_format_pct(lp_locked_pct)}
+<b>Mint:</b> {'✅ Renounced' if not mint_authority else '❌ Active'}
+<b>Freeze:</b> {'✅ Renounced' if not freeze_authority else '❌ Active'}
 
 --- ⚠️ <b>Top Risks</b> ---
 {risk_str}
-{ml_insight_str}
+{ml_section}
 
 --- 🔗 <b>Links</b> ---
 <a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
 
-        # Create initial state for refresh functionality
+        # Create initial state
         initial_state = {
             "first_alert_at": datetime.now(timezone.utc).isoformat(),
             "initial_market_cap": market_cap,
@@ -339,7 +395,6 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
             "mint": mint
         }
 
-        # Return JUST the string and dict - no tuples, no extra wrapping
         return msg, initial_state
 
     except Exception as e:
@@ -348,17 +403,12 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 
 
 async def format_alpha_refresh(mint: str, initial_state: Dict[str, Any]) -> str:
-    """
-    Format refresh message showing changes since initial alert.
-    Returns a plain HTML string for Telegram.
-    """
+    """Format refresh message showing changes since initial alert."""
     try:
-        # Fetch current data
         dex_data = await _get_dexscreener_data(mint)
         if not dex_data:
             return "❌ Failed to fetch fresh data. Please try again in a moment."
 
-        # Get initial values
         symbol = initial_state.get("symbol", "N/A")
         name = initial_state.get("name", "Unknown")
         
@@ -371,12 +421,10 @@ async def format_alpha_refresh(mint: str, initial_state: Dict[str, Any]) -> str:
             logger.error(f"Failed to parse initial_state for {mint}: {e}")
             return "❌ Error: Could not parse initial token data."
 
-        # Get current values
         current_price = float(dex_data.get("priceUsd", 0) or 0)
         current_mc = float(dex_data.get("fdv", 0) or 0)
         current_liq = float(dex_data.get("liquidity", {}).get("usd", 0) or 0)
 
-        # Calculate changes
         mc_change_pct = ((current_mc - initial_mc) / initial_mc * 100) if initial_mc > 0 else 0
         liq_change_pct = ((current_liq - initial_liq) / initial_liq * 100) if initial_liq > 0 else 0
 
@@ -393,11 +441,10 @@ async def format_alpha_refresh(mint: str, initial_state: Dict[str, Any]) -> str:
         mc_change_str = format_change(mc_change_pct)
         liq_change_str = format_change(liq_change_pct)
 
-        # Build refresh message as plain string
         msg = f"""🔄 <b>Refresh: ${html.escape(str(symbol))}</b>
 <i>Stats vs. first alert {time_elapsed_str}</i>
 
-<b>Price:</b> ${current_price:.8f}
+<b>💰 Price:</b> ${current_price:.8f}
 
 --- <b>Market Cap</b> ---
 <b>Now:</b> {_format_usd(current_mc)}
@@ -431,15 +478,14 @@ def format_alert_html(
     first_alert_at: Optional[str] = None
 ) -> str:
     """
-    Format regular token alert as an HTML message with a tappable address.
-    Uses data ALREADY FETCHED by the monitoring loop.
+    Format regular token alert with enhanced ML insights.
     
     Args:
-        token_data: Token information dictionary (MUST include 'dexscreener' and 'rugcheck' keys)
+        token_data: Token information dictionary
         alert_type: "NEW" or "CHANGE"
         previous_grade: Previous grade (for CHANGE alerts)
-        initial_mc: Initial market cap (for comparison)
-        initial_fdv: Initial FDV (for comparison)
+        initial_mc: Initial market cap
+        initial_fdv: Initial FDV
         first_alert_at: Timestamp of first alert
     
     Returns:
@@ -454,19 +500,11 @@ def format_alert_html(
     dex_data = token_data.get("dexscreener", {})
     rugcheck_data = token_data.get("rugcheck", {})
 
-    # Use Dexscreener's market cap (which is FDV from their API)
     current_mc = dex_data.get("market_cap_usd")
-    
-    # Use RugCheck's aggregated liquidity
     current_liquidity = rugcheck_data.get("total_liquidity_usd")
-    
-    # --- ML V2: Removed old ml_win_probability line ---
-    # We will get this from the ml_prediction dict later
-
-    # We will use 'current_mc' for both MC and FDV display.
     current_fdv = current_mc 
 
-    # Build Market Cap / FDV line based on alert_type
+    # Build Market Cap line
     mc_line = ""
     if alert_type == "NEW":
         if current_mc is not None:
@@ -490,13 +528,12 @@ def format_alert_html(
         else:
             mc_line = "💰 <b>Market Cap/FDV:</b> Unknown"
 
-    # Build the full alert
+    # Build alert
     lines = [
         "🚀 <b>New Token Detected</b>" if alert_type == "NEW" else "🔔 <b>Grade Changed</b>",
         f"<b>{name}</b> ({symbol})" if symbol else f"<b>{name}</b>",
         f"<b>Grade:</b> {grade}" + (f" (was {previous_grade})" if previous_grade and alert_type == "CHANGE" else ""),
         mc_line,
-        # (CORRECTION) Handle 'None' for liquidity
         f"💧 <b>Liquidity:</b> {format_marketcap_display(current_liquidity)}" if current_liquidity is not None else "💧 <b>Liquidity:</b> Unknown",
         f"<b>Concentration:</b> {token_data.get('concentration')}%"
     ]
@@ -506,34 +543,15 @@ def format_alert_html(
 
     lines.append("")
     if mint:
-        # Wrap the address in <code> tags to make it tappable/copyable
         lines.append(f"<b>Token: (tap to copy)</b> <code>{mint}</code>")
 
-        # --- ML Insight ---
-        # Data from token_monitor.py is at: token_data -> ml_prediction
+        # Add ML insight
         ml_data = token_data.get("ml_prediction", {})
-        if ml_data: # and isinstance(ml_data, dict):
-            prob = ml_data.get("probability")
-            confidence = ml_data.get("confidence")
-            risk_tier = ml_data.get("risk_tier")
-
-            # Check if at least one value is present
-            if prob is not None or confidence or risk_tier:
-                lines.append("") # Add a newline separator
-                lines.append("--- <b>ML Insight</b> ---")
-                if prob is not None:
-                    try:
-                        lines.append(f"<b>🤖 Win Probability:</b> {float(prob)*100:.2f}%")
-                    except Exception:
-                        pass # fail silently if conversion fails
-                if confidence:
-                    lines.append(f"<b>📈 Confidence:</b> {html.escape(str(confidence))}")
-                if risk_tier:
-                    lines.append(f"<b>🛡️ Risk Tier:</b> {html.escape(str(risk_tier))}")
+        ml_section = format_ml_insight_for_alert(ml_data)
+        if ml_section:
+            lines.append(ml_section)
         
-        # Add a newline before the links
-        lines.append("") 
-
+        lines.append("")
         lines.append(
             f'<a href="https://solscan.io/token/{mint}">Solscan</a> | '
             f'<a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | '

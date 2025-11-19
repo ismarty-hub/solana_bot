@@ -4,22 +4,28 @@ alerts/commands.py - User-facing bot commands with enhanced portfolio management
 """
 
 import logging
+import html
+import aiohttp
+import asyncio
+from pathlib import Path  # Added back for path construction
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from datetime import datetime
 
-from config import ALL_GRADES
+# Imports from new config.py
+# REVERTED: We import DATA_DIR instead of ALPHA_ALERTS_STATE_FILE to ensure path accuracy
+from config import ALL_GRADES, FASTAPI_ML_URL, DATA_DIR
 from alerts.user_manager import UserManager
 from trade_manager import PortfolioManager
 
 # --- Imports for Alpha Alerts ---
-from pathlib import Path
-from config import DATA_DIR
 from shared.file_io import safe_load
-# Import the refresh formatter
+# Import the refresh formatter and HTTP session manager
 from .formatters import format_alpha_refresh, _get_http_session, _close_http_session
 
-# Define state file path
+logger = logging.getLogger(__name__)
+
+# --- FIX: Explicitly define path to ensure it matches where the writer saves data ---
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
 
 
@@ -96,30 +102,12 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     success = user_manager.update_user_prefs(chat_id, {"alpha_alerts": True})
     
     if success:
-        # Verify the update
-        verify_prefs = user_manager.get_user_prefs(chat_id)
-        is_now_enabled = verify_prefs.get("alpha_alerts", False)
-        
-        if is_now_enabled:
-            logging.info(f"✅ User {chat_id} successfully subscribed to alpha alerts")
-            await update.message.reply_html(
-                "🚀 <b>Alpha Alerts Activated!</b>\n\n"
-                "✅ You will now receive high-priority Alpha Alerts for tokens with:\n"
-                "• Strong wallet overlap signals\n"
-                "• Concentrated holder patterns\n"
-                "• Critical timing indicators\n\n"
-                "<b>📊 What to expect:</b>\n"
-                "You'll get instant notifications when our system detects premium opportunities.\n\n"
-                "<i>Use /myalerts to confirm your settings</i>"
-            )
-        else:
-            logging.error(f"❌ User {chat_id} update succeeded but verification failed")
-            await update.message.reply_html(
-                "⚠️ <b>Update Issue</b>\n\n"
-                "The subscription was saved but couldn't be verified. Please try again or contact support."
-            )
+        await update.message.reply_html(
+            "🚀 <b>Alpha Alerts Activated!</b>\n\n"
+            "✅ You will now receive high-priority Alpha Alerts.\n"
+            "<i>Use /myalerts to confirm your settings</i>"
+        )
     else:
-        logging.error(f"❌ Failed to update alpha_alerts for user {chat_id}")
         await update.message.reply_html(
             "❌ <b>Failed to Subscribe</b>\n\n"
             "There was an error updating your preferences. Please try again in a moment."
@@ -150,95 +138,16 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     success = user_manager.update_user_prefs(chat_id, {"alpha_alerts": False})
     
     if success:
-        # Verify the update
-        verify_prefs = user_manager.get_user_prefs(chat_id)
-        is_now_disabled = not verify_prefs.get("alpha_alerts", False)
-        
-        if is_now_disabled:
-            logging.info(f"✅ User {chat_id} successfully unsubscribed from alpha alerts")
-            await update.message.reply_html(
-                "😴 <b>Alpha Alerts Disabled</b>\n\n"
-                "✅ You will no longer receive high-priority Alpha Alerts.\n\n"
-                "<i>You can re-enable them anytime with /alpha_subscribe</i>\n"
-                "<i>Use /myalerts to confirm your settings</i>"
-            )
-        else:
-            logging.error(f"❌ User {chat_id} update succeeded but verification failed")
-            await update.message.reply_html(
-                "⚠️ <b>Update Issue</b>\n\n"
-                "The unsubscribe was saved but couldn't be verified. Please try again or contact support."
-            )
+        await update.message.reply_html(
+            "😴 <b>Alpha Alerts Disabled</b>\n\n"
+            "✅ You will no longer receive high-priority Alpha Alerts.\n"
+            "<i>Use /myalerts to confirm your settings</i>"
+        )
     else:
-        logging.error(f"❌ Failed to update alpha_alerts for user {chat_id}")
         await update.message.reply_html(
             "❌ <b>Failed to Unsubscribe</b>\n\n"
             "There was an error updating your preferences. Please try again in a moment."
         )
-
-
-async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
-    """Handle /myalerts command, now shows alpha alert status clearly."""
-    chat_id = str(update.effective_chat.id)
-    
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
-        return
-    
-    prefs = user_manager.get_user_prefs(chat_id)
-    stats = user_manager.get_user_stats(chat_id)
-
-    total_alerts = stats.get("alerts_received", 0)
-    last_alert = stats.get("last_alert_at")
-    last_alert_str = "Never" if not last_alert else f"<i>{last_alert[:10]}</i>"
-
-    # Check Alpha Alert Status
-    alpha_enabled = prefs.get("alpha_alerts", False)
-    alpha_status = "✅ <b>Enabled</b>" if alpha_enabled else "❌ <b>Disabled</b>"
-    
-    # Get mode status
-    from commands import get_mode_status_text  # Import if in separate file
-    modes_status = get_mode_status_text(prefs)
-    
-    msg = (
-        f"📊 <b>Your Alert Settings</b>\n\n"
-        f"<b>Active Modes:</b> {modes_status}\n"
-        f"<b>Subscribed Grades:</b> {', '.join(prefs.get('grades', ['Not Set']))}\n\n"
-        f"<b>🚀 Alpha Alerts:</b> {alpha_status}\n"
-    )
-    
-    if alpha_enabled:
-        msg += f"<i>   You'll receive high-priority alpha signals</i>\n"
-    else:
-        msg += f"<i>   Use /alpha_subscribe to enable</i>\n"
-    
-    msg += (
-        f"\n<b>📈 Statistics:</b>\n"
-        f"<b>Total alerts received:</b> {total_alerts}\n"
-        f"<b>Last alert:</b> {last_alert_str}\n\n"
-        f"<b>💡 Quick Commands:</b>\n"
-        f"• /start - Change mode\n"
-        f"• /setalerts - Change grades\n"
-        f"• /alpha_subscribe - Enable alpha alerts\n"
-        f"• /alpha_unsubscribe - Disable alpha alerts"
-    )
-    
-    await update.message.reply_html(msg)
-
-async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
-    """Handle /alpha_unsubscribe command to opt-out of alpha alerts."""
-    chat_id = str(update.effective_chat.id)
-    
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
-        return
-        
-    # Set the user preference for alpha_alerts to False
-    user_manager.update_user_prefs(chat_id, {"alpha_alerts": False})
-    
-    await update.message.reply_html(
-        "😴 <b>Alpha Alerts Unsubscribed!</b>\n\n"
-        "You will no longer receive high-priority Alpha Alerts. Use /myalerts to confirm your setting."
-    )
 
 # --- END ALPHA ALERTS COMMANDS ---
 
@@ -341,6 +250,11 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>--- 🔥 Alpha Alerts ---</b>\n"
         "• /alpha_subscribe - Opt-in to high-priority alpha alerts\n"
         "• /alpha_unsubscribe - Opt-out of alpha alerts\n\n"
+        
+        "<b>--- 🤖 ML Predictions (NEW) ---</b>\n"
+        "• /predict [mint] - Get ML prediction for one token\n"
+        "• /predict_batch [mints...] - Get ML predictions for multiple tokens\n\n"
+
         "<b>--- Paper Trading ---</b>\n"
         "• /papertrade [capital] - Set trading capital and enable paper trading\n"
         "  Example: <code>/papertrade 1000</code>\n"
@@ -572,8 +486,6 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
         await update.message.reply_html("📊 No open positions to calculate P/L.")
         return
     
-    # We need current prices - this is a simplified version
-    # In production, you'd fetch live prices here
     msg = (
         f"📊 <b>Unrealized P/L Summary</b>\n\n"
         f"<i>Note: For live P/L with current prices, the monitoring loop sends automatic updates every 5 minutes.</i>\n\n"
@@ -931,6 +843,296 @@ async def testalert_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(f"🔔 Test Alert\n\n{message}")
 
 
+# --- NEW: ML PREDICTION COMMANDS ---
+
+def _format_prediction_result(mint: str, data: dict) -> str:
+    """Helper to format the prediction data into an HTML string."""
+    try:
+        # The data from batch and single endpoints has a slightly different structure
+        # This handles both
+        if 'prediction' in data:
+            pred = data['prediction']
+        else:
+            pred = data
+            
+        win_prob = pred.get('win_probability', 0) * 100
+        confidence = pred.get('confidence', 'N/A')
+        risk_tier = pred.get('risk_tier', 'N/A')
+        
+        lines = [
+            f"🤖 <b>ML Prediction for Token</b>",
+            f"<code>{mint}</code>\n",
+            f"<b>Win Probability:</b> {win_prob:.2f}%",
+            f"<b>Confidence:</b> {html.escape(confidence)}",
+            f"<b>Risk Tier:</b> {html.escape(risk_tier)}",
+        ]
+        
+        # --- Helper to format numbers compactly (e.g., 100K, 2.5M) ---
+        def fmt_num(val):
+            if val is None: return "N/A"
+            if val >= 1_000_000: return f"${val/1_000_000:.1f}M"
+            if val >= 1_000: return f"${val/1_000:.1f}K"
+            return f"${val:,.2f}"
+
+        # Add Key Metrics with Friendly Names and Grouping
+        key_metrics = pred.get('key_metrics', {})
+        if key_metrics:
+            lines.append("\n--- <b>Key Metrics</b> ---")
+            
+            # 1. Market Stats (Liquidity, Volume, FDV)
+            liq = key_metrics.get('liquidity_usd', 0)
+            vol = key_metrics.get('volume_h24_usd', 0)
+            fdv = key_metrics.get('market_cap_usd', 0)
+            
+            lines.append(f"💧 <b>Liquidity:</b> {fmt_num(liq)}")
+            lines.append(f"📊 <b>24h Volume:</b> {fmt_num(vol)}")
+            if fdv > 0:
+                lines.append(f"💰 <b>Market Cap:</b> {fmt_num(fdv)}")
+
+            # 2. Age & Price Action
+            age_hours = key_metrics.get('token_age_hours', 0)
+            price_change = key_metrics.get('price_change_h24_pct', 0)
+            
+            # Smart Age Formatting (Corrected for Days/Hours)
+            if age_hours >= 24:
+                age_str = f"{age_hours/24:.1f} days"
+            else:
+                age_str = f"{age_hours:.1f}h"
+                
+            lines.append(f"⏰ <b>Token Age:</b> {age_str}")
+            
+            # Price Change with Direction
+            pch_emoji = "🟢" if price_change > 0 else "🔴"
+            lines.append(f"{pch_emoji} <b>24h Change:</b> {price_change:+.2f}%")
+
+            # 3. Holders & Supply
+            insider = key_metrics.get('insider_supply_pct', 0)
+            top10 = key_metrics.get('top_10_holders_pct', 0)
+            
+            lines.append(f"👥 <b>Insider Holdings:</b> {insider:.1f}%")
+            lines.append(f"🐳 <b>Top 10 Holders:</b> {top10:.1f}%")
+            
+            # 4. Risk & Health (Interpretations)
+            risk_score = key_metrics.get('pump_dump_risk_score', 0)
+            health_score = key_metrics.get('market_health_score', 0)
+            
+            # Interpret Risk (Lower is better)
+            if risk_score <= 20:
+                risk_text = "Low (Safe)"
+                risk_emoji = "🟢"
+            elif risk_score <= 50:
+                risk_text = "Moderate"
+                risk_emoji = "🟡"
+            else:
+                risk_text = "High Risk"
+                risk_emoji = "🔴"
+            
+            # Interpret Health (Higher is better)
+            if health_score >= 80:
+                health_text = "Strong"
+                health_emoji = "💪"
+            elif health_score >= 40:
+                health_text = "Average"
+                health_emoji = "⚠️"
+            else:
+                health_text = "Weak"
+                health_emoji = "🤒"
+            
+            lines.append(f"{risk_emoji} <b>Risk Level:</b> {risk_text} ({risk_score:.0f})")
+            lines.append(f"{health_emoji} <b>Market Health:</b> {health_text} ({health_score:.0f})")
+
+        # Add Warnings
+        warnings = pred.get('warnings', [])
+        if warnings:
+            lines.append("\n--- <b>Warnings</b> ---")
+            for warning in warnings:
+                # Clean up specific common warning text if needed, otherwise just display
+                clean_warning = html.escape(warning)
+                lines.append(f"• {clean_warning}")
+        
+        return "\n".join(lines)
+        
+    except Exception as e:
+        logger.error(f"Error formatting prediction: {e}")
+        return f"❌ Error formatting prediction for <code>{mint}</code>."
+
+async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /predict [mint] command."""
+    chat_id = str(update.effective_chat.id)
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+
+    if not context.args or len(context.args) != 1:
+        await update.message.reply_html(
+            "<b>Usage:</b> <code>/predict [mint_address]</code>\n\n"
+            "<b>Example:</b> <code>/predict DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263</code>"
+        )
+        return
+
+    mint = context.args[0].strip()
+    loading_msg = await update.message.reply_html(f"🤖 Analyzing token <code>{mint}</code>... Please wait.")
+    
+    url = f"{FASTAPI_ML_URL}/token/{mint}/predict"
+    
+    try:
+        session = await _get_http_session()
+        async with session.get(url, timeout=120) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                result_msg = _format_prediction_result(mint, data)
+                await loading_msg.edit_text(result_msg, parse_mode="HTML", disable_web_page_preview=True)
+            else:
+                error_data = await resp.json()
+                error_msg = error_data.get('detail', 'Unknown error')
+                logger.warning(f"Prediction failed for {mint}, status {resp.status}: {error_msg}")
+                await loading_msg.edit_text(
+                    f"❌ <b>Analysis Failed for <code>{mint}</code></b>\n\n"
+                    f"<b>Error:</b> {html.escape(error_msg)}",
+                    parse_mode="HTML"
+                )
+                
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout during /predict for {mint}")
+        await loading_msg.edit_text(f"❌ <b>Request Timed Out</b>\n\nThe prediction service is taking too long to respond.")
+    except aiohttp.ClientError as e:
+        logger.error(f"HTTP error during /predict: {e}")
+        await loading_msg.edit_text(f"❌ <b>Connection Error</b>\n\nFailed to connect to the prediction service.")
+    except Exception as e:
+        logger.exception(f"Error in /predict command: {e}")
+        await loading_msg.edit_text(f"❌ <b>An Unexpected Error Occurred</b>\n\nPlease try again later.")
+
+async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Handle /predict_batch [mint1] [mint2] ... command."""
+    chat_id = str(update.effective_chat.id)
+    if not user_manager.is_subscribed(chat_id):
+        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        return
+
+    mints = [arg.strip() for arg in context.args]
+    
+    if not mints:
+        await update.message.reply_html(
+            "<b>Usage:</b> <code>/predict_batch [mint1] [mint2] ...</code>\n\n"
+            "<b>Example:</b> <code>/predict_batch mint1 mint2 mint3</code>\n\n"
+            "<b>Note:</b> Maximum 10 tokens per batch"
+        )
+        return
+        
+    if len(mints) > 10:
+        await update.message.reply_html("❌ <b>Error:</b> Maximum of 10 tokens per batch request.")
+        return
+
+    loading_msg = await update.message.reply_html(
+        f"🤖 Analyzing <b>{len(mints)} tokens</b> in a batch... This may take a moment."
+    )
+    
+    # FIXED: Send as JSON array in request body, NOT inside a dict
+    url = f"{FASTAPI_ML_URL}/token/predict/batch"
+    
+    try:
+        session = await _get_http_session()
+        
+        # CRITICAL FIX: Send mints as a JSON array directly
+        async with session.post(
+            url, 
+            json=mints,  # ← This is now a list, not {"mints": mints}
+            params={"threshold": 0.70},
+            timeout=120
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                predictions = data.get('predictions', [])
+                
+                result_lines = [f"<b>Batch Analysis Complete ({len(predictions)} tokens)</b>\n"]
+                
+                for item in predictions:
+                    mint = item.get('mint')
+                    mint_short = mint[:8] + "..." if len(mint) > 12 else mint
+                    
+                    if item.get('success'):
+                        # Format successful prediction
+                        pred_data = item['prediction']
+                        action = pred_data.get('action', 'N/A')
+                        win_prob = pred_data.get('win_probability', 0) * 100
+                        confidence = pred_data.get('confidence', 'N/A')
+                        risk = pred_data.get('risk_tier', 'N/A')
+                        
+                        # Action emoji
+                        action_emoji = {
+                            "BUY": "🟢",
+                            "CONSIDER": "🟡",
+                            "SKIP": "🟠",
+                            "AVOID": "🔴"
+                        }.get(action, "⚪")
+                        
+                        result_lines.append(
+                            f"{action_emoji} <b>{mint_short}</b>\n"
+                            f"   Action: <b>{action}</b>\n"
+                            f"   Win: {win_prob:.1f}% | {confidence}\n"
+                            f"   Risk: {risk}\n"
+                        )
+                    else:
+                        # Format error
+                        error = item.get('error', 'Unknown error')
+                        result_lines.append(
+                            f"❌ <b>{mint_short}</b>\n"
+                            f"   Error: {html.escape(error)}\n"
+                        )
+                
+                # Summary
+                successful = data.get('successful_predictions', 0)
+                failed = data.get('failed_predictions', 0)
+                buy_signals = data.get('buy_signals', 0)
+                
+                result_lines.append(
+                    f"\n<b>Summary:</b>\n"
+                    f"✅ Success: {successful} | ❌ Failed: {failed}\n"
+                    f"🟢 Buy Signals: {buy_signals}"
+                )
+                
+                final_msg = "\n".join(result_lines)
+                
+                # Check Telegram message length limit
+                if len(final_msg) > 4096:
+                    final_msg = final_msg[:4090] + "...\n<i>(truncated)</i>"
+                    
+                await loading_msg.edit_text(final_msg, parse_mode="HTML", disable_web_page_preview=True)
+                
+            else:
+                error_data = await resp.json()
+                error_msg = error_data.get('detail', 'Unknown error')
+                logger.warning(f"Batch prediction failed, status {resp.status}: {error_msg}")
+                await loading_msg.edit_text(
+                    f"❌ <b>Batch Analysis Failed</b>\n\n"
+                    f"<b>Error:</b> {html.escape(error_msg)}",
+                    parse_mode="HTML"
+                )
+                
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout during /predict_batch for {len(mints)} mints")
+        await loading_msg.edit_text(
+            "❌ <b>Request Timed Out</b>\n\n"
+            "The prediction service is taking too long to respond.\n"
+            "Try reducing the number of tokens or try again later."
+        )
+    except aiohttp.ClientError as e:
+        logger.error(f"HTTP error during /predict_batch: {e}")
+        await loading_msg.edit_text(
+            "❌ <b>Connection Error</b>\n\n"
+            "Failed to connect to the prediction service.\n"
+            "Please try again in a moment."
+        )
+    except Exception as e:
+        logger.exception(f"Error in /predict_batch command: {e}")
+        await loading_msg.edit_text(
+            "❌ <b>An Unexpected Error Occurred</b>\n\n"
+            "Please try again later or contact support."
+        )
+
+# --- END ML PREDICTION COMMANDS ---
+
+
 # --- MODIFIED: button_handler ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle inline keyboard button callbacks."""
@@ -951,48 +1153,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         try:
             mint = data.split(":", 1)[1]
             
-            # Load the initial state
+            # Load the initial state using the correctly constructed path
             alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
             initial_state = alerts_state.get(mint)
             
             if not initial_state:
+                # If not found, it might be because the alert is too old or path issue persisting
                 await query.edit_message_text(
                     "Error: Initial data not found for this token. It may be too old.",
                     reply_markup=None
                 )
                 return
             
-            # --- NEW: Reply vs. Edit Logic ---
-            # Check if the message we're acting on is a refresh message
+            # --- Reply vs. Edit Logic ---
             is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
             
             if is_refresh_message:
                 # --- EDIT LOGIC (for subsequent clicks) ---
-                
-                # 1. Show loading state by editing
                 symbol = initial_state.get("symbol", "N/A")
                 loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>
 
 <i>Please wait, fetching live data...</i> 
-
---- <b>Market Cap</b> ---
-<b>Now:</b> <i>Loading...</i>
-<b>Initial:</b> <i>Loading...</i>
-<b>Change:</b> <i>Loading...</i>
-
---- <b>Liquidity</b> ---
-<b>Now:</b> <i>Loading...</i>
-<b>Initial:</b> <i>Loading...</i>
-<b>Change:</b> <i>Loading...</i>
-
-<a href="https://dexscreener.com/solana/{mint}">View on DexScreener</a>
 """
                 loading_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
                 ])
                 
                 try:
-                    # Only edit if message is not already "loading"
                     if query.message.text != loading_message:
                         await query.edit_message_text(
                             text=loading_message,
@@ -1003,17 +1190,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 except Exception as e:
                     if "message is not modified" in str(e).lower():
                         await query.answer("Already refreshing...")
-                        return # Already in loading state, stop
-                    raise # Re-raise other errors
+                        return 
+                    raise 
                 
-                # 2. Get final data
                 message = await format_alpha_refresh(mint, initial_state)
-                
                 final_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
                 ])
 
-                # 3. Edit to final data
                 await query.edit_message_text(
                     text=message,
                     parse_mode="HTML",
@@ -1023,62 +1207,50 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             
             else:
                 # --- REPLY LOGIC (for first click on original alert) ---
-                
-                # 1. Get final data
                 message = await format_alpha_refresh(mint, initial_state)
-                
                 final_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
                 ])
                 
-                # 2. Send as a new reply to the original alert
                 await query.message.reply_html(
                     text=message,
                     reply_markup=final_keyboard,
                     disable_web_page_preview=True
                 )
-            # --- END NEW LOGIC ---
                 
         except Exception as e:
             if "message is not modified" in str(e).lower():
                 await query.answer("Data is already up to date.")
             else:
-                logging.error(f"Failed to refresh alpha alert: {e}")
+                logger.error(f"Failed to refresh alpha alert: {e}")
                 await query.answer("Error during refresh.", show_alert=True)
-        return # Stop processing
+        return
 
     # --- Handle CA Analysis Button in Groups ---
     if data.startswith("analyze_"):
-        # This button is intended for groups.
-        # query.message.chat.type can be 'group', 'supergroup', or 'private'
         if query.message.chat.type in ["group", "supergroup"]:
             try:
                 mint_address = data.split("_", 1)[1]
-                # Send the CA as a new message in the group
                 await context.bot.send_message(
                     chat_id=query.message.chat_id,
                     text=f"<code>{mint_address}</code>",
                     parse_mode="HTML"
                 )
-                # We don't edit the original message, just send a new one.
-                # We already called query.answer()
-                return # Exit handler
+                return 
             except Exception as e:
                 logging.warning(f"Failed to send CA in group: {e}")
                 try:
-                    # Notify user who clicked that it failed
                     await query.answer("Error sending address.", show_alert=True)
                 except:
                     pass
-                return # Exit handler
+                return 
         else:
-            # User clicked it in a private chat (shouldn't happen, but handle it)
             try:
                 mint_address = data.split("_", 1)[1]
                 await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
             except Exception as e:
                 logging.warning(f"Failed to send CA in private chat: {e}")
-            return # Exit handler
+            return
 
     # --- Subscription Check (for all other user-specific commands) ---
     if not user_manager.is_subscribed(chat_id):

@@ -10,12 +10,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 # --- Updated Config Imports ---
+# Now imports ALL settings from the new config.py
 from config import (
     BOT_TOKEN, DATA_DIR, USER_PREFS_FILE, USER_STATS_FILE, 
     ALERTS_STATE_FILE, GROUPS_FILE, PORTFOLIOS_FILE,
     USE_SUPABASE, OVERLAP_FILE, BUCKET_NAME,
-    # Add new config file name
-    ALPHA_ALERTS_STATE_FILE
+    ALPHA_ALERTS_STATE_FILE, ADMIN_USER_ID
 )
 # --- End Updated Config Imports ---
 
@@ -30,7 +30,9 @@ from alerts.commands import (
     papertrade_cmd, portfolio_cmd, pnl_cmd, history_cmd,
     performance_cmd, watchlist_cmd, resetcapital_cmd,
     # Add new alpha commands
-    alpha_subscribe_cmd, alpha_unsubscribe_cmd
+    alpha_subscribe_cmd, alpha_unsubscribe_cmd,
+    # --- NEW: Add ML commands ---
+    predict_cmd, predict_batch_cmd
 )
 # --- End Updated Command Imports ---
 
@@ -116,6 +118,15 @@ async def watchlist_wrapper(update, context):
 async def resetcapital_wrapper(update, context): 
     await resetcapital_cmd(update, context, user_manager, portfolio_manager)
 
+# --- NEW: ML Command Wrappers ---
+# We pass user_manager to check for subscription status
+async def predict_wrapper(update, context): 
+    await predict_cmd(update, context, user_manager)
+
+async def predict_batch_wrapper(update, context): 
+    await predict_batch_cmd(update, context, user_manager)
+# --- END ML Command Wrappers ---
+
 # ----------------------
 # Startup hook
 # ----------------------
@@ -146,6 +157,9 @@ async def on_startup(app: Application):
             # Add new alpha commands to the list
             BotCommand("alpha_subscribe", "Subscribe to Alpha Alerts"),
             BotCommand("alpha_unsubscribe", "Unsubscribe from Alpha Alerts"),
+            # --- NEW: Add ML commands to menu ---
+            BotCommand("predict", "🤖 Get ML prediction for a token"),
+            BotCommand("predict_batch", "🤖 Get ML predictions for multiple tokens"),
         ]
         
         # Set commands for all users
@@ -165,10 +179,9 @@ async def on_startup(app: Application):
             BotCommand("listgroups", "List authorized groups"),
         ]
         
-        # Set admin commands for each admin (if ADMIN_IDS exists)
-        try:
-            from config import ADMIN_IDS
-            for admin_id in ADMIN_IDS:
+        # Set admin commands for each admin
+        if ADMIN_USER_ID:
+            for admin_id in ADMIN_USER_ID:
                 try:
                     await app.bot.set_my_commands(
                         admin_commands, 
@@ -176,8 +189,8 @@ async def on_startup(app: Application):
                     )
                 except Exception as e:
                     logger.warning(f"Could not set admin commands for {admin_id}: {e}")
-            logger.info(f"✅ Admin commands configured for {len(ADMIN_IDS)} admins")
-        except ImportError:
+            logger.info(f"✅ Admin commands configured for {len(ADMIN_USER_ID)} admins")
+        else:
             logger.info("ℹ️ No ADMIN_IDS found in config - skipping admin command setup")
         
     except Exception as e:
@@ -278,6 +291,11 @@ async def main():
     app.add_handler(CommandHandler("alpha_unsubscribe", alpha_unsubscribe_wrapper))
     # --- End New Alpha Commands ---
     
+    # --- NEW: Register ML Commands ---
+    app.add_handler(CommandHandler("predict", predict_wrapper))
+    app.add_handler(CommandHandler("predict_batch", predict_batch_wrapper))
+    # --- END NEW ML Commands ---
+
     # Register admin commands
     app.add_handler(CommandHandler("admin", admin_stats_wrapper))
     app.add_handler(CommandHandler("broadcast", broadcast_wrapper))
@@ -297,11 +315,8 @@ async def main():
             notify_new_group
         )
     )
-
-    # Register callback query handler for inline buttons (This was a duplicate in your file)
-    # app.add_handler(CallbackQueryHandler(button_wrapper))
     
-    logger.info("✅ All command handlers registered (including new alpha commands).")
+    logger.info("✅ All command handlers registered (including new alpha and ML commands).")
     
     # Run application with startup logic
     try:

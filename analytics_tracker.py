@@ -46,7 +46,7 @@ PRICE_CHECK_INTERVAL_OLD = 240  # 4 minutes for tokens > 12 hours old
 TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
 TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days
 
-# Validation Thresholds (*** NEW ***)
+# Validation Thresholds
 MCAP_LIQUIDITY_RATIO_THRESHOLD = 10.0 # If Mcap / Liquidity > 10, verify
 MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious pump
 
