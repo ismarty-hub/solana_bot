@@ -2132,3 +2132,190 @@ Traceback (most recent call last):
   File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
     self._write_fut = self._loop._proactor.send(self._sock, data)
 AttributeError: 'NoneType' object has no attribute 'send'
+2025-11-26 09:06:15,158 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 09:06:16,662 - __main__ - INFO - Initialized with 75 active tokens.
+2025-11-26 09:06:16,663 - __main__ - INFO - Downloading signals...
+2025-11-26 09:06:16,985 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:06:18,242 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:06:31,276 - __main__ - INFO - Retry successful for t1ckMMQzJA6rH3ma9a2vZoowSZqsmCHqrgLhvvQTJ1d_alpha
+2025-11-26 09:06:31,496 - __main__ - INFO - Retry successful for 7ncZHDGCmUmqnjCzSKqRGAzX3wuKWRkWzPNUcGbpump_alpha
+2025-11-26 09:06:32,829 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:33,966 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 09:06:33,972 - __main__ - INFO - Generating summary stats for discovery...
+2025-11-26 09:06:34,510 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:35,100 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-19.json "HTTP/2 200 OK"
+2025-11-26 09:06:36,978 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-20.json "HTTP/2 200 OK"
+2025-11-26 09:06:38,435 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-21.json "HTTP/2 200 OK"
+2025-11-26 09:06:39,847 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-22.json "HTTP/2 200 OK"
+2025-11-26 09:06:41,371 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-23.json "HTTP/2 200 OK"
+2025-11-26 09:06:42,732 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-11-24.json "HTTP/2 200 OK"
+2025-11-26 09:06:44,822 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:45,302 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/discovery/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 09:06:45,305 - __main__ - INFO - Generating summary stats for alpha...
+2025-11-26 09:06:45,677 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:46,272 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-17.json "HTTP/2 200 OK"
+2025-11-26 09:06:47,988 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-19.json "HTTP/2 200 OK"
+2025-11-26 09:06:50,459 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-20.json "HTTP/2 200 OK"
+2025-11-26 09:06:51,970 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-21.json "HTTP/2 200 OK"
+2025-11-26 09:06:53,390 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-22.json "HTTP/2 200 OK"
+2025-11-26 09:06:54,891 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-23.json "HTTP/2 200 OK"
+2025-11-26 09:06:56,481 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-24.json "HTTP/2 200 OK"
+2025-11-26 09:06:58,082 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:58,625 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 09:06:58,628 - __main__ - INFO - Generating overall analytics...
+2025-11-26 09:06:59,028 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:06:59,526 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/overall/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 09:07:17,629 - __main__ - INFO - Downloading signals...
+2025-11-26 09:07:18,397 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:07:19,903 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:08:18,653 - __main__ - INFO - Downloading signals...
+2025-11-26 09:08:20,745 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:08:22,243 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:09:19,140 - __main__ - INFO - Downloading signals...
+2025-11-26 09:09:21,241 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:09:22,905 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:10:19,595 - __main__ - INFO - Downloading signals...
+2025-11-26 09:10:23,799 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:10:25,204 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:11:19,988 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:11:21,150 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 09:11:22,164 - __main__ - INFO - Downloading signals...
+2025-11-26 09:11:22,613 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:11:23,977 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:12:22,328 - __main__ - INFO - Downloading signals...
+2025-11-26 09:12:24,445 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:12:25,890 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:13:23,075 - __main__ - INFO - Downloading signals...
+2025-11-26 09:13:25,163 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:13:26,520 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:14:23,950 - __main__ - INFO - Downloading signals...
+2025-11-26 09:14:26,035 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:14:27,480 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:15:24,261 - __main__ - INFO - Downloading signals...
+2025-11-26 09:15:26,096 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:15:27,554 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:16:19,751 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:16:20,886 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 09:16:25,179 - __main__ - INFO - Downloading signals...
+2025-11-26 09:16:25,816 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:16:27,297 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:17:25,228 - __main__ - INFO - Downloading signals...
+2025-11-26 09:17:29,286 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:17:30,745 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:18:26,089 - __main__ - INFO - Downloading signals...
+2025-11-26 09:18:28,262 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:18:29,653 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:19:26,609 - __main__ - INFO - Downloading signals...
+2025-11-26 09:19:28,654 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:19:30,254 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:20:27,243 - __main__ - INFO - Downloading signals...
+2025-11-26 09:20:29,493 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:20:30,910 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:21:20,579 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 09:21:21,950 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 09:21:27,289 - __main__ - INFO - Downloading signals...
+2025-11-26 09:21:28,260 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:21:29,620 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:22:27,682 - __main__ - INFO - Downloading signals...
+2025-11-26 09:22:29,777 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:22:31,304 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:23:28,327 - __main__ - INFO - Downloading signals...
+2025-11-26 09:23:30,510 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:23:32,870 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:24:28,382 - __main__ - INFO - Downloading signals...
+2025-11-26 09:24:40,445 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:24:43,048 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 09:25:28,473 - __main__ - INFO - Downloading signals...
+2025-11-26 09:25:30,779 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 09:25:32,154 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:03:17,009 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 10:03:18,365 - __main__ - INFO - Initialized with 75 active tokens.
+2025-11-26 10:03:18,365 - __main__ - INFO - Downloading signals...
+2025-11-26 10:03:18,708 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:03:20,067 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:03:21,808 - __main__ - INFO - Tracking complete for 2T1FZvs9TEp88bXKhHoRn6sXqufa8Ky6VKB4iMJnpump_alpha. Final status: active
+2025-11-26 10:03:21,808 - __main__ - INFO - Added new entry for 2T1FZvs9TEp88bXKhHoRn6sXqufa8Ky6VKB4iMJnpump_alpha to analytics/alpha/daily/2025-11-26.json (is_final=True)
+2025-11-26 10:03:21,808 - __main__ - INFO - Removed 2T1FZvs9TEp88bXKhHoRn6sXqufa8Ky6VKB4iMJnpump_alpha from active tracking.
+2025-11-26 10:03:22,151 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:22,647 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/daily/2025-11-26.json "HTTP/2 200 OK"
+2025-11-26 10:03:22,647 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-11-26.json "HTTP/2 400 Bad Request"
+2025-11-26 10:03:22,647 - __main__ - ERROR - File 'analytics/alpha/daily/2025-11-26.json': Download error. {'statusCode': 404, 'error': not_found, 'message': Object not found}
+2025-11-26 10:03:34,340 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:35,473 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 10:03:35,473 - __main__ - INFO - Generating summary stats for discovery...
+2025-11-26 10:03:36,117 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:36,536 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:37,016 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/discovery/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 10:03:37,022 - __main__ - INFO - Generating summary stats for alpha...
+2025-11-26 10:03:37,442 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:38,009 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:38,498 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 10:03:38,502 - __main__ - INFO - Generating overall analytics...
+2025-11-26 10:03:38,928 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:03:39,411 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/overall/summary_stats.json "HTTP/2 200 OK"
+2025-11-26 10:04:19,265 - __main__ - INFO - Downloading signals...
+2025-11-26 10:04:21,309 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:04:22,870 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:05:19,381 - __main__ - INFO - Downloading signals...
+2025-11-26 10:05:23,836 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:05:25,337 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:06:19,692 - __main__ - INFO - Downloading signals...
+2025-11-26 10:06:22,350 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:06:24,389 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:07:19,977 - __main__ - INFO - Downloading signals...
+2025-11-26 10:07:22,443 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:07:24,188 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:08:21,483 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:08:22,727 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 10:08:23,750 - __main__ - INFO - Downloading signals...
+2025-11-26 10:08:24,141 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:08:26,092 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:09:23,920 - __main__ - INFO - Downloading signals...
+2025-11-26 10:09:26,159 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:09:27,637 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:10:24,247 - __main__ - INFO - Downloading signals...
+2025-11-26 10:10:26,357 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:10:28,717 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:11:24,598 - __main__ - INFO - Downloading signals...
+2025-11-26 10:11:28,891 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:11:30,338 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:12:25,153 - __main__ - INFO - Downloading signals...
+2025-11-26 10:12:27,349 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:12:28,811 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:13:22,401 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:13:23,612 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 10:13:25,853 - __main__ - INFO - Downloading signals...
+2025-11-26 10:13:26,219 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:13:27,705 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:14:26,215 - __main__ - INFO - Downloading signals...
+2025-11-26 10:14:30,324 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:14:31,735 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:15:26,597 - __main__ - INFO - Downloading signals...
+2025-11-26 10:15:38,812 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:15:41,395 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:16:27,527 - __main__ - INFO - Downloading signals...
+2025-11-26 10:16:29,656 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:16:31,067 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:17:27,572 - __main__ - INFO - Downloading signals...
+2025-11-26 10:17:29,711 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:17:31,066 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:17:32,724 - __main__ - INFO - New token: DMCP | Key: 81YHAzq9yfptVbNTHiYuMVKVQ6ZNs3XeQFFENnNUpump_alpha | Liq: $39926.106384231185 | Mcap: $None
+2025-11-26 10:18:22,570 - httpx - INFO - HTTP Request: DELETE https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data "HTTP/2 200 OK"
+2025-11-26 10:18:23,764 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-26 10:18:28,016 - __main__ - INFO - Downloading signals...
+2025-11-26 10:18:28,377 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:18:29,765 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:19:28,675 - __main__ - INFO - Downloading signals...
+2025-11-26 10:19:30,759 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-26 10:19:32,190 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-26 10:19:59,699 - asyncio - ERROR - Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x000002CC18A13940>
+transport: <_ProactorSocketTransport fd=-1 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Python310\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 361, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'
