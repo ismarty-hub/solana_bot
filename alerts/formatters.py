@@ -55,8 +55,8 @@ def format_ml_insight_for_alert(ml_data: Dict[str, Any]) -> str:
     if not ml_data or not isinstance(ml_data, dict):
         return ""
     
-    # Extract values
-    prob = ml_data.get("probability")
+    # Extract values (handle both "probability" and "win_probability" keys)
+    prob = ml_data.get("probability") or ml_data.get("win_probability")
     confidence = ml_data.get("confidence")
     risk_tier = ml_data.get("risk_tier")
     action = ml_data.get("action")
@@ -164,25 +164,45 @@ async def _get_dexscreener_data(mint: str) -> Dict[str, Any]:
 
 
 def _format_time_ago(dt: datetime) -> str:
-    """Format datetime as 'Xd ago' or 'Xh ago'."""
+    """
+    Format datetime as age.
+    - If < 24 hours: show as hours, minutes, seconds (e.g., "2h 30m 15s ago")
+    - If >= 24 hours: show as days and hours (e.g., "1d 3h ago")
+    """
     if not dt:
         return "Unknown"
     now = datetime.now(timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     diff = now - dt
-    seconds = diff.total_seconds()
+    total_seconds = diff.total_seconds()
     
-    if seconds < 60:
-        return f"{int(seconds)}s ago"
-    minutes = seconds / 60
-    if minutes < 60:
-        return f"{int(minutes)}m ago"
-    hours = minutes / 60
-    if hours < 24:
-        return f"{int(hours)}h ago"
-    days = hours / 24
-    return f"{int(days)}d ago"
+    # If less than 24 hours, show hours:minutes:seconds format
+    if total_seconds < 86400:  # 86400 seconds = 24 hours
+        hours = int(total_seconds // 3600)
+        remaining = int(total_seconds % 3600)
+        minutes = remaining // 60
+        seconds = remaining % 60
+        
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if seconds > 0 or not parts:  # Always show seconds if no hours/minutes
+            parts.append(f"{seconds}s")
+        
+        return " ".join(parts) + " ago"
+    
+    # If >= 24 hours, show days and hours format
+    total_hours = total_seconds / 3600
+    days = int(total_hours // 24)
+    remaining_hours = int(total_hours % 24)
+    
+    if remaining_hours > 0:
+        return f"{days}d {remaining_hours}h ago"
+    else:
+        return f"{days}d ago"
 
 
 def _format_usd(value: float) -> str:

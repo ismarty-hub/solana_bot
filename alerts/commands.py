@@ -977,7 +977,7 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     
     try:
         session = await _get_http_session()
-        async with session.get(url, timeout=120) as resp:
+        async with session.get(url, timeout=300) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 result_msg = _format_prediction_result(mint, data)
@@ -1038,7 +1038,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             url, 
             json=mints,  # ← This is now a list, not {"mints": mints}
             params={"threshold": 0.70},
-            timeout=120
+            timeout=300
         ) as resp:
             if resp.status == 200:
                 data = await resp.json()
@@ -1129,9 +1129,6 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             "❌ <b>An Unexpected Error Occurred</b>\n\n"
             "Please try again later or contact support."
         )
-
-# --- END ML PREDICTION COMMANDS ---
-
 
 # --- MODIFIED: button_handler ---
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):

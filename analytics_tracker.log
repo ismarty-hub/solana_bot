@@ -2927,3 +2927,52 @@ Traceback (most recent call last):
   File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
     self._write_fut = self._loop._proactor.send(self._sock, data)
 AttributeError: 'NoneType' object has no attribute 'send'
+2025-11-28 12:59:40,112 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-28 12:59:42,161 - __main__ - INFO - Initialized with 98 active tokens.
+2025-11-28 12:59:42,161 - __main__ - INFO - Downloading signals...
+2025-11-28 12:59:42,623 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-28 12:59:44,401 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-28 12:59:53,642 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-11-28 12:59:53,645 - __main__ - INFO - Generating summary stats for discovery...
+2025-11-28 12:59:53,977 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-28 12:59:55,000 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/discovery/summary_stats.json "HTTP/2 200 OK"
+2025-11-28 12:59:55,330 - __main__ - INFO - Generating summary stats for alpha...
+2025-11-28 12:59:55,694 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-11-28 12:59:56,567 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/summary_stats.json "HTTP/2 200 OK"
+2025-11-28 12:59:56,570 - __main__ - INFO - Generating overall analytics...
+2025-11-28 12:59:57,303 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/overall/summary_stats.json "HTTP/2 200 OK"
+2025-11-28 13:00:42,479 - __main__ - INFO - Downloading signals...
+2025-11-28 13:00:43,492 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-28 13:00:44,997 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-28 13:01:43,439 - __main__ - INFO - Downloading signals...
+2025-11-28 13:01:44,550 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-28 13:01:46,338 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-28 13:02:44,322 - __main__ - INFO - Downloading signals...
+2025-11-28 13:02:50,547 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-28 13:02:52,392 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-28 13:03:44,918 - __main__ - INFO - Downloading signals...
+2025-11-28 13:03:45,968 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-11-28 13:03:48,122 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-11-28 13:03:50,981 - __main__ - INFO - New token: AIRBAGS | Key: 9a5DxpveEUcPKjcULbHU1YMDq5FwUZFtPLxw6YRGBAGS_alpha | Liq: $16766.313414072465 | Mcap: $None
+2025-11-28 13:04:27,729 - asyncio - ERROR - Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x000002239617FB80>
+transport: <_ProactorSocketTransport fd=-1 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Python310\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 361, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'
+2025-11-28 13:04:27,808 - asyncio - ERROR - Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x00000223962C5F90>
+transport: <_ProactorSocketTransport fd=-1 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Python310\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 361, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'
