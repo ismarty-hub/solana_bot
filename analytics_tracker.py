@@ -890,10 +890,15 @@ async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -
     return all_tokens
 
 def calculate_timeframe_stats(tokens: list[dict]) -> dict:
+    """
+    Calculate comprehensive statistics for a given set of tokens.
+    Now includes loss rate and average loss metrics.
+    """
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(wins) + len(losses)
     
+    # Calculate traditional ROI metrics
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
     
     # FIXED: handle final_roi=None for active tokens by treating as 0
@@ -901,33 +906,56 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
-    # --- NEW: Time Calculation Logic ---
+    # --- NEW: Loss Rate & Average Loss Calculation ---
+    # Filter tokens with BOTH status="loss" AND negative final ROI
+    # This excludes any wins that may have crashed after hitting 45%
+    negative_tokens = [
+        t for t in tokens 
+        if t.get("status") == "loss" 
+        and t.get("final_roi") is not None 
+        and t.get("final_roi") < 0
+    ]
+    
+    negative_count = len(negative_tokens)
+    
+    # Calculate loss rate (percentage of tokens with status=loss AND negative returns)
+    loss_rate = (negative_count / total_valid * 100) if total_valid > 0 else 0.0
+    
+    # Calculate average loss for tokens with status=loss and negative ROI
+    negative_rois = [t["final_roi"] for t in negative_tokens]
+    average_loss = sum(negative_rois) / len(negative_rois) if negative_rois else 0.0
+    # ---------------------------------------------------
+
+    # Time calculation logic
     times_to_ath = [float(t["time_to_ath_minutes"]) for t in tokens if t.get("time_to_ath_minutes") is not None]
     times_to_50 = [float(t["time_to_50_percent_minutes"]) for t in wins if t.get("time_to_50_percent_minutes") is not None]
 
     avg_time_to_ath = (sum(times_to_ath) / len(times_to_ath)) if times_to_ath else 0.0
     avg_time_to_50 = (sum(times_to_50) / len(times_to_50)) if times_to_50 else 0.0
-    # -----------------------------------
 
     top_tokens = sorted(tokens, key=lambda x: x.get("ath_roi", 0), reverse=True)
-    # Calculation of total ATH ROI sum  
     total_ath_roi = sum(float(t.get('ath_roi', 0.0)) for t in tokens)
 
     return {
         "total_tokens": total_valid,
         "wins": len(wins),
-        "losses": len(losses),
+        "losses": len(losses),  # Kept: tokens that didn't hit 45%
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
+        
+        # --- NEW METRICS ---
+        "negative_returns": negative_count,  # Count of tokens with final_roi < 0
+        "loss_rate": round(loss_rate, 2),    # Percentage of tokens with negative ROI
+        "average_loss": round(average_loss, 2),  # Average ROI for negative tokens
+        # -------------------
+        
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
         
-        # --- NEW: Added Metrics ---
         "avg_time_to_ath_minutes": round(avg_time_to_ath, 2),
         "avg_time_to_50_percent_minutes": round(avg_time_to_50, 2),
         "total_aths_recorded": round(total_ath_roi, 2),
-        # --------------------------
         
         "top_tokens": top_tokens[:10]
     }
@@ -963,33 +991,59 @@ async def generate_summary_stats(signal_type: str):
     if local_path: await upload_file_to_supabase(local_path, remote_path)
 
 async def generate_overall_analytics():
+    """
+    Generate overall analytics combining discovery and alpha signals.
+    Now includes combined loss rate and average loss metrics.
+    """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")
     alph = load_json("analytics/alpha/summary_stats.json")
-    if not disc or not alph: return
+    if not disc or not alph: 
+        return
 
     overall = {"signal_type": "overall", "last_updated": to_iso(get_now()), "timeframes": {}}
     
     for period in ["1_day", "7_days", "1_month", "all_time"]:
         d = disc["timeframes"].get(period)
         a = alph["timeframes"].get(period)
-        if not d or not a: continue
+        if not d or not a: 
+            continue
         
         total = d["total_tokens"] + a["total_tokens"]
         wins = d["wins"] + a["wins"]
+        losses = d["losses"] + a["losses"]
         
-        # --- Weighted Averages for ROI ---
+        # --- NEW: Combine Loss Metrics ---
+        negative_returns_d = d.get("negative_returns", 0)
+        negative_returns_a = a.get("negative_returns", 0)
+        total_negative = negative_returns_d + negative_returns_a
+        
+        # Calculate combined loss rate
+        combined_loss_rate = (total_negative / total * 100) if total > 0 else 0.0
+        
+        # Calculate weighted average loss
+        avg_loss_d = d.get("average_loss", 0)
+        avg_loss_a = a.get("average_loss", 0)
+        
+        combined_avg_loss = 0.0
+        if total_negative > 0:
+            # Weight by number of negative tokens from each signal type
+            combined_avg_loss = (
+                (avg_loss_d * negative_returns_d) + (avg_loss_a * negative_returns_a)
+            ) / total_negative
+        # ---------------------------------
+        
+        # Weighted Averages for ROI
         avg_ath = 0
         if total > 0:
             avg_ath = ((d["average_ath_all"] * d["total_tokens"]) + (a["average_ath_all"] * a["total_tokens"])) / total
 
-        # --- NEW: Weighted Averages for TIME and TOTAL ATHs ---
-        # Calculate Total ATHs recorded
+        # Weighted Averages for TIME and TOTAL ATHs
         total_aths_d = d.get("total_aths_recorded", 0)
         total_aths_a = a.get("total_aths_recorded", 0)
         total_aths_combined = total_aths_d + total_aths_a
 
-        # Calculate Average Time to ATH (Weighted by number of ATHs recorded)
+        # Average Time to ATH (Weighted by number of ATHs recorded)
         avg_time_ath_d = d.get("avg_time_to_ath_minutes", 0)
         avg_time_ath_a = a.get("avg_time_to_ath_minutes", 0)
         
@@ -999,14 +1053,12 @@ async def generate_overall_analytics():
                 (avg_time_ath_d * total_aths_d) + (avg_time_ath_a * total_aths_a)
             ) / total_aths_combined
 
-        # Calculate Average Time to 50% (Weighted by number of wins)
+        # Average Time to 50% (Weighted by number of wins)
         avg_time_50_d = d.get("avg_time_to_50_percent_minutes", 0)
         avg_time_50_a = a.get("avg_time_to_50_percent_minutes", 0)
-        # Note: wins variable calculated above is the sum of wins
         
         avg_time_50_combined = 0
         if wins > 0:
-            # Check if source data actually has wins to avoid div by zero inside the weight logic
             d_wins = d.get("wins", 0)
             a_wins = a.get("wins", 0)
             avg_time_50_combined = (
@@ -1016,23 +1068,29 @@ async def generate_overall_analytics():
         overall["timeframes"][period] = {
             "total_tokens": total,
             "wins": wins,
-            "losses": d["losses"] + a["losses"],
+            "losses": losses,  # Kept: total non-winners
             "success_rate": (wins / total * 100) if total > 0 else 0,
+            
+            # --- NEW METRICS ---
+            "negative_returns": total_negative,
+            "loss_rate": round(combined_loss_rate, 2),
+            "average_loss": round(combined_avg_loss, 2),
+            # -------------------
+            
             "average_ath_all": avg_ath,
             "max_roi": max(d["max_roi"], a["max_roi"]),
             
-            # --- ADD THESE MISSING FIELDS ---
             "avg_time_to_ath_minutes": round(avg_time_ath_combined, 2),
             "avg_time_to_50_percent_minutes": round(avg_time_50_combined, 2),
             "total_aths_recorded": total_aths_combined,
-            # --------------------------------
             
             "top_tokens": sorted(d["top_tokens"] + a["top_tokens"], key=lambda x: x["ath_roi"], reverse=True)[:10]
         }
 
     remote_path = "analytics/overall/summary_stats.json"
     local_path = save_json(overall, remote_path)
-    if local_path: await upload_file_to_supabase(local_path, remote_path)
+    if local_path: 
+        await upload_file_to_supabase(local_path, remote_path)
 
 async def update_all_summary_stats():
     await generate_summary_stats("discovery")
