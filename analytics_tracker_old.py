@@ -5,20 +5,12 @@ analytics_tracker.py
 Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
-This script:
-1.  Downloads 'discovery' (overlap_results.json) and 'alpha'
-    (overlap_results_alpha.json) signal files every minute.
-2.  Deduplicates tokens PER SIGNAL TYPE, tracking each mint-signal pair distinctly.
-3.  Fetches token age, entry price, mcap, and liquidity from the JSON data.
-4.  Tracks prices asynchronously (Jupiter -> Dexscreener verification).
-5.  VALIDATES SUSPICIOUS PUMPS:
-    - If Jupiter price implies Mcap/Liquidity ratio > 10x, triggers verification.
-    - Verifies via Dexscreener with exponential backoff for 429s.
-    - Validates against CURRENT liquidity and minimum 5m volume ($500).
-6.  Calculates ROI, ATH, and win/loss status (win >= 45% ROI).
-7.  Handles API failures with retry until tracking duration ends.
-8.  Generates and uploads daily, summary, and overall analytics to Supabase.
-9.  Resumes tracking from 'active_tracking.json' on restart.
+REVISION: STABILITY FIXES APPLIED
+- FIXED: TypeError when summing 'final_roi' for active tokens (NoneType error).
+- FIXED: Upload 409 Duplicate errors by using the robust 'update' then 'upload' logic (no 'upsert' flag needed).
+- Wins -> Grouped by Date of Win (Written immediately, updated on finalization)
+- Losses -> Grouped by Date of Tracking Completion
+- Daily files update immediately upon Win or finalization.
 """
 
 import os
@@ -58,7 +50,7 @@ BUCKET_NAME = "monitor-data"
 TEMP_DIR = "/tmp/analytics_tracker"
 
 # Analytics
-STATS_UPDATE_INTERVAL = 3600    # Update summary stats every 1 hour
+STATS_UPDATE_INTERVAL = 3600    # Update summary stats every 1 hour (failsafe)
 ACTIVE_UPLOAD_INTERVAL = 300    # Upload active_tracking.json every 5 mins
 WIN_ROI_THRESHOLD = 45.0        # ROI percentage to mark as a "win"
 
@@ -172,26 +164,48 @@ async def download_file_from_supabase(remote_path: str, local_path: str) -> bool
 async def upload_file_to_supabase(local_path: str, remote_path: str, content_type: str = "application/json") -> bool:
     if not os.path.exists(local_path):
         return False 
+    
+    client = get_supabase_client()
+    
+    def _read_file():
+        with open(local_path, "rb") as f:
+            return f.read()
+    
     try:
-        client = get_supabase_client()
-        try:
-            await asyncio.to_thread(client.storage.from_(BUCKET_NAME).remove, [remote_path])
-        except Exception:
-            pass
-
-        def _read_file():
-            with open(local_path, "rb") as f:
-                return f.read()
-        
         data = await asyncio.to_thread(_read_file)
+    except Exception as e:
+        logger.error(f"Error reading local file {local_path}: {e}")
+        return False
+        
+    file_options = {"content-type": content_type, "cache-control": "3600"}
+
+    # 1. Try to UPDATE (replace) the file if it exists. This prevents 409 errors.
+    try:
         await asyncio.to_thread(
-            client.storage.from_(BUCKET_NAME).upload,
-            remote_path, data, {"content-type": content_type, "cache-control": "3600"}
+            client.storage.from_(BUCKET_NAME).update,
+            remote_path, data, file_options
         )
         return True
-    except Exception as e:
-        logger.error(f"Upload failed for {remote_path}: {e}")
-        return False
+    except Exception as update_e:
+        # 2. If update fails (e.g., file not found, meaning it's new), try to UPLOAD (create new).
+        is_not_found = "404" in str(update_e) or "not found" in str(update_e).lower()
+        
+        if is_not_found:
+            logger.warning(f"Update failed for {remote_path} (likely new file). Trying upload instead.")
+        else:
+            # Log full error if it's not a common 404/not found error
+            logger.warning(f"Update failed for {remote_path}: {update_e}. Trying upload as fallback.")
+            
+        try:
+            await asyncio.to_thread(
+                client.storage.from_(BUCKET_NAME).upload,
+                remote_path, data, file_options
+            )
+            return True
+        except Exception as upload_e:
+            # The second attempt also failed (e.g., another 409 if a race occurred)
+            logger.error(f"Upload failed for {remote_path} on second attempt: {upload_e}")
+            return False
 
 # --- JSON File Helpers ---
 
@@ -280,7 +294,6 @@ async def fetch_price_dexscreener(mint: str) -> float | None:
 
 async def verify_suspicious_price_dexscreener(mint: str) -> Dict[str, Any] | None:
     """
-    (*** NEW ***)
     Fetch full market data from Dexscreener with exponential backoff for 429 errors.
     Returns a dict with {price, mcap, liquidity, volume_5m} or None on failure.
     """
@@ -343,7 +356,6 @@ async def verify_suspicious_price_dexscreener(mint: str) -> Dict[str, Any] | Non
 
 async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dict) -> Dict[str, float | None]:
     """
-    (*** NEW ***)
     Extract entry price, mcap, and liquidity from JSON based on signal type.
     """
     entry_price = None
@@ -354,43 +366,31 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
 
     if signal_type == "discovery":
         # Discovery Paths
-        # Price
         dex_data = result.get("dexscreener", {})
         entry_price = dex_data.get("current_price_usd")
-        
-        # Mcap
         entry_mcap = dex_data.get("market_cap_usd")
-        
-        # Liquidity
         entry_liquidity = result.get("rugcheck", {}).get("total_liquidity_usd")
         
     else:
         # Alpha Paths
         security = result.get("security", {})
         dex_raw = security.get("dexscreener", {}).get("raw", {})
-        rug_raw = security.get("rugcheck_raw", {})
         
-        # Price (try security.dexscreener first, then raw)
         entry_price = security.get("dexscreener", {}).get("current_price_usd")
         
-        # Mcap (try marketCap, then fdv)
         entry_mcap = dex_raw.get("marketCap")
         if entry_mcap is None:
             entry_mcap = dex_raw.get("fdv")
             
-        # Liquidity (try dexscreener raw first, then rugcheck)
         entry_liquidity = dex_raw.get("liquidity", {}).get("usd")
         if entry_liquidity is None:
             entry_liquidity = security.get("rugcheck", {}).get("total_liquidity_usd")
 
-    # Fallbacks if live fetching needed (though prefer JSON for entry)
     if entry_price is None:
-        # Try rugcheck raw price as last resort
         try:
              entry_price = result.get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("price")
         except Exception: pass
 
-    # Clean conversion to float
     def to_float(val):
         try:
             f = float(val)
@@ -406,11 +406,7 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
 
 async def fetch_current_price_validated(mint: str, token_data: dict) -> float | None:
     """
-    (*** NEW ***)
-    Fetch price with validation logic:
-    1. Try Jupiter.
-    2. If Jupiter price implies > 50x ratio (Mcap/EntryLiq), verify with Dexscreener.
-    3. If verifying, check Mcap/CurrentLiq <= 50x and Volume > $500.
+    Fetch price with validation logic (Jupiter -> Dexscreener if suspicious).
     """
     entry_price = token_data.get("entry_price")
     entry_mcap = token_data.get("entry_mcap")
@@ -426,18 +422,13 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
         logger.warning(f"Jupiter error for {mint}: {e}")
 
     if jupiter_price:
-        # Check for suspicious pump if we have entry data
         if entry_price and entry_mcap and entry_liquidity and entry_liquidity > 0:
-            # Calculate implied current market cap
             current_mcap_est = entry_mcap * (jupiter_price / entry_price)
-            
-            # Ratio of Current Mcap / Entry Liquidity
             ratio = current_mcap_est / entry_liquidity
             
             if ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD:
-                logger.warning(f"SUSPICIOUS PUMP {mint}: Ratio {ratio:.1f}x > {MCAP_LIQUIDITY_RATIO_THRESHOLD}x. Verifying with Dexscreener...")
+                logger.warning(f"SUSPICIOUS PUMP {mint}: Ratio {ratio:.1f}x. Verifying...")
                 
-                # --- Verification Step ---
                 dex_data = await verify_suspicious_price_dexscreener(mint)
                 
                 if dex_data:
@@ -446,24 +437,21 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
                     dex_liquidity = dex_data["liquidity"]
                     dex_vol_5m = dex_data["volume_5m"]
                     
-                    # Check 1: Ratio against CURRENT liquidity
                     verified_ratio = dex_mcap / dex_liquidity if dex_liquidity > 0 else 9999
                     
-                    # Check 2: Volume check
                     if verified_ratio <= MCAP_LIQUIDITY_RATIO_THRESHOLD and dex_vol_5m >= MIN_VOLUME_5M_USD:
-                        logger.info(f"VERIFIED {mint}: Dexscreener confirms legitimate pump. Ratio: {verified_ratio:.1f}x, Vol: ${dex_vol_5m}.")
-                        return dex_price # Accept verified price
+                        logger.info(f"VERIFIED {mint}: Dexscreener confirms legitimate pump.")
+                        return dex_price 
                     else:
-                        logger.warning(f"REJECTED {mint}: Failed verification. Ratio: {verified_ratio:.1f}x (Lim: {MCAP_LIQUIDITY_RATIO_THRESHOLD}), Vol: ${dex_vol_5m} (Lim: {MIN_VOLUME_5M_USD}).")
-                        return None # Reject (treat as failure)
+                        logger.warning(f"REJECTED {mint}: Failed verification.")
+                        return None 
                 else:
-                     logger.warning(f"REJECTED {mint}: Dexscreener fetch failed during verification.")
-                     return None # Reject
+                     logger.warning(f"REJECTED {mint}: Dexscreener fetch failed.")
+                     return None
             
-        # Not suspicious, accept Jupiter
         return jupiter_price
 
-    # 2. Jupiter failed, fallback to Dexscreener (standard fetch)
+    # 2. Fallback to Dexscreener
     try:
         data = await verify_suspicious_price_dexscreener(mint)
         if data:
@@ -487,7 +475,11 @@ def handle_price_failure(token_data: dict):
     
     token_data["last_price_check"] = to_iso(now)
 
-def update_token_price(token_data: dict, price: float):
+async def update_token_price(token_data: dict, price: float):
+    """
+    Async update of token price. 
+    Handles WINS immediately to ensure daily files and stats are fresh.
+    """
     now = get_now()
     entry_price = token_data["entry_price"]
     current_roi = calculate_roi(entry_price, price)
@@ -499,27 +491,55 @@ def update_token_price(token_data: dict, price: float):
     token_data["consecutive_failures"] = 0
     token_data["retry_start_time"] = None
 
+    is_new_ath = False
     if current_roi > token_data["ath_roi"]:
         token_data["ath_price"] = price
         token_data["ath_roi"] = current_roi
         token_data["ath_time"] = to_iso(now)
         time_to_ath = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
         token_data["time_to_ath_minutes"] = round(time_to_ath, 2)
+        is_new_ath = True
     
-    if current_roi >= WIN_ROI_THRESHOLD and not token_data["hit_50_percent"]:
-        token_data["hit_50_percent"] = True
-        token_data["hit_50_percent_time"] = to_iso(now)
-        time_to_50 = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
-        token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
-        token_data["status"] = "win"
-        logger.info(f"WIN: {token_data['symbol']} hit {current_roi:.2f}% ROI!")
+    # Check for WIN condition
+    if current_roi >= WIN_ROI_THRESHOLD:
+        
+        # CASE A: First time hitting 45% (The "Win" Moment)
+        if not token_data["hit_50_percent"]:
+            token_data["hit_50_percent"] = True
+            token_data["hit_50_percent_time"] = to_iso(now)
+            time_to_50 = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
+            token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
+            token_data["status"] = "win"
+            
+            logger.info(f"WIN: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Writing to daily file immediately.")
+            
+            # Write to file
+            win_date_str = now.strftime('%Y-%m-%d')
+            update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
+            
+            # Trigger Stats Update Immediately (Fire and forget task)
+            asyncio.create_task(update_all_summary_stats())
+
+        # CASE B: Already a Win, but hit a new ATH (Keep the daily file updated with the pump)
+        elif is_new_ath:
+            # We update the file again so the "ATH ROI" in the daily file isn't stuck at 45%
+            # We use the date of the win (hit_50_percent_time) to ensure we update the correct file
+            if token_data.get("hit_50_percent_time"):
+                win_date = parse_ts(token_data["hit_50_percent_time"])
+                date_str = win_date.strftime('%Y-%m-%d')
+                # Update without marking final, just saving the new ATH
+                update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
 
 def finalize_token_tracking(composite_key: str, token_data: dict):
     mint = token_data["mint"]
     logger.info(f"Tracking complete for {composite_key}. Final status: {token_data['status']}")
     
+    # If it was active and never won, it's a loss.
     if token_data["status"] == "active":
         token_data["status"] = "loss"
+        # Ensure 'hit_50_percent' is explicitly false if not present
+        if "hit_50_percent" not in token_data:
+            token_data["hit_50_percent"] = False
     
     token_data["tracking_completed_at"] = to_iso(get_now())
     final_price = token_data.get("last_successful_price", token_data["entry_price"]) or 0.0
@@ -527,10 +547,25 @@ def finalize_token_tracking(composite_key: str, token_data: dict):
     token_data["final_price"] = final_price
     token_data["final_roi"] = calculate_roi(token_data["entry_price"], final_price)
     
-    entry_date_str = parse_ts(token_data["entry_time"]).strftime('%Y-%m-%d')
+    # --- PART 1 & 2: Option C1 Logic ---
     signal_type = token_data["signal_type"]
     
-    generate_daily_file(entry_date_str, signal_type, completed_token=token_data)
+    if token_data["status"] == "win":
+        # Rule: Wins are stored by DATE OF WIN
+        # We update the existing entry in that file
+        if token_data.get("hit_50_percent_time"):
+            win_date = parse_ts(token_data["hit_50_percent_time"])
+            date_str = win_date.strftime('%Y-%m-%d')
+        else:
+            # Fallback if time missing (shouldn't happen)
+            date_str = get_now().strftime('%Y-%m-%d')
+            
+        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
+        
+    else:
+        # Rule: Losses are stored by TRACKING END DATE
+        date_str = get_now().strftime('%Y-%m-%d')
+        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
     
     if composite_key in active_tracking:
         del active_tracking[composite_key]
@@ -544,12 +579,10 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     entry_liquidity = entry_data["entry_liquidity"]
 
     if entry_price is None:
-        # Fallback: Try Dexscreener API if JSON failed
         try:
             dex_data = await verify_suspicious_price_dexscreener(mint)
             if dex_data:
                 entry_price = dex_data["price"]
-                # Only populate if missing
                 if not entry_mcap: entry_mcap = dex_data["mcap"]
                 if not entry_liquidity: entry_liquidity = dex_data["liquidity"]
         except Exception: pass
@@ -608,8 +641,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "symbol": symbol,
         "name": name,
         "entry_price": entry_price,
-        "entry_mcap": entry_mcap,          # Stored for validation
-        "entry_liquidity": entry_liquidity,# Stored for validation
+        "entry_mcap": entry_mcap,          
+        "entry_liquidity": entry_liquidity,
         "entry_time": to_iso(entry_time),
         "token_age_hours": round(age_hours, 2),
         "pair_created_at": pair_created_at_seconds,
@@ -691,7 +724,6 @@ async def update_active_token_prices():
 
     # 2. Batch fetch & Validate Normal Checks
     if tokens_to_check:
-        # Map mint -> [keys]
         mint_to_keys_map = {}
         for key, data in tokens_to_check.items():
             mint = data["mint"]
@@ -699,24 +731,16 @@ async def update_active_token_prices():
             mint_to_keys_map[mint].append(key)
             
         mints_list = list(mint_to_keys_map.keys())
-        
-        # Fetch Jupiter prices
         jupiter_prices = await fetch_price_jupiter(mints_list)
         
-        # Process results
         for mint, keys in mint_to_keys_map.items():
-            # We need to process validation for each signal type separately 
-            # because they might have different entry prices/liquidity
             for composite_key in keys:
                 token_data = tokens_to_check[composite_key]
-                
-                # Decide price: Jupiter (Validated) or Dexscreener fallback
                 price = None
                 
                 if mint in jupiter_prices:
                     raw_jup_price = jupiter_prices[mint]
                     
-                    # --- VALIDATION LOGIC ---
                     entry_price = token_data.get("entry_price")
                     entry_mcap = token_data.get("entry_mcap")
                     entry_liq = token_data.get("entry_liquidity")
@@ -729,86 +753,99 @@ async def update_active_token_prices():
                              is_suspicious = True
                     
                     if is_suspicious:
-                        logger.warning(f"Suspicious pump detected for {composite_key}. Validating...")
-                        # Verify via Dexscreener
                         verified_data = await verify_suspicious_price_dexscreener(mint)
                         if verified_data:
                             dex_mcap = verified_data["mcap"]
                             dex_liq = verified_data["liquidity"]
                             dex_vol = verified_data["volume_5m"]
-                            
-                            # Check against CURRENT liquidity
                             verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
                             
                             if verified_ratio <= MCAP_LIQUIDITY_RATIO_THRESHOLD and dex_vol >= MIN_VOLUME_5M_USD:
-                                price = verified_data["price"] # Accepted
-                                logger.info(f"Validation PASSED for {composite_key}. Using Dexscreener price.")
+                                price = verified_data["price"]
                             else:
-                                price = None # Rejected
-                                logger.warning(f"Validation REJECTED for {composite_key}. Ratio: {verified_ratio:.1f}, Vol: {dex_vol}")
+                                price = None
                         else:
-                            price = None # Rejected
+                            price = None
                     else:
-                        price = raw_jup_price # Accepted
-                
-                # If Jupiter failed or was rejected, price is None here.
-                # Fallback logic is handled by handle_price_failure.
-                # (We could double check dexscreener here if Jupiter returned nothing, 
-                # but verify_suspicious handles logic better).
+                        price = raw_jup_price
                 
                 if price is None and mint not in jupiter_prices:
-                    # Jupiter didn't return a price, try Dexscreener fallback
                      try:
                         d_data = await verify_suspicious_price_dexscreener(mint)
                         if d_data: price = d_data["price"]
                      except Exception: pass
 
                 if price is not None:
-                    update_token_price(token_data, price)
+                    await update_token_price(token_data, price)
                 else:
                     handle_price_failure(token_data)
 
-    # 3. Handle Retry Tokens (Individual Validated Check)
+    # 3. Handle Retry Tokens
     for composite_key, token_data in tokens_to_retry.items():
         price = await fetch_current_price_validated(token_data["mint"], token_data)
         if price is not None:
-            logger.info(f"Retry successful for {composite_key}")
-            update_token_price(token_data, price)
+            await update_token_price(token_data, price)
         else:
             handle_price_failure(token_data)
 
-# --- Analytics Generation ---
+# --- Analytics Generation (Daily File Handler) ---
 
-def generate_daily_file(date_str: str, signal_type: str, completed_token: dict = None):
+def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool):
+    """
+    Handles creating or updating entries in daily files.
+    - If entry exists: UPDATES it (preventing duplicates).
+    - If entry new: APPENDS it.
+    - Sets 'is_final' flag.
+    - Calculates daily summary stats.
+    - Uploads to Supabase.
+    """
     remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
     local_path = os.path.join(TEMP_DIR, remote_path)
     
+    # 1. Load existing data or create new
     daily_data = load_json(remote_path)
     if daily_data is None:
+        # Assume new file if not found locally (or failed to load)
         daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
     
-    if completed_token:
-        token_key = get_composite_key(completed_token["mint"], completed_token["signal_type"])
-        is_duplicate = False
-        for t in daily_data["tokens"]:
-            existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
-            if existing_key == token_key:
-                is_duplicate = True
-                break
-        
-        if not is_duplicate:
-            pruned_token = copy.deepcopy(completed_token)
-            pruned_token.pop("price_history", None)
-            daily_data["tokens"].append(pruned_token)
-            logger.info(f"Added {token_key} to daily file {remote_path}")
-
+    # 2. Prepare the Token Entry
+    token_key = get_composite_key(token_data["mint"], signal_type)
+    
+    # Deepcopy to avoid modifying the active tracking object with file-specific flags
+    entry_to_write = copy.deepcopy(token_data)
+    entry_to_write["is_final"] = is_final
+    
+    # 3. Insert or Update
     tokens = daily_data.get("tokens", [])
+    found_index = -1
+    
+    for i, t in enumerate(tokens):
+        existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
+        if existing_key == token_key:
+            found_index = i
+            break
+            
+    if found_index != -1:
+        # UPDATE existing entry
+        tokens[found_index] = entry_to_write
+        logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
+    else:
+        # APPEND new entry
+        tokens.append(entry_to_write)
+        logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
+    
+    daily_data["tokens"] = tokens
+
+    # 4. Update Summary Stats (For this file)
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(tokens)
     
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi_all = sum(t.get("final_roi", 0) for t in tokens)
+    
+    # FIXED: handle final_roi=None for active tokens by treating as 0
+    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
+    
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
     
     daily_data["daily_summary"] = {
@@ -822,6 +859,7 @@ def generate_daily_file(date_str: str, signal_type: str, completed_token: dict =
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
     }
 
+    # 5. Save and Upload
     saved_path = save_json(daily_data, remote_path)
     if saved_path:
         asyncio.create_task(upload_file_to_supabase(saved_path, remote_path))
@@ -852,25 +890,73 @@ async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -
     return all_tokens
 
 def calculate_timeframe_stats(tokens: list[dict]) -> dict:
+    """
+    Calculate comprehensive statistics for a given set of tokens.
+    Now includes loss rate and average loss metrics.
+    """
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(wins) + len(losses)
     
+    # Calculate traditional ROI metrics
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi_all = sum(t.get("final_roi", 0) for t in tokens)
+    
+    # FIXED: handle final_roi=None for active tokens by treating as 0
+    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
+    
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
+    # --- NEW: Loss Rate & Average Loss Calculation ---
+    # Filter tokens with BOTH status="loss" AND negative final ROI
+    # This excludes any wins that may have crashed after hitting 45%
+    negative_tokens = [
+        t for t in tokens 
+        if t.get("status") == "loss" 
+        and t.get("final_roi") is not None 
+        and t.get("final_roi") < 0
+    ]
+    
+    negative_count = len(negative_tokens)
+    
+    # Calculate loss rate (percentage of tokens with status=loss AND negative returns)
+    loss_rate = (negative_count / total_valid * 100) if total_valid > 0 else 0.0
+    
+    # Calculate average loss for tokens with status=loss and negative ROI
+    negative_rois = [t["final_roi"] for t in negative_tokens]
+    average_loss = sum(negative_rois) / len(negative_rois) if negative_rois else 0.0
+    # ---------------------------------------------------
+
+    # Time calculation logic
+    times_to_ath = [float(t["time_to_ath_minutes"]) for t in tokens if t.get("time_to_ath_minutes") is not None]
+    times_to_50 = [float(t["time_to_50_percent_minutes"]) for t in wins if t.get("time_to_50_percent_minutes") is not None]
+
+    avg_time_to_ath = (sum(times_to_ath) / len(times_to_ath)) if times_to_ath else 0.0
+    avg_time_to_50 = (sum(times_to_50) / len(times_to_50)) if times_to_50 else 0.0
+
     top_tokens = sorted(tokens, key=lambda x: x.get("ath_roi", 0), reverse=True)
+    total_ath_roi = sum(float(t.get('ath_roi', 0.0)) for t in tokens)
 
     return {
         "total_tokens": total_valid,
         "wins": len(wins),
-        "losses": len(losses),
+        "losses": len(losses),  # Kept: tokens that didn't hit 45%
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
+        
+        # --- NEW METRICS ---
+        "negative_returns": negative_count,  # Count of tokens with final_roi < 0
+        "loss_rate": round(loss_rate, 2),    # Percentage of tokens with negative ROI
+        "average_loss": round(average_loss, 2),  # Average ROI for negative tokens
+        # -------------------
+        
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+        
+        "avg_time_to_ath_minutes": round(avg_time_to_ath, 2),
+        "avg_time_to_50_percent_minutes": round(avg_time_to_50, 2),
+        "total_aths_recorded": round(total_ath_roi, 2),
+        
         "top_tokens": top_tokens[:10]
     }
 
@@ -894,6 +980,9 @@ async def generate_summary_stats(signal_type: str):
     }
     
     for period, start_date in timeframes.items():
+        # Include all tokens that were *completed* after start_date, 
+        # OR if they are winners from that date file (standard logic: simply filter by token's timestamps if needed, 
+        # but here we follow the standard approach of checking tracking completion or creation)
         filtered = [t for t in all_tokens if parse_ts(t.get("tracking_completed_at", to_iso(now))) >= start_date]
         summary_data["timeframes"][period] = calculate_timeframe_stats(filtered)
 
@@ -902,39 +991,106 @@ async def generate_summary_stats(signal_type: str):
     if local_path: await upload_file_to_supabase(local_path, remote_path)
 
 async def generate_overall_analytics():
+    """
+    Generate overall analytics combining discovery and alpha signals.
+    Now includes combined loss rate and average loss metrics.
+    """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")
     alph = load_json("analytics/alpha/summary_stats.json")
-    if not disc or not alph: return
+    if not disc or not alph: 
+        return
 
     overall = {"signal_type": "overall", "last_updated": to_iso(get_now()), "timeframes": {}}
     
     for period in ["1_day", "7_days", "1_month", "all_time"]:
         d = disc["timeframes"].get(period)
         a = alph["timeframes"].get(period)
-        if not d or not a: continue
+        if not d or not a: 
+            continue
         
         total = d["total_tokens"] + a["total_tokens"]
         wins = d["wins"] + a["wins"]
+        losses = d["losses"] + a["losses"]
         
-        # Weighted Averages
+        # --- Combine Loss Metrics ---
+        negative_returns_d = d.get("negative_returns", 0)
+        negative_returns_a = a.get("negative_returns", 0)
+        total_negative = negative_returns_d + negative_returns_a
+        
+        # Calculate combined loss rate
+        combined_loss_rate = (total_negative / total * 100) if total > 0 else 0.0
+        
+        # Calculate weighted average loss
+        avg_loss_d = d.get("average_loss", 0)
+        avg_loss_a = a.get("average_loss", 0)
+        
+        combined_avg_loss = 0.0
+        if total_negative > 0:
+            # Weight by number of negative tokens from each signal type
+            combined_avg_loss = (
+                (avg_loss_d * negative_returns_d) + (avg_loss_a * negative_returns_a)
+            ) / total_negative
+        # ---------------------------------
+        
+        # Weighted Averages for ROI
         avg_ath = 0
         if total > 0:
             avg_ath = ((d["average_ath_all"] * d["total_tokens"]) + (a["average_ath_all"] * a["total_tokens"])) / total
-            
+
+        # Weighted Averages for TIME and TOTAL ATHs
+        total_aths_d = d.get("total_aths_recorded", 0)
+        total_aths_a = a.get("total_aths_recorded", 0)
+        total_aths_combined = total_aths_d + total_aths_a
+
+        # Average Time to ATH (Weighted by number of ATHs recorded)
+        avg_time_ath_d = d.get("avg_time_to_ath_minutes", 0)
+        avg_time_ath_a = a.get("avg_time_to_ath_minutes", 0)
+        
+        avg_time_ath_combined = 0
+        if total_aths_combined > 0:
+            avg_time_ath_combined = (
+                (avg_time_ath_d * total_aths_d) + (avg_time_ath_a * total_aths_a)
+            ) / total_aths_combined
+
+        # Average Time to 50% (Weighted by number of wins)
+        avg_time_50_d = d.get("avg_time_to_50_percent_minutes", 0)
+        avg_time_50_a = a.get("avg_time_to_50_percent_minutes", 0)
+        
+        avg_time_50_combined = 0
+        if wins > 0:
+            d_wins = d.get("wins", 0)
+            a_wins = a.get("wins", 0)
+            avg_time_50_combined = (
+                (avg_time_50_d * d_wins) + (avg_time_50_a * a_wins)
+            ) / wins
+
         overall["timeframes"][period] = {
             "total_tokens": total,
             "wins": wins,
-            "losses": d["losses"] + a["losses"],
+            "losses": losses,  # Kept: total non-winners
             "success_rate": (wins / total * 100) if total > 0 else 0,
+            
+            # --- NEW METRICS ---
+            "negative_returns": total_negative,
+            "loss_rate": round(combined_loss_rate, 2),
+            "average_loss": round(combined_avg_loss, 2),
+            # -------------------
+            
             "average_ath_all": avg_ath,
             "max_roi": max(d["max_roi"], a["max_roi"]),
+            
+            "avg_time_to_ath_minutes": round(avg_time_ath_combined, 2),
+            "avg_time_to_50_percent_minutes": round(avg_time_50_combined, 2),
+            "total_aths_recorded": total_aths_combined,
+            
             "top_tokens": sorted(d["top_tokens"] + a["top_tokens"], key=lambda x: x["ath_roi"], reverse=True)[:10]
         }
 
     remote_path = "analytics/overall/summary_stats.json"
     local_path = save_json(overall, remote_path)
-    if local_path: await upload_file_to_supabase(local_path, remote_path)
+    if local_path: 
+        await upload_file_to_supabase(local_path, remote_path)
 
 async def update_all_summary_stats():
     await generate_summary_stats("discovery")

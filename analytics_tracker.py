@@ -5,12 +5,11 @@ analytics_tracker.py
 Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
-REVISION: STABILITY FIXES APPLIED
-- FIXED: TypeError when summing 'final_roi' for active tokens (NoneType error).
-- FIXED: Upload 409 Duplicate errors by using the robust 'update' then 'upload' logic (no 'upsert' flag needed).
-- Wins -> Grouped by Date of Win (Written immediately, updated on finalization)
-- Losses -> Grouped by Date of Tracking Completion
-- Daily files update immediately upon Win or finalization.
+REVISION: ROBUST DATA INTEGRITY
+- CRITICAL FIX: "Zombie Wins" prevented. 'hit_50_percent' flag only sets after confirmed Supabase write.
+- CRITICAL FIX: "Archival Loss" prevented. Tokens are only removed from active tracking after confirmed Supabase write.
+- CRITICAL FIX: "History Overwrite" prevented. Daily files are downloaded before update to ensure history isn't wiped on restart.
+- Fixed: Async handling for all Supabase file operations.
 """
 
 import os
@@ -461,6 +460,98 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
 
     return None
 
+# --- Analytics Generation (Daily File Handler) ---
+
+async def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool) -> bool:
+    """
+    Handles creating or updating entries in daily files.
+    - Downloads existing file first (prevent overwrite history).
+    - If entry exists: UPDATES it.
+    - If entry new: APPENDS it.
+    - Sets 'is_final' flag.
+    - Calculates daily summary stats.
+    - Uploads to Supabase.
+    - Returns True if successful, False otherwise.
+    """
+    remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
+    local_path = os.path.join(TEMP_DIR, remote_path)
+    
+    # 1. Ensure we have the latest version from Supabase
+    # Check local first, then try download.
+    daily_data = load_json(remote_path)
+    
+    if daily_data is None:
+        # Not found locally, try to download to ensure we don't overwrite remote history
+        downloaded = await download_file_from_supabase(remote_path, local_path)
+        if downloaded:
+            daily_data = load_json(remote_path)
+    
+    # If still None, assume it's a brand new day/file
+    if daily_data is None:
+        daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
+    
+    # 2. Prepare the Token Entry
+    token_key = get_composite_key(token_data["mint"], signal_type)
+    
+    # Deepcopy to avoid modifying the active tracking object with file-specific flags
+    entry_to_write = copy.deepcopy(token_data)
+    entry_to_write["is_final"] = is_final
+    
+    # 3. Insert or Update
+    tokens = daily_data.get("tokens", [])
+    found_index = -1
+    
+    for i, t in enumerate(tokens):
+        existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
+        if existing_key == token_key:
+            found_index = i
+            break
+            
+    if found_index != -1:
+        # UPDATE existing entry
+        tokens[found_index] = entry_to_write
+        logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
+    else:
+        # APPEND new entry
+        tokens.append(entry_to_write)
+        logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
+    
+    daily_data["tokens"] = tokens
+
+    # 4. Update Summary Stats (For this file)
+    wins = [t for t in tokens if t.get("status") == "win"]
+    losses = [t for t in tokens if t.get("status") == "loss"]
+    total_valid = len(tokens)
+    
+    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
+    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
+    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
+    
+    daily_data["daily_summary"] = {
+        "total_tokens": total_valid,
+        "wins": len(wins),
+        "losses": len(losses),
+        "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
+        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
+        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
+        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
+        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+    }
+
+    # 5. Save and Upload with Confirmation
+    saved_path = save_json(daily_data, remote_path)
+    if saved_path:
+        success = await upload_file_to_supabase(saved_path, remote_path)
+        if success:
+            logger.info(f"Successfully uploaded {remote_path}")
+            return True
+        else:
+            logger.error(f"Failed to upload {remote_path}")
+            return False
+    else:
+        logger.error(f"Failed to save local file {remote_path}")
+        return False
+
 # --- Core Tracking Logic ---
 
 def handle_price_failure(token_data: dict):
@@ -479,6 +570,7 @@ async def update_token_price(token_data: dict, price: float):
     """
     Async update of token price. 
     Handles WINS immediately to ensure daily files and stats are fresh.
+    CRITICAL: Validates persistence before updating memory state to prevent Zombie Wins.
     """
     now = get_now()
     entry_price = token_data["entry_price"]
@@ -505,39 +597,52 @@ async def update_token_price(token_data: dict, price: float):
         
         # CASE A: First time hitting 45% (The "Win" Moment)
         if not token_data["hit_50_percent"]:
+            logger.info(f"WIN CANDIDATE: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Attempting to write.")
+            
+            # Temporarily set values to prepare for write
+            original_status = token_data["status"]
             token_data["hit_50_percent"] = True
             token_data["hit_50_percent_time"] = to_iso(now)
             time_to_50 = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
             token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
             token_data["status"] = "win"
             
-            logger.info(f"WIN: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Writing to daily file immediately.")
-            
             # Write to file
             win_date_str = now.strftime('%Y-%m-%d')
-            update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
+            success = await update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
             
-            # Trigger Stats Update Immediately (Fire and forget task)
-            asyncio.create_task(update_all_summary_stats())
+            if success:
+                logger.info(f"WIN CONFIRMED: {token_data.get('symbol')} stats saved to daily file.")
+                # Trigger Stats Update Immediately (Fire and forget task)
+                asyncio.create_task(update_all_summary_stats())
+            else:
+                logger.error(f"WIN WRITE FAILED: {token_data.get('symbol')}. Reverting state to retry next loop.")
+                # Revert state so we try again next time (Prevent Zombie Win)
+                token_data["hit_50_percent"] = False
+                token_data["hit_50_percent_time"] = None
+                token_data["time_to_50_percent_minutes"] = None
+                token_data["status"] = original_status
 
-        # CASE B: Already a Win, but hit a new ATH (Keep the daily file updated with the pump)
+        # CASE B: Already a Win, but hit a new ATH
         elif is_new_ath:
-            # We update the file again so the "ATH ROI" in the daily file isn't stuck at 45%
-            # We use the date of the win (hit_50_percent_time) to ensure we update the correct file
             if token_data.get("hit_50_percent_time"):
                 win_date = parse_ts(token_data["hit_50_percent_time"])
                 date_str = win_date.strftime('%Y-%m-%d')
-                # Update without marking final, just saving the new ATH
-                update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
+                # We try to update, but if it fails, it's not critical enough to revert the ATH in memory
+                await update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
 
-def finalize_token_tracking(composite_key: str, token_data: dict):
+async def finalize_token_tracking(composite_key: str, token_data: dict):
+    """
+    Finalizes a token.
+    CRITICAL: Only removes token from active_tracking if the file write is confirmed successful.
+    This prevents Archival Loss.
+    """
     mint = token_data["mint"]
-    logger.info(f"Tracking complete for {composite_key}. Final status: {token_data['status']}")
+    logger.info(f"Tracking complete for {composite_key}. Finalizing...")
     
-    # If it was active and never won, it's a loss.
+    # Update Status
     if token_data["status"] == "active":
         token_data["status"] = "loss"
-        # Ensure 'hit_50_percent' is explicitly false if not present
         if "hit_50_percent" not in token_data:
             token_data["hit_50_percent"] = False
     
@@ -547,29 +652,31 @@ def finalize_token_tracking(composite_key: str, token_data: dict):
     token_data["final_price"] = final_price
     token_data["final_roi"] = calculate_roi(token_data["entry_price"], final_price)
     
-    # --- PART 1 & 2: Option C1 Logic ---
     signal_type = token_data["signal_type"]
+    date_str = ""
     
     if token_data["status"] == "win":
         # Rule: Wins are stored by DATE OF WIN
-        # We update the existing entry in that file
         if token_data.get("hit_50_percent_time"):
             win_date = parse_ts(token_data["hit_50_percent_time"])
             date_str = win_date.strftime('%Y-%m-%d')
         else:
-            # Fallback if time missing (shouldn't happen)
             date_str = get_now().strftime('%Y-%m-%d')
-            
-        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
-        
     else:
         # Rule: Losses are stored by TRACKING END DATE
         date_str = get_now().strftime('%Y-%m-%d')
-        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
+            
+    # CRITICAL: Attempt write
+    success = await update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
     
-    if composite_key in active_tracking:
-        del active_tracking[composite_key]
-        logger.info(f"Removed {composite_key} from active tracking.")
+    if success:
+        if composite_key in active_tracking:
+            del active_tracking[composite_key]
+            logger.info(f"SUCCESS: Archived and removed {composite_key} from active tracking.")
+    else:
+        logger.error(f"FAILURE: Could not archive {composite_key}. Retaining in active tracking for retry.")
+        # We do NOT remove it. It will be picked up again in the next loop, 
+        # see that time > end_time, and call finalize_token_tracking again.
 
 async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: dict):
     # 1. Get Entry Data (Price, Mcap, Liquidity)
@@ -709,7 +816,8 @@ async def update_active_token_prices():
     for composite_key, token_data in list(active_tracking.items()):
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
         if now >= tracking_end_time:
-            finalize_token_tracking(composite_key, token_data)
+            # IMPORTANT: await the async finalization
+            await finalize_token_tracking(composite_key, token_data)
             continue
 
         if token_data["retry_start_time"] is not None:
@@ -788,82 +896,6 @@ async def update_active_token_prices():
         else:
             handle_price_failure(token_data)
 
-# --- Analytics Generation (Daily File Handler) ---
-
-def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool):
-    """
-    Handles creating or updating entries in daily files.
-    - If entry exists: UPDATES it (preventing duplicates).
-    - If entry new: APPENDS it.
-    - Sets 'is_final' flag.
-    - Calculates daily summary stats.
-    - Uploads to Supabase.
-    """
-    remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
-    local_path = os.path.join(TEMP_DIR, remote_path)
-    
-    # 1. Load existing data or create new
-    daily_data = load_json(remote_path)
-    if daily_data is None:
-        # Assume new file if not found locally (or failed to load)
-        daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
-    
-    # 2. Prepare the Token Entry
-    token_key = get_composite_key(token_data["mint"], signal_type)
-    
-    # Deepcopy to avoid modifying the active tracking object with file-specific flags
-    entry_to_write = copy.deepcopy(token_data)
-    entry_to_write["is_final"] = is_final
-    
-    # 3. Insert or Update
-    tokens = daily_data.get("tokens", [])
-    found_index = -1
-    
-    for i, t in enumerate(tokens):
-        existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
-        if existing_key == token_key:
-            found_index = i
-            break
-            
-    if found_index != -1:
-        # UPDATE existing entry
-        tokens[found_index] = entry_to_write
-        logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
-    else:
-        # APPEND new entry
-        tokens.append(entry_to_write)
-        logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
-    
-    daily_data["tokens"] = tokens
-
-    # 4. Update Summary Stats (For this file)
-    wins = [t for t in tokens if t.get("status") == "win"]
-    losses = [t for t in tokens if t.get("status") == "loss"]
-    total_valid = len(tokens)
-    
-    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    
-    # FIXED: handle final_roi=None for active tokens by treating as 0
-    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
-    
-    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
-    
-    daily_data["daily_summary"] = {
-        "total_tokens": total_valid,
-        "wins": len(wins),
-        "losses": len(losses),
-        "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
-        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
-        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
-    }
-
-    # 5. Save and Upload
-    saved_path = save_json(daily_data, remote_path)
-    if saved_path:
-        asyncio.create_task(upload_file_to_supabase(saved_path, remote_path))
-
 async def get_available_daily_files(signal_type: str) -> list[str]:
     folder_path = f"analytics/{signal_type}/daily"
     files = await asyncio.to_thread(list_files_in_supabase_folder, folder_path)
@@ -900,33 +932,22 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     
     # Calculate traditional ROI metrics
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    
-    # FIXED: handle final_roi=None for active tokens by treating as 0
     total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
-    
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
     # --- NEW: Loss Rate & Average Loss Calculation ---
-    # Filter tokens with BOTH status="loss" AND negative final ROI
-    # This excludes any wins that may have crashed after hitting 45%
     negative_tokens = [
         t for t in tokens 
         if t.get("status") == "loss" 
         and t.get("final_roi") is not None 
         and t.get("final_roi") < 0
     ]
-    
     negative_count = len(negative_tokens)
-    
-    # Calculate loss rate (percentage of tokens with status=loss AND negative returns)
     loss_rate = (negative_count / total_valid * 100) if total_valid > 0 else 0.0
-    
-    # Calculate average loss for tokens with status=loss and negative ROI
     negative_rois = [t["final_roi"] for t in negative_tokens]
     average_loss = sum(negative_rois) / len(negative_rois) if negative_rois else 0.0
     # ---------------------------------------------------
 
-    # Time calculation logic
     times_to_ath = [float(t["time_to_ath_minutes"]) for t in tokens if t.get("time_to_ath_minutes") is not None]
     times_to_50 = [float(t["time_to_50_percent_minutes"]) for t in wins if t.get("time_to_50_percent_minutes") is not None]
 
@@ -939,24 +960,18 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     return {
         "total_tokens": total_valid,
         "wins": len(wins),
-        "losses": len(losses),  # Kept: tokens that didn't hit 45%
+        "losses": len(losses),
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        
-        # --- NEW METRICS ---
-        "negative_returns": negative_count,  # Count of tokens with final_roi < 0
-        "loss_rate": round(loss_rate, 2),    # Percentage of tokens with negative ROI
-        "average_loss": round(average_loss, 2),  # Average ROI for negative tokens
-        # -------------------
-        
+        "negative_returns": negative_count,
+        "loss_rate": round(loss_rate, 2),
+        "average_loss": round(average_loss, 2),
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
-        
         "avg_time_to_ath_minutes": round(avg_time_to_ath, 2),
         "avg_time_to_50_percent_minutes": round(avg_time_to_50, 2),
         "total_aths_recorded": round(total_ath_roi, 2),
-        
         "top_tokens": top_tokens[:10]
     }
 
@@ -980,9 +995,6 @@ async def generate_summary_stats(signal_type: str):
     }
     
     for period, start_date in timeframes.items():
-        # Include all tokens that were *completed* after start_date, 
-        # OR if they are winners from that date file (standard logic: simply filter by token's timestamps if needed, 
-        # but here we follow the standard approach of checking tracking completion or creation)
         filtered = [t for t in all_tokens if parse_ts(t.get("tracking_completed_at", to_iso(now))) >= start_date]
         summary_data["timeframes"][period] = calculate_timeframe_stats(filtered)
 
@@ -993,7 +1005,6 @@ async def generate_summary_stats(signal_type: str):
 async def generate_overall_analytics():
     """
     Generate overall analytics combining discovery and alpha signals.
-    Now includes combined loss rate and average loss metrics.
     """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")
@@ -1013,37 +1024,29 @@ async def generate_overall_analytics():
         wins = d["wins"] + a["wins"]
         losses = d["losses"] + a["losses"]
         
-        # --- NEW: Combine Loss Metrics ---
         negative_returns_d = d.get("negative_returns", 0)
         negative_returns_a = a.get("negative_returns", 0)
         total_negative = negative_returns_d + negative_returns_a
         
-        # Calculate combined loss rate
         combined_loss_rate = (total_negative / total * 100) if total > 0 else 0.0
         
-        # Calculate weighted average loss
         avg_loss_d = d.get("average_loss", 0)
         avg_loss_a = a.get("average_loss", 0)
         
         combined_avg_loss = 0.0
         if total_negative > 0:
-            # Weight by number of negative tokens from each signal type
             combined_avg_loss = (
                 (avg_loss_d * negative_returns_d) + (avg_loss_a * negative_returns_a)
             ) / total_negative
-        # ---------------------------------
         
-        # Weighted Averages for ROI
         avg_ath = 0
         if total > 0:
             avg_ath = ((d["average_ath_all"] * d["total_tokens"]) + (a["average_ath_all"] * a["total_tokens"])) / total
 
-        # Weighted Averages for TIME and TOTAL ATHs
         total_aths_d = d.get("total_aths_recorded", 0)
         total_aths_a = a.get("total_aths_recorded", 0)
         total_aths_combined = total_aths_d + total_aths_a
 
-        # Average Time to ATH (Weighted by number of ATHs recorded)
         avg_time_ath_d = d.get("avg_time_to_ath_minutes", 0)
         avg_time_ath_a = a.get("avg_time_to_ath_minutes", 0)
         
@@ -1053,7 +1056,6 @@ async def generate_overall_analytics():
                 (avg_time_ath_d * total_aths_d) + (avg_time_ath_a * total_aths_a)
             ) / total_aths_combined
 
-        # Average Time to 50% (Weighted by number of wins)
         avg_time_50_d = d.get("avg_time_to_50_percent_minutes", 0)
         avg_time_50_a = a.get("avg_time_to_50_percent_minutes", 0)
         
@@ -1068,22 +1070,16 @@ async def generate_overall_analytics():
         overall["timeframes"][period] = {
             "total_tokens": total,
             "wins": wins,
-            "losses": losses,  # Kept: total non-winners
+            "losses": losses,
             "success_rate": (wins / total * 100) if total > 0 else 0,
-            
-            # --- NEW METRICS ---
             "negative_returns": total_negative,
             "loss_rate": round(combined_loss_rate, 2),
             "average_loss": round(combined_avg_loss, 2),
-            # -------------------
-            
             "average_ath_all": avg_ath,
             "max_roi": max(d["max_roi"], a["max_roi"]),
-            
             "avg_time_to_ath_minutes": round(avg_time_ath_combined, 2),
             "avg_time_to_50_percent_minutes": round(avg_time_50_combined, 2),
             "total_aths_recorded": total_aths_combined,
-            
             "top_tokens": sorted(d["top_tokens"] + a["top_tokens"], key=lambda x: x["ath_roi"], reverse=True)[:10]
         }
 
