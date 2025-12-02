@@ -5,10 +5,11 @@ analytics_tracker.py
 Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
-REVISION: ROBUST DATA INTEGRITY
+REVISION: ROBUST DATA INTEGRITY & TIMEFRAME ATTRIBUTION
+- CRITICAL FIX: "Timeframe Inflation" fixed. Wins are now attributed to the time they
+  hit the target (hit_50_percent_time), not when tracking completes.
 - CRITICAL FIX: "Zombie Wins" prevented. 'hit_50_percent' flag only sets after confirmed Supabase write.
 - CRITICAL FIX: "Archival Loss" prevented. Tokens are only removed from active tracking after confirmed Supabase write.
-- CRITICAL FIX: "History Overwrite" prevented. Daily files are downloaded before update to ensure history isn't wiped on restart.
 - Fixed: Async handling for all Supabase file operations.
 """
 
@@ -976,6 +977,14 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     }
 
 async def generate_summary_stats(signal_type: str):
+    """
+    Generates summary stats with strict Event-Based Attribution.
+    
+    Correction:
+    - WINS are attributed to 'hit_50_percent_time'.
+    - LOSSES are attributed to 'tracking_completed_at'.
+    - ACTIVE tokens are excluded from finalized stats.
+    """
     logger.info(f"Generating summary stats for {signal_type}...")
     available_dates = await get_available_daily_files(signal_type)
     if not available_dates: return
@@ -987,7 +996,7 @@ async def generate_summary_stats(signal_type: str):
         "1_day": now - timedelta(days=1),
         "7_days": now - timedelta(days=7),
         "1_month": now - timedelta(days=30),
-        "all_time": parse_ts(f"{available_dates[0]}T00:00:00Z")
+        "all_time": parse_ts(f"{available_dates[0]}T00:00:00Z") if available_dates else now - timedelta(days=365)
     }
     
     summary_data = {
@@ -995,7 +1004,34 @@ async def generate_summary_stats(signal_type: str):
     }
     
     for period, start_date in timeframes.items():
-        filtered = [t for t in all_tokens if parse_ts(t.get("tracking_completed_at", to_iso(now))) >= start_date]
+        filtered = []
+        for t in all_tokens:
+            status = t.get("status")
+            attribution_date = None
+
+            # Filter 1: Exclude purely active tokens (only finalized or confirmed wins)
+            if status == "active": 
+                continue
+
+            # Filter 2: Event-Based Attribution
+            if status == "win":
+                # For WINS: Attribute to the moment the win occurred (hit_50_percent_time)
+                # This prevents "Zombie Wins" from lingering in 24h stats for days while they track.
+                ts = t.get("hit_50_percent_time")
+                if not ts:
+                    # Fallback for legacy data: Use tracking completion or ATH time
+                    ts = t.get("tracking_completed_at") or t.get("ath_time")
+                attribution_date = parse_ts(ts) if ts else None
+            
+            elif status == "loss":
+                # For LOSSES: Attribute to the moment tracking ended (tracking_completed_at)
+                ts = t.get("tracking_completed_at")
+                attribution_date = parse_ts(ts) if ts else None
+            
+            # Apply Timeframe Filter
+            if attribution_date and attribution_date >= start_date:
+                filtered.append(t)
+        
         summary_data["timeframes"][period] = calculate_timeframe_stats(filtered)
 
     remote_path = f"analytics/{signal_type}/summary_stats.json"
@@ -1005,6 +1041,7 @@ async def generate_summary_stats(signal_type: str):
 async def generate_overall_analytics():
     """
     Generate overall analytics combining discovery and alpha signals.
+    Relies on the pre-filtered summary stats from generate_summary_stats.
     """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")
