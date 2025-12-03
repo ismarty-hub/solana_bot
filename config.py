@@ -39,8 +39,14 @@ USER_PREFS_FILE = DATA_DIR / "bot_user_prefs.pkl"
 USER_STATS_FILE = DATA_DIR / "bot_user_stats.pkl"
 ALERTS_STATE_FILE = DATA_DIR / "bot_alerts_state.pkl"
 ALPHA_ALERTS_STATE_FILE = DATA_DIR / "alerts_state_alpha.pkl"
-GROUPS_FILE = DATA_DIR / "bot_groups.pkl"  # NEW: Group chat IDs for mint broadcasting
+GROUPS_FILE = DATA_DIR / "bot_groups.pkl"  
 PORTFOLIOS_FILE = DATA_DIR / "bot_portfolios.pkl"
+
+# ----------------------
+# Analytics Tracking Configuration
+# ----------------------
+ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
+ANALYTICS_POLL_INTERVAL = 300  # 5 minutes
 
 # ----------------------
 # Bot Configuration

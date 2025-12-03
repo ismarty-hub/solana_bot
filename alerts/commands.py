@@ -1296,3 +1296,176 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     elif data == "preset_all":
         user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
         await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
+
+
+async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Set global TP preference."""
+    chat_id = str(update.effective_chat.id)
+    if not context.args:
+        await update.message.reply_html(
+            "<b>Usage:</b> <code>/set_tp [median|mean|number]</code>\n"
+            "• median: Use median historical ATH (Recommended)\n"
+            "• mean: Use average historical ATH (Aggressive)\n"
+            "• number: Fixed percentage (e.g., 50)"
+        )
+        return
+        
+    val = context.args[0].lower()
+    if val not in ["median", "mean"]:
+        try:
+            float(val)
+        except ValueError:
+            await update.message.reply_text("❌ Invalid option.")
+            return
+
+    user_manager.update_user_prefs(chat_id, {"tp_preference": val})
+    await update.message.reply_html(f"✅ Global TP preference set to: <b>{val}</b>")
+
+async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Override TP for discovery signals."""
+    chat_id = str(update.effective_chat.id)
+    if not context.args:
+        await update.message.reply_html("Usage: <code>/set_tp_discovery [number]</code>")
+        return
+    try:
+        val = float(context.args[0])
+        user_manager.update_user_prefs(chat_id, {"tp_discovery": val})
+        await update.message.reply_text(f"✅ Discovery TP fixed at {val}%")
+    except: await update.message.reply_text("❌ Invalid number")
+
+async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Override TP for alpha signals."""
+    chat_id = str(update.effective_chat.id)
+    if not context.args:
+        await update.message.reply_html("Usage: <code>/set_tp_alpha [number]</code>")
+        return
+    try:
+        val = float(context.args[0])
+        user_manager.update_user_prefs(chat_id, {"tp_alpha": val})
+        await update.message.reply_text(f"✅ Alpha TP fixed at {val}%")
+    except: await update.message.reply_text("❌ Invalid number")
+
+
+async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                            user_manager: UserManager, portfolio_manager: PortfolioManager):
+    """
+    Close a specific position by symbol.
+    Usage: /closeposition TOKEN
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Usage: /closeposition <SYMBOL>\n"
+            "Example: /closeposition SOL"
+        )
+        return
+    
+    symbol = context.args[0].upper()
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions.")
+        return
+    
+    # Find position
+    position_key = None
+    position = None
+    for key, pos in portfolio["positions"].items():
+        if pos.get("symbol", "").upper() == symbol:
+            position_key = key
+            position = pos
+            break
+    
+    if not position_key:
+        await update.message.reply_text(f"❌ Position {symbol} not found.")
+        return
+    
+    # Get current ROI
+    active_tracking = await portfolio_manager.download_active_tracking()
+    analytics_key = f"{position['mint']}_{position['signal_type']}"
+    data = active_tracking.get(analytics_key)
+    
+    current_roi = 0.0
+    if data:
+        current_roi = float(data.get("current_roi", 0))
+    else:
+        # Fallback
+        curr_price = await portfolio_manager.fetch_current_price_fallback(position["mint"])
+        if curr_price > 0:
+            current_roi = ((curr_price - position["entry_price"]) / position["entry_price"]) * 100
+    
+    await portfolio_manager.exit_position(
+        chat_id, position_key, 
+        "Manual Close 👤", 
+        context.application, 
+        exit_roi=current_roi
+    )
+
+async def closeall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                       user_manager: UserManager, portfolio_manager: PortfolioManager):
+    """
+    Close ALL open positions with confirmation.
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions.")
+        return
+    
+    positions = portfolio["positions"]
+    count = len(positions)
+    
+    msg = f"⚠️ <b>Close All Positions?</b>\n\n"
+    msg += f"You have {count} open position(s):\n\n"
+    
+    for key, pos in positions.items():
+        msg += f"• {pos.get('symbol', 'N/A')} ({pos.get('signal_type', 'N/A')})\n"
+    
+    msg += f"\nType <code>/confirmcloseall</code> to proceed."
+    
+    await update.message.reply_html(msg)
+
+async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                              user_manager: UserManager, portfolio_manager: PortfolioManager):
+    """
+    Confirmation for /closeall
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions to close.")
+        return
+    
+    active_tracking = await portfolio_manager.download_active_tracking()
+    
+    closed_count = 0
+    # Create list of keys to avoid runtime error during deletion
+    keys_to_close = list(portfolio["positions"].keys())
+
+    for key in keys_to_close:
+        pos = portfolio["positions"].get(key)
+        if not pos: continue
+
+        analytics_key = f"{pos['mint']}_{pos['signal_type']}"
+        data = active_tracking.get(analytics_key)
+        
+        current_roi = 0.0
+        if data:
+            current_roi = float(data.get("current_roi", 0))
+        else:
+            curr_price = await portfolio_manager.fetch_current_price_fallback(pos["mint"])
+            if curr_price > 0:
+                current_roi = ((curr_price - pos["entry_price"]) / pos["entry_price"]) * 100
+        
+        await portfolio_manager.exit_position(
+            chat_id, key, 
+            "Manual Close All 👤", 
+            context.application, 
+            exit_roi=current_roi
+        )
+        closed_count += 1
+    
+    await update.message.reply_text(f"✅ Closed {closed_count} position(s).")

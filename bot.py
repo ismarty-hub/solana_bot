@@ -21,7 +21,9 @@ from config import (
 
 from shared.file_io import safe_load, safe_save
 from alerts.user_manager import UserManager
-from trade_manager import PortfolioManager, trade_monitoring_loop, signal_detection_loop
+from trade_manager import PortfolioManager#, trade_monitoring_loop
+from alerts.analytics_monitoring import active_tracking_signal_loop
+
 
 # --- Updated Command Imports ---
 from alerts.commands import (
@@ -32,8 +34,13 @@ from alerts.commands import (
     # Add new alpha commands
     alpha_subscribe_cmd, alpha_unsubscribe_cmd,
     # --- NEW: Add ML commands ---
-    predict_cmd, predict_batch_cmd
+    predict_cmd, predict_batch_cmd,
+
+    set_tp_cmd, set_tp_discovery_cmd, set_tp_alpha_cmd,
+
+    closeposition_cmd, closeall_cmd, confirmcloseall_cmd
 )
+
 # --- End Updated Command Imports ---
 
 from alerts.admin_commands import (
@@ -118,6 +125,15 @@ async def watchlist_wrapper(update, context):
 async def resetcapital_wrapper(update, context): 
     await resetcapital_cmd(update, context, user_manager, portfolio_manager)
 
+async def closeposition_wrapper(update, context): 
+    await closeposition_cmd(update, context, user_manager, portfolio_manager)
+
+async def closeall_wrapper(update, context): 
+    await closeall_cmd(update, context, user_manager, portfolio_manager)
+
+async def confirmcloseall_wrapper(update, context): 
+    await confirmcloseall_cmd(update, context, user_manager, portfolio_manager)
+
 # --- NEW: ML Command Wrappers ---
 # We pass user_manager to check for subscription status
 async def predict_wrapper(update, context): 
@@ -126,6 +142,10 @@ async def predict_wrapper(update, context):
 async def predict_batch_wrapper(update, context): 
     await predict_batch_cmd(update, context, user_manager)
 # --- END ML Command Wrappers ---
+
+async def set_tp_wrapper(update, context): await set_tp_cmd(update, context, user_manager)
+async def set_tp_discovery_wrapper(update, context): await set_tp_discovery_cmd(update, context, user_manager)
+async def set_tp_alpha_wrapper(update, context): await set_tp_alpha_cmd(update, context, user_manager)
 
 # ----------------------
 # Startup hook
@@ -239,25 +259,21 @@ async def on_startup(app: Application):
     user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
     portfolio_manager = PortfolioManager(PORTFOLIOS_FILE)
     logger.info("✅ Managers initialized.")
-
-    # --- Start ALL background loops ---
+    # Start ALL background loops
     logger.info("🔄 Starting background tasks...")
-    # 1. Original alert monitoring loop - NOW PASSES portfolio_manager
+    # 1. Original alert monitoring loop - ONLY sends alerts
     asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
     # 2. Monthly expiry notifier
     asyncio.create_task(monthly_expiry_notifier(app, user_manager))
-    # 3. Periodic Supabase sync (this now handles alpha state upload)
+    # 3. Periodic Supabase sync
     if USE_SUPABASE:
         asyncio.create_task(periodic_supabase_sync())
-    # 4. Paper trading signal detection loop
-    asyncio.create_task(signal_detection_loop(app, user_manager, portfolio_manager))
-    # 5. Paper trading high-frequency monitoring loop
-    asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
-
-    # 6. --- New Alpha Monitoring Loop ---
-    # This loop no longer handles its own upload/download
+    # 4. 🆕 ANALYTICS-DRIVEN SIGNAL DETECTION (replaces old signal_detection_loop)
+    asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
+    # # 5. Paper trading position monitoring (checks exits, TP, stop loss)
+    # asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
+    # 6. Alpha alerts monitoring
     asyncio.create_task(alpha_monitoring_loop(app, user_manager))
-    # --- End New Alpha Loop ---
 
     logger.info("🚀 Bot startup complete.")
 
@@ -315,6 +331,14 @@ async def main():
             notify_new_group
         )
     )
+
+    app.add_handler(CommandHandler("set_tp", set_tp_wrapper))
+    app.add_handler(CommandHandler("set_tp_discovery", set_tp_discovery_wrapper))
+    app.add_handler(CommandHandler("set_tp_alpha", set_tp_alpha_wrapper))
+
+    app.add_handler(CommandHandler("closeposition", closeposition_wrapper))
+    app.add_handler(CommandHandler("closeall", closeall_wrapper))
+    app.add_handler(CommandHandler("confirmcloseall", confirmcloseall_wrapper))
     
     logger.info("✅ All command handlers registered (including new alpha and ML commands).")
     

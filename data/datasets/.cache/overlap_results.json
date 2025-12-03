@@ -1,1 +1,182 @@
-{}
+{
+  "FZdiakzh2soYdkhZ3rUnmnrPWBDz5Q5kPNL3TFPVpump": [
+    {
+      "ts": "2025-12-02T05:28:16.660887+00:00",
+      "result": {
+        "token": "FZdiakzh2soYdkhZ3rUnmnrPWBDz5Q5kPNL3TFPVpump",
+        "checked_at": "2025-12-02T05:28:16.659927+00:00",
+        "top_holders_checked": 28,
+        "overlap_count": 2,
+        "overlap_percentage": 7.14,
+        "concentration": 0.02,
+        "weighted_concentration": 0.01,
+        "total_winner_wallets": 9355,
+        "overlap_wallets_sample": [
+          "9E8n82dSfowQgNuTa1w6XwvedLMTCzpSpSwpt5U7SPVf",
+          "GLMcvgcLmLVrzzh8sz2MZ6Yv9ymtDTrduGHdtf8bYQBw"
+        ],
+        "grade": "NONE",
+        "detected_via": "rugcheck",
+        "block_time": 1764651742,
+        "token_metadata": {
+          "fdv_usd": 0.0,
+          "volume_usd": 0.0,
+          "source_dex": "unknown",
+          "price_change_percentage": 0.0
+        }
+      },
+      "security": "passed_grade_none_rugcheck",
+      "rugcheck": {
+        "top1_holder_pct": 22.5814800785989,
+        "top_10_holders_pct": 41.9094611672854,
+        "holder_count": 275,
+        "has_authorities": false,
+        "creator_balance": 1.763352468753e-07,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": 100.0,
+        "total_liquidity_usd": 18664.913685723943,
+        "lp_lock_details": [
+          {
+            "market_type": "pump_fun_amm",
+            "locked_usd": 18664.913685723943,
+            "total_usd": 18664.913685723943,
+            "locked_pct": 100
+          }
+        ]
+      }
+    },
+    {
+      "ts": "2025-12-02T05:36:29.159888+00:00",
+      "result": {
+        "token": "FZdiakzh2soYdkhZ3rUnmnrPWBDz5Q5kPNL3TFPVpump",
+        "checked_at": "2025-12-02T05:36:29.158672+00:00",
+        "top_holders_checked": 38,
+        "overlap_count": 3,
+        "overlap_percentage": 7.89,
+        "concentration": 0.03,
+        "weighted_concentration": 0.02,
+        "total_winner_wallets": 9355,
+        "overlap_wallets_sample": [
+          "9E8n82dSfowQgNuTa1w6XwvedLMTCzpSpSwpt5U7SPVf",
+          "GLMcvgcLmLVrzzh8sz2MZ6Yv9ymtDTrduGHdtf8bYQBw",
+          "jWJFdhKuaGLW4M2Vk6iWhCiRpnxpPNDYk9u91qEHFKo"
+        ],
+        "grade": "NONE",
+        "detected_via": "rugcheck",
+        "block_time": 1764651742,
+        "token_metadata": {
+          "fdv_usd": 0.0,
+          "volume_usd": 0.0,
+          "source_dex": "unknown",
+          "price_change_percentage": 0.0
+        }
+      },
+      "security": "passed_grade_none_rugcheck",
+      "rugcheck": {
+        "top1_holder_pct": 18.37001818811799,
+        "top_10_holders_pct": 37.634077114062094,
+        "holder_count": 374,
+        "has_authorities": false,
+        "creator_balance": 1.7633525009727864e-07,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": 100.0,
+        "total_liquidity_usd": 24806.049344967643,
+        "lp_lock_details": [
+          {
+            "market_type": "pump_fun_amm",
+            "locked_usd": 24806.049344967643,
+            "total_usd": 24806.049344967643,
+            "locked_pct": 100
+          }
+        ]
+      }
+    },
+    {
+      "ts": "2025-12-02T06:44:28.006676+00:00",
+      "result": {
+        "token": "FZdiakzh2soYdkhZ3rUnmnrPWBDz5Q5kPNL3TFPVpump",
+        "checked_at": "2025-12-02T05:50:25.881171+00:00",
+        "top_holders_checked": 76,
+        "overlap_count": 6,
+        "overlap_percentage": 7.89,
+        "concentration": 0.06,
+        "weighted_concentration": 0.04,
+        "total_winner_wallets": 9355,
+        "overlap_wallets_sample": [
+          "9E8n82dSfowQgNuTa1w6XwvedLMTCzpSpSwpt5U7SPVf",
+          "GLMcvgcLmLVrzzh8sz2MZ6Yv9ymtDTrduGHdtf8bYQBw",
+          "jWJFdhKuaGLW4M2Vk6iWhCiRpnxpPNDYk9u91qEHFKo",
+          "Ar2Y6o1QmrRAskjii1cRfijeKugHH13ycxW5cd7rro1x",
+          "5MzY4tf8G9RYDtKK1bSyqmArmuVRsrbAeieh48DUdE9A",
+          "8GnLC57kP2SDvD8VAUiXMq8JKGKjVeLzoFLW87jPHRuD"
+        ],
+        "grade": "LOW",
+        "detected_via": "rugcheck",
+        "block_time": 1764651742,
+        "token_metadata": {
+          "fdv_usd": 0.0,
+          "volume_usd": 0.0,
+          "source_dex": "unknown",
+          "price_change_percentage": 0.0
+        },
+        "dexscreener": {
+          "current_price_usd": 4.492e-05
+        }
+      },
+      "security": "passed_rugcheck",
+      "probation_meta": {
+        "probation": false,
+        "top_n_pct": 19.348316,
+        "top_n": 3,
+        "threshold_pct": 40.0,
+        "explanation": "Top 3 holders own 19.35% of supply; threshold is >40.0%. Probation=False."
+      },
+      "rugcheck": {
+        "top1_holder_pct": 12.985931410531885,
+        "top_10_holders_pct": 29.294579376994815,
+        "holder_count": 759,
+        "has_authorities": false,
+        "creator_balance": 1.7633531616033852e-07,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": 100.0,
+        "total_liquidity_usd": 35150.82240910294,
+        "lp_lock_details": [
+          {
+            "market_type": "pump_fun_amm",
+            "locked_usd": 35150.82240910294,
+            "total_usd": 35150.82240910294,
+            "locked_pct": 100
+          },
+          {
+            "market_type": "meteora_damm_v2",
+            "locked_usd": 0.0,
+            "total_usd": 0.0,
+            "locked_pct": 0
+          }
+        ]
+      },
+      "dexscreener": {
+        "current_price_usd": 4.492e-05,
+        "market_cap_usd": 44928.0
+      },
+      "ml_prediction": {
+        "probability": 0.49283029515698407,
+        "confidence": "LOW",
+        "risk_tier": "HIGH RISK",
+        "action": "SKIP",
+        "error": null,
+        "key_metrics": {
+          "token_age_hours": 1.3083316664563285,
+          "liquidity_usd": 20788.12,
+          "volume_h24_usd": 633604.2,
+          "price_change_h24_pct": -12.22,
+          "insider_supply_pct": 0.0,
+          "top_10_holders_pct": 35.51943615462208,
+          "pump_dump_risk_score": 0.0,
+          "market_health_score": 28262.85381054651
+        },
+        "warnings": []
+      }
+    }
+  ]
+}

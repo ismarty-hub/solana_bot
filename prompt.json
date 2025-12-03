@@ -1,0 +1,511 @@
+📋 COMPREHENSIVE PROMPT FOR AI CODE GENERATION
+
+🎯 Objective
+Generate corrected and complete Python scripts for an auto-trading Telegram bot that:
+
+Opens positions automatically based on signals from active_tracking.json
+Exits positions based on Take Profit (TP) or tracking expiry
+Allows manual position closing via commands
+Relies entirely on analytics data (no cooldown logic needed)
+
+
+📁 Required Files to Upload
+Please attach these files to provide full context:
+
+trade_manager.py - Portfolio and position management
+analytics_monitoring.py - Signal detection and processing loop
+commands.py - Telegram bot commands
+bot.py - Main bot initialization and startup
+analytics_tracker.py - Analytics system (for understanding data structure)
+
+
+🔍 Current System Understanding
+Data Flow:
+Analytics System (analytics_tracker.py)
+    ↓ Generates
+active_tracking.json (on Supabase)
+    ↓ Contains
+{
+  "mint_discovery": {
+    "mint": "ABC...",
+    "symbol": "TOKEN",
+    "signal_type": "discovery",
+    "entry_time": "2025-01-15T10:00:00Z",
+    "entry_price": 0.0001234,
+    "entry_mcap": 50000,
+    "entry_liquidity": 30000,
+    "token_age_hours": 8.5,
+    "tracking_end_time": "2025-01-16T10:00:00Z",  // ← Already calculated
+    "current_price": 0.0001456,
+    "current_roi": 18.0,
+    "ath_price": 0.0002000,
+    "ath_roi": 62.1,
+    // ... other fields
+  }
+}
+    ↓ Monitored by
+Bot (analytics_monitoring.py) - Every 5 minutes
+    ↓ Opens positions via
+trade_manager.py → process_new_signal()
+    ↓ Exits positions via
+trade_manager.py → check_and_exit_positions()
+
+🎯 Required Changes
+1. Remove All Cooldown Logic
+Why: Analytics system prevents duplicate signals upstream. No cooldown needed in bot.
+Files to modify:
+
+trade_manager.py
+
+What to remove:
+
+add_cooldown() function
+is_on_cooldown() function
+cooldowns dictionary in portfolio structure
+All cooldown checks in process_new_signal()
+All cooldown-related code in exit_position()
+
+
+2. Fix tracking_end_time Handling
+Current Issue: Bot calculates tracking_end_time based on signal type (24h for discovery, 168h for alpha)
+Correct Behavior: Use tracking_end_time directly from active_tracking.json (analytics already calculated it based on token age)
+Files to modify:
+
+trade_manager.py → process_new_signal()
+
+Changes needed:
+python# REMOVE THIS:
+hours = 168 if signal_type == "alpha" else 24
+tracking_end_time = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat() + "Z"
+
+# REPLACE WITH:
+tracking_end_time = token_data.get("tracking_end_time")  # Already in analytics JSON
+
+3. Update Position Data with Analytics Values
+Why: Allows /portfolio command to show live P/L without re-downloading analytics
+Files to modify:
+
+trade_manager.py → check_and_exit_positions()
+
+Logic to add:
+python# While checking each position (even if not exiting):
+if data:  # If analytics data exists
+    pos["current_price"] = data.get("current_price")
+    pos["current_roi"] = data.get("current_roi")
+    pos["ath_price"] = data.get("ath_price")
+    pos["ath_roi"] = data.get("ath_roi")
+    pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
+
+4. Handle Analytics Data Missing - Fallback Strategy
+Scenario: Bot tries to exit but token was already removed from active_tracking.json
+Solution Hierarchy:
+
+Check Daily Files (Best - most accurate)
+
+Download daily file: analytics/{signal_type}/daily/{date}.json
+Extract final data for that token
+Use final_roi and final_price
+
+
+Use Jupiter API (Fallback - acceptable)
+
+Fetch current price from Jupiter
+Calculate ROI from entry price
+
+
+Exit at 0% ROI (Last Resort - safe)
+
+If both methods fail
+Return capital without gain/loss
+
+
+
+Files to modify:
+
+trade_manager.py → check_and_exit_positions()
+
+Daily File Structure (from analytics_tracker.py):
+json{
+  "date": "2025-01-15",
+  "signal_type": "discovery",
+  "tokens": [
+    {
+      "mint": "ABC...",
+      "signal_type": "discovery",
+      "symbol": "TOKEN",
+      "entry_price": 0.0001234,
+      "final_price": 0.0001100,
+      "final_roi": -10.87,
+      "ath_roi": 25.5,
+      "status": "loss",
+      "is_final": true,
+      "tracking_completed_at": "2025-01-16T10:00:00Z"
+    }
+  ],
+  "daily_summary": { ... }
+}
+Implementation:
+pythonasync def get_final_data_from_daily_file(mint: str, signal_type: str, tracking_end_date: str):
+    """
+    Downloads daily file and extracts final token data.
+    tracking_end_date format: "2025-01-15"
+    """
+    remote_path = f"analytics/{signal_type}/daily/{tracking_end_date}.json"
+    local_path = os.path.join(TEMP_DIR, remote_path)
+    
+    # Download if not cached
+    if not os.path.exists(local_path):
+        await download_file_from_supabase(remote_path, local_path)
+    
+    # Load and search
+    daily_data = load_json(local_path)
+    if daily_data and "tokens" in daily_data:
+        for token in daily_data["tokens"]:
+            if token.get("mint") == mint and token.get("signal_type") == signal_type:
+                return {
+                    "final_price": token.get("final_price"),
+                    "final_roi": token.get("final_roi"),
+                    "ath_roi": token.get("ath_roi")
+                }
+    return None
+
+5. Exit Logic Corrections
+TP Hit Exit:
+python# When ath_roi >= user_tp:
+# Exit at the ACTUAL ath_roi value (not just user's TP percentage)
+
+if ath_roi >= user_tp:
+    await self.exit_position(
+        chat_id, key, 
+        "TP Hit 🎯", 
+        app, 
+        exit_roi=ath_roi  # ← Use actual ATH, not user_tp
+    )
+Tracking Expiry Exit:
+python# Priority order for getting final ROI:
+1. Use current_roi from active_tracking.json
+2. If missing, check daily file for final_roi
+3. If missing, use Jupiter API for current price
+4. If all fail, exit at 0% ROI
+
+end_time = datetime.fromisoformat(pos["tracking_end_time"].rstrip("Z"))
+if now >= end_time:
+    current_roi = 0.0
+    
+    # Method 1: From active_tracking
+    if data:
+        current_roi = float(data.get("current_roi", 0))
+    
+    # Method 2: From daily file
+    else:
+        date_str = end_time.strftime('%Y-%m-%d')
+        daily_data = await get_final_data_from_daily_file(
+            pos["mint"], 
+            pos["signal_type"], 
+            date_str
+        )
+        if daily_data:
+            current_roi = daily_data.get("final_roi", 0)
+        
+        # Method 3: Jupiter API
+        else:
+            curr_price = await self.fetch_current_price_fallback(pos["mint"])
+            if curr_price > 0:
+                current_roi = ((curr_price - pos["entry_price"]) / pos["entry_price"]) * 100
+    
+    # Method 4: Fallback to 0%
+    await self.exit_position(chat_id, key, "Tracking Ended ⏱️", app, exit_roi=current_roi)
+
+6. Add Manual Exit Commands
+Files to modify:
+
+commands.py
+
+Commands to add:
+/closeposition <symbol>
+python@requires_auth
+async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                           user_manager, portfolio_manager):
+    """
+    Close a specific position by symbol.
+    Usage: /closeposition TOKEN
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    # Validate argument
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Usage: /closeposition <SYMBOL>\n"
+            "Example: /closeposition SOL"
+        )
+        return
+    
+    symbol = context.args[0].upper()
+    
+    # Get portfolio
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions.")
+        return
+    
+    # Find position
+    position_key = None
+    position = None
+    for key, pos in portfolio["positions"].items():
+        if pos.get("symbol", "").upper() == symbol:
+            position_key = key
+            position = pos
+            break
+    
+    if not position_key:
+        await update.message.reply_text(f"❌ Position {symbol} not found.")
+        return
+    
+    # Get current ROI from analytics or fallback
+    active_tracking = await portfolio_manager.download_active_tracking()
+    analytics_key = f"{position['mint']}_{position['signal_type']}"
+    data = active_tracking.get(analytics_key)
+    
+    current_roi = 0.0
+    if data:
+        current_roi = float(data.get("current_roi", 0))
+    else:
+        # Fallback to Jupiter
+        curr_price = await portfolio_manager.fetch_current_price_fallback(position["mint"])
+        if curr_price > 0:
+            current_roi = ((curr_price - position["entry_price"]) / position["entry_price"]) * 100
+    
+    # Exit position
+    await portfolio_manager.exit_position(
+        chat_id, position_key, 
+        "Manual Close 👤", 
+        context.application, 
+        exit_roi=current_roi
+    )
+/closeall
+python@requires_auth
+async def closeall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                       user_manager, portfolio_manager):
+    """
+    Close ALL open positions with confirmation.
+    Usage: /closeall
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions.")
+        return
+    
+    positions = portfolio["positions"]
+    count = len(positions)
+    
+    # Show positions and ask confirmation
+    msg = f"⚠️ **Close All Positions?**\n\n"
+    msg += f"You have {count} open position(s):\n\n"
+    
+    for key, pos in positions.items():
+        msg += f"• {pos.get('symbol', 'N/A')} - {pos.get('signal_type', 'N/A')}\n"
+    
+    msg += f"\nType `/confirmcloseall` to proceed."
+    
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+@requires_auth
+async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                              user_manager, portfolio_manager):
+    """
+    Confirmation for /closeall
+    """
+    chat_id = str(update.effective_chat.id)
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    if not portfolio or not portfolio.get("positions"):
+        await update.message.reply_text("❌ No open positions to close.")
+        return
+    
+    # Download analytics once
+    active_tracking = await portfolio_manager.download_active_tracking()
+    
+    closed_count = 0
+    for key, pos in list(portfolio["positions"].items()):
+        analytics_key = f"{pos['mint']}_{pos['signal_type']}"
+        data = active_tracking.get(analytics_key)
+        
+        current_roi = 0.0
+        if data:
+            current_roi = float(data.get("current_roi", 0))
+        else:
+            curr_price = await portfolio_manager.fetch_current_price_fallback(pos["mint"])
+            if curr_price > 0:
+                current_roi = ((curr_price - pos["entry_price"]) / pos["entry_price"]) * 100
+        
+        await portfolio_manager.exit_position(
+            chat_id, key, 
+            "Manual Close All 👤", 
+            context.application, 
+            exit_roi=current_roi
+        )
+        closed_count += 1
+    
+    await update.message.reply_text(f"✅ Closed {closed_count} position(s).")
+Register commands in bot:
+python# In bot.py or commands.py registration section
+app.add_handler(CommandHandler("closeposition", 
+    lambda u, c: closeposition_cmd(u, c, user_manager, portfolio_manager)))
+app.add_handler(CommandHandler("closeall", 
+    lambda u, c: closeall_cmd(u, c, user_manager, portfolio_manager)))
+app.add_handler(CommandHandler("confirmcloseall", 
+    lambda u, c: confirmcloseall_cmd(u, c, user_manager, portfolio_manager)))
+
+🔍 Key Data Sources Confirmed
+From active_tracking.json (Primary):
+
+✅ ath_roi - For TP detection
+✅ current_roi - For expiry exit
+✅ current_price - For position updates and display
+✅ ath_price - For position updates and display
+✅ tracking_end_time - Already calculated, don't recalculate
+
+From Daily Files (Fallback when analytics missing):
+
+✅ final_roi - Most accurate exit ROI
+✅ final_price - Most accurate exit price
+✅ ath_roi - Peak performance reached
+
+From Jupiter API (Emergency Fallback):
+
+⚠️ Current price only (calculate ROI manually)
+
+
+⚙️ System Behavior Requirements
+Signal Processing (Every 5 minutes):
+
+Download active_tracking.json
+Filter new signals:
+
+entry_time > bot startup time
+entry_time > user's auto-trade activation time
+Not in processed_signals (snapshot duplicate prevention)
+Passes user filters (grades, alpha alerts, auto-trade enabled)
+
+
+Open position via process_new_signal()
+
+Position Exit Checks (Every 5 minutes):
+
+Download active_tracking.json
+For each open position:
+
+Update position data with latest analytics values
+Check TP: If ath_roi >= user_tp → Exit at ath_roi
+Check Expiry: If now >= tracking_end_time → Exit at current_roi (with fallbacks)
+
+
+Send exit notification
+
+Position Entry Logic:
+python# Validate capital
+if portfolio["capital_usd"] < 10:
+    return  # Skip, insufficient capital
+
+# Size position
+size_usd = min(portfolio["capital_usd"] * 0.10, 150.0)  # 10% of capital, max $150
+token_amount = size_usd / entry_price
+
+# Signal type swap (if exists)
+if existing_position and existing_position["signal_type"] != signal_type:
+    # Close old signal type position
+    await exit_position(chat_id, old_key, "Signal Type Swap 🔄", app)
+    # Continue to open new signal type
+
+# Deduct capital
+portfolio["capital_usd"] -= size_usd
+
+# Store position
+portfolio["positions"][position_key] = {
+    "mint": mint,
+    "symbol": symbol,
+    "signal_type": signal_type,
+    "entry_time": entry_time,
+    "entry_price": entry_price,
+    "entry_mcap": entry_mcap,
+    "entry_liquidity": entry_liquidity,
+    "token_age_hours": token_age_hours,
+    "tracking_end_time": tracking_end_time,  # From analytics
+    "size_usd": size_usd,
+    "token_amount": token_amount,
+    "user_tp": user_tp,
+    
+    # Analytics-sourced (updated periodically)
+    "current_price": current_price,
+    "current_roi": current_roi,
+    "ath_price": ath_price,
+    "ath_roi": ath_roi,
+    "last_updated": datetime.now(timezone.utc).isoformat() + "Z"
+}
+
+# Notify user
+Position Exit Logic:
+python# Calculate final values
+investment = pos["size_usd"]
+final_value = investment * (1 + exit_roi / 100)
+pnl = final_value - investment
+
+# Update capital
+portfolio["capital_usd"] += final_value
+
+# Remove position
+del portfolio["positions"][position_key]
+
+# Add to history
+portfolio["history"].append({
+    "mint": pos["mint"],
+    "symbol": pos["symbol"],
+    "signal_type": pos["signal_type"],
+    "entry_time": pos["entry_time"],
+    "entry_price": pos["entry_price"],
+    "exit_time": datetime.now(timezone.utc).isoformat() + "Z",
+    "exit_price": pos["entry_price"] * (1 + exit_roi / 100),
+    "roi": exit_roi,
+    "size_usd": investment,
+    "pnl": pnl,
+    "exit_reason": reason
+})
+
+# Save portfolio
+save_portfolio(chat_id, portfolio)
+
+# Send notification
+
+🎯 Final Checklist
+Generate scripts that accomplish:
+
+ Remove all cooldown logic entirely
+ Use tracking_end_time from analytics (don't recalculate)
+ Update position data with analytics values during checks
+ Implement 3-tier fallback for missing analytics data
+ Exit at ath_roi (not user_tp) when TP hit
+ Add /closeposition <symbol> command
+ Add /closeall and /confirmcloseall commands
+ Keep Jupiter API fallback for price fetching
+ Maintain signal type swap logic
+ Keep position sizing (10% capital, max $150)
+ Preserve duplicate prevention (snapshot tracking)
+
+
+📤 Expected Output
+Please generate:
+
+trade_manager.py - Complete corrected file
+commands.py - With new manual exit commands added
+Summary of changes - What was removed, added, modified
+
+
+🚨 Critical Notes
+
+NO cooldown logic anywhere
+Trust analytics data - it prevents duplicates upstream
+Fallback gracefully when analytics data missing
+Exit at actual ROI values from analytics (ath_roi for TP, current_roi/final_roi for expiry)
+Daily files are authoritative for finalized tokens
