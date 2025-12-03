@@ -26,7 +26,10 @@ from .formatters import format_alpha_refresh, _get_http_session, _close_http_ses
 logger = logging.getLogger(__name__)
 
 # --- FIX: Explicitly define path to ensure it matches where the writer saves data ---
+
 ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
+PAGE_SIZE = 5
+
 
 
 def get_mode_status_text(user_prefs: dict) -> str:
@@ -366,127 +369,30 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         f"The bot will now automatically trade signals. Good luck! 🚀"
     )
 
-async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
-    """Display user's comprehensive paper trading portfolio."""
+async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager, page: int = 0):
+    """Display user's comprehensive paper trading portfolio with pagination and sell buttons."""
+    from alerts.trading_buttons import send_portfolio_page
+    
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html(
-            "❌ Paper trading is not enabled. Use <code>/papertrade [capital]</code> to enable it."
-        )
+        await update.message.reply_html("❌ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
         return
-        
+    
     portfolio = portfolio_manager.get_portfolio(chat_id)
-    
-    capital = portfolio['capital_usd']
-    positions = portfolio['positions']
-    watchlist = portfolio.get('watchlist', {})
-    reentry = portfolio.get('reentry_candidates', {})
-    blacklist = portfolio.get('blacklist', {})
-    history = portfolio['trade_history']
-    stats = portfolio.get('stats', {})
-    
-    # Calculate totals
-    total_realized_pnl = stats.get('total_pnl', 0)
-    wins = stats.get('wins', 0)
-    losses = stats.get('losses', 0)
-    total_trades = stats.get('total_trades', 0)
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
-    
-    # Calculate invested capital
-    invested = sum(
-        pos['investment_usd'] * (pos.get('remaining_percentage', 100) / 100.0)
-        for pos in positions.values()
-        if pos.get('status') == 'active'
-    )
-    
-    total_portfolio_value = capital + invested
-    
-    msg = (
-        f"💼 <b>Paper Trading Portfolio</b>\n\n"
-        f"<b>💰 Capital Summary:</b>\n"
-        f"• Available: <b>${capital:,.2f}</b>\n"
-        f"• Invested: <b>${invested:,.2f}</b>\n"
-        f"• Total Value: <b>${total_portfolio_value:,.2f}</b>\n\n"
-        f"<b>📊 Performance:</b>\n"
-        f"• Realized P/L: <b>${total_realized_pnl:,.2f}</b>\n"
-        f"• Win Rate: <b>{win_rate:.1f}%</b> ({wins}W / {losses}L)\n"
-        f"• Total Trades: <b>{total_trades}</b>\n\n"
-    )
+    await send_portfolio_page(update.message, chat_id, portfolio, page=page)
 
-    # Open Positions
-    msg += f"<b>📈 Open Positions ({len(positions)}):</b>\n"
-    if not positions:
-        msg += "<i>No open positions</i>\n"
-    else:
-        for mint, pos in list(positions.items())[:5]:  # Show top 5
-            if pos.get('status') != 'active':
-                continue
-            
-            remaining_pct = pos.get('remaining_percentage', 100)
-            locked = pos.get('locked_profit_usd', 0)
-            remaining_note = f" ({remaining_pct:.0f}%)" if remaining_pct < 100 else ""
-            locked_note = f" | 💰${locked:.0f}" if locked > 0 else ""
-            
-            msg += (
-                f"• <b>{pos['symbol']}</b>{remaining_note}\n"
-                f"  Entry: ${pos['entry_price']:.6f}\n"
-                f"  Invested: ${pos['investment_usd'] * (remaining_pct/100):.2f}{locked_note}\n"
-            )
-        
-        if len(positions) > 5:
-            msg += f"<i>...and {len(positions) - 5} more positions</i>\n"
+async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager, page: int = 0):
+    """Get current unrealized P/L for all open positions with live prices and interactive buttons."""
+    from alerts.trading_buttons import send_pnl_page
     
-    msg += "\n"
-    
-    # Watchlist
-    if watchlist:
-        msg += f"<b>👀 Watchlist ({len(watchlist)}):</b>\n"
-        for mint, item in list(watchlist.items())[:3]:
-            msg += f"• {item['symbol']} @ ${item['signal_price']:.6f}\n"
-        if len(watchlist) > 3:
-            msg += f"<i>...and {len(watchlist) - 3} more</i>\n"
-        msg += "\n"
-    
-    # Re-entry candidates
-    if reentry:
-        msg += f"<b>🔄 Re-entry Watch ({len(reentry)}):</b>\n"
-        for mint, cand in list(reentry.items())[:3]:
-            msg += f"• {cand['symbol']} (exits: {cand.get('reentry_attempts', 0)}/2)\n"
-        if len(reentry) > 3:
-            msg += f"<i>...and {len(reentry) - 3} more</i>\n"
-        msg += "\n"
-    
-    # Blacklist info
-    if blacklist:
-        msg += f"<b>🚫 Blacklisted:</b> {len(blacklist)} tokens\n\n"
-    
-    msg += (
-        f"<i>Use /pnl for live unrealized P/L</i>\n"
-        f"<i>Use /performance for detailed stats</i>\n"
-        f"<i>Use /history to see trade log</i>"
-    )
-    
-    await update.message.reply_html(msg)
-
-async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager,portfolio_manager: PortfolioManager):
-    """Get current unrealized P/L for all open positions with live prices."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    
     if "papertrade" not in prefs.get("modes", []):
         await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
-    portfolio = portfolio_manager.get_portfolio(chat_id)
-    positions = portfolio.get('positions', {})
-    
-    if not positions:
-        await update.message.reply_html("📊 No open positions to calculate P/L.")
-        return
-    
-    # Fetch live prices for all positions
+    # Fetch live prices and calculate PnL
     try:
         live_prices = await portfolio_manager.update_positions_with_live_prices(chat_id)
         pnl_data = portfolio_manager.calculate_unrealized_pnl(chat_id, live_prices)
@@ -495,45 +401,9 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
         await update.message.reply_html("❌ Error fetching live prices. Please try again.")
         return
     
-    total_unrealized_usd = pnl_data["total_unrealized_usd"]
-    total_unrealized_pct = pnl_data["total_unrealized_pct"]
-    total_cost_basis = pnl_data["total_cost_basis"]
-    position_count = pnl_data["position_count"]
-    positions_detail = pnl_data["positions_detail"]
-    
-    capital = portfolio.get('capital_usd', 0)
-    total_value = capital + total_cost_basis + total_unrealized_usd
-    
-    # Overall PnL message
-    pnl_emoji = "🟢" if total_unrealized_usd > 0 else "🔴" if total_unrealized_usd < 0 else "⚪"
-    
-    msg = (
-        f"📊 <b>Unrealized P/L Report</b>\n\n"
-        f"<b>💰 Portfolio Value:</b>\n"
-        f"• Available Capital: <b>${capital:,.2f}</b>\n"
-        f"• Invested (Cost Basis): <b>${total_cost_basis:,.2f}</b>\n"
-        f"• Total Value: <b>${total_value:,.2f}</b>\n\n"
-        f"<b>{pnl_emoji} Unrealized P/L:</b>\n"
-        f"• USD: <b>${total_unrealized_usd:+,.2f}</b>\n"
-        f"• Percentage: <b>{total_unrealized_pct:+.2f}%</b>\n\n"
-        f"<b>📈 Open Positions ({position_count}):</b>\n"
-    )
-    
-    # Show individual positions (up to 10)
-    for i, pos in enumerate(positions_detail[:10], 1):
-        pnl_emoji = "🟢" if pos["unrealized_pnl_usd"] > 0 else "🔴"
-        msg += (
-            f"{i}. {pnl_emoji} <b>{pos['symbol']}</b>\n"
-            f"   Price: ${pos['current_price']:.8f}\n"
-            f"   P/L: ${pos['unrealized_pnl_usd']:+,.2f} ({pos['unrealized_pnl_pct']:+.2f}%)\n"
-        )
-    
-    if len(positions_detail) > 10:
-        msg += f"\n<i>...and {len(positions_detail) - 10} more positions</i>\n"
-    
-    msg += "\n<i>💡 Use /portfolio to see full position details</i>"
-    
-    await update.message.reply_html(msg)
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    await send_pnl_page(update.message, chat_id, portfolio, pnl_data, page=page)
+
 
 async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
     """View trade history with optional limit and improved UX."""
@@ -1168,13 +1038,65 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         )
 
 # --- MODIFIED: button_handler ---
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager=None):
     """Handle inline keyboard button callbacks."""
+    from alerts.trading_buttons import (
+        handle_pnl_page_callback, handle_portfolio_page_callback,
+        handle_sell_confirm_callback, handle_sell_execute_callback,
+        handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
+        handle_sell_cancel_callback
+    )
+    
     query = update.callback_query
+    data = query.data
+    
+    # --- Handle Trading Button Callbacks ---
+    # PnL pagination
+    if data.startswith("pnl_page:"):
+        if portfolio_manager:
+            await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Portfolio pagination
+    elif data.startswith("portfolio_page:"):
+        if portfolio_manager:
+            await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Sell confirmation for single position
+    elif data.startswith("sell_confirm:"):
+        if portfolio_manager:
+            await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Execute single position sell
+    elif data.startswith("sell_execute:"):
+        if portfolio_manager:
+            await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Sell all confirmation
+    elif data == "sell_all_confirm":
+        if portfolio_manager:
+            await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Execute sell all
+    elif data == "sell_all_execute":
+        if portfolio_manager:
+            await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
+        return
+    
+    # Cancel sell
+    elif data == "sell_cancel":
+        await handle_sell_cancel_callback(update, context)
+        return
+    
+    # --- End Trading Button Callbacks ---
     
     # Acknowledge the click immediately
     # For refresh, show a loading text
-    if query.data.startswith("refresh_alpha:"):
+    if data.startswith("refresh_alpha:"):
         await query.answer("Refreshing data...")
     else:
         await query.answer() 

@@ -92,7 +92,7 @@ async def adduser_wrapper(update, context): await adduser_cmd(update, context, u
 async def debug_user_wrapper(update, context): await debug_user_cmd(update, context, user_manager)
 async def debug_system_wrapper(update, context): await debug_system_cmd(update, context, user_manager)
 async def force_download_wrapper(update, context): await force_download_cmd(update, context, user_manager)
-async def button_wrapper(update, context): await button_handler(update, context, user_manager)
+async def button_wrapper(update, context): await button_handler(update, context, user_manager, portfolio_manager)
 async def addgroup_wrapper(update, context): await addgroup_cmd(update, context)
 async def removegroup_wrapper(update, context): await removegroup_cmd(update, context)
 async def listgroups_wrapper(update, context): await listgroups_cmd(update, context)
