@@ -327,6 +327,17 @@ async def main():
     
     # Register callback query handler for inline buttons
     app.add_handler(CallbackQueryHandler(button_wrapper))
+    
+    # Register text message handler for menu inputs
+    from alerts.message_handler import handle_text_message
+    
+    async def text_message_wrapper(update, context):
+        await handle_text_message(update, context, user_manager, portfolio_manager)
+    
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_wrapper)
+    )
+    
     app.add_handler(
         MessageHandler(
             filters.StatusUpdate.NEW_CHAT_MEMBERS & filters.ChatType.GROUPS,

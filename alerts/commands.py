@@ -46,7 +46,9 @@ def get_mode_status_text(user_prefs: dict) -> str:
     return " & ".join(status)
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
-    """Handle /start command."""
+    """Handle /start command - Show main menu."""
+    from alerts.menu_navigation import show_main_menu
+    
     chat_id = str(update.effective_chat.id)
     logging.info(f"🚀 User {chat_id} started bot")
 
@@ -59,24 +61,9 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
         return
 
     user_manager.activate_user(chat_id)
-    user_prefs = user_manager.get_user_prefs(chat_id)
     
-    keyboard = [
-        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts")],
-        [InlineKeyboardButton("📈 Paper Trading Only", callback_data="mode_papertrade")],
-        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both")],
-        [InlineKeyboardButton("⚙️ Configure Alert Grades", callback_data="config_grades")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    welcome_msg = (
-        f"👋 <b>Welcome!</b>\n\n"
-        f"Please choose your desired mode of operation. You can receive token alerts, "
-        f"let the bot automatically paper trade signals, or do both.\n\n"
-        f"<b>Current Mode:</b> {get_mode_status_text(user_prefs)}\n"
-        f"<b>Alert Grades:</b> {', '.join(user_prefs.get('grades', ['Not Set']))}"
-    )
-    await update.message.reply_html(welcome_msg, reply_markup=reply_markup)
+    # Show the main menu
+    await show_main_menu(update.message, user_manager, chat_id)
 
 # --- ALPHA ALERTS COMMANDS ---
 
@@ -1046,9 +1033,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
         handle_sell_cancel_callback
     )
+    from alerts.menu_handler import handle_menu_callback
     
     query = update.callback_query
     data = query.data
+    
+    # --- Handle Menu Navigation Callbacks First ---
+    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
+       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
+       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
+       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
+       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
+       data.startswith("watchlist_") or data.startswith("portfolio_") or data.startswith("pnl_") or \
+       data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_"):
+        if portfolio_manager:
+            await handle_menu_callback(update, context, user_manager, portfolio_manager)
+        return
     
     # --- Handle Trading Button Callbacks ---
     # PnL pagination
