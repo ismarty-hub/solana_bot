@@ -58,6 +58,8 @@ from alerts.monitoring import (
 )
 # Add new alpha monitoring loop
 from alerts.alpha_monitoring import alpha_monitoring_loop, ALPHA_OVERLAP_FILE
+# Add trade monitoring loop
+from alerts.trade_monitor import trade_monitoring_loop
 # --- End Updated Monitoring Imports ---
 
 # --- New Import for closing session ---
@@ -270,8 +272,8 @@ async def on_startup(app: Application):
         asyncio.create_task(periodic_supabase_sync())
     # 4. 🆕 ANALYTICS-DRIVEN SIGNAL DETECTION (replaces old signal_detection_loop)
     asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
-    # # 5. Paper trading position monitoring (checks exits, TP, stop loss)
-    # asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
+    # 5. 📊 Paper trading position monitoring (checks exits, TP, stop loss)
+    asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
     # 6. Alpha alerts monitoring
     asyncio.create_task(alpha_monitoring_loop(app, user_manager))
 

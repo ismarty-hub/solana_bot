@@ -124,6 +124,43 @@ class PortfolioManager:
 
     # --- PNL CALCULATIONS ---
 
+    async def update_positions_with_live_prices(self, chat_id: str) -> Dict[str, float]:
+        """Update all positions with live prices from analytics or Jupiter API.
+        Returns a dict of mint -> current_price for all active positions."""
+        portfolio = self.get_portfolio(chat_id)
+        positions = portfolio.get("positions", {})
+        live_prices = {}
+        
+        if not positions:
+            return live_prices
+        
+        # Download active tracking once
+        active_tracking = await self.download_active_tracking()
+        
+        for key, pos in positions.items():
+            if pos.get("status") != "active":
+                continue
+            
+            mint = pos.get("mint")
+            signal_type = pos.get("signal_type")
+            
+            # Try to get price from active tracking
+            analytics_key = f"{mint}_{signal_type}"
+            data = active_tracking.get(analytics_key)
+            
+            if data and "current_price" in data:
+                live_prices[mint] = float(data["current_price"])
+            else:
+                # Fallback to Jupiter API
+                price = await self.fetch_current_price_fallback(mint)
+                if price > 0:
+                    live_prices[mint] = price
+                else:
+                    # Use last known price
+                    live_prices[mint] = pos.get("current_price", pos["entry_price"])
+        
+        return live_prices
+
     def calculate_unrealized_pnl(self, chat_id: str, live_prices: Dict[str, float]) -> Dict[str, Any]:
         """Calculate total unrealized P/L using live prices provided."""
         portfolio = self.get_portfolio(chat_id)
@@ -224,7 +261,9 @@ class PortfolioManager:
         
         # Fallback only if absolutely necessary
         if not tracking_end_time:
-            hours = 168 if signal_type == "alpha" else 24
+            # Tracking duration based on token age at signal time
+            token_age_hours = token_data.get("token_age_hours", 0)
+            hours = 168 if token_age_hours >= 12 else 24
             tracking_end_time = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat() + "Z"
 
         # Check if position already exists
@@ -239,9 +278,9 @@ class PortfolioManager:
         if other_key in portfolio["positions"]:
             logger.info(f"🔄 [{chat_id}] Swapping {other_type} -> {signal_type} for {mint}")
             other_pos = portfolio["positions"][other_key]
-            # Use current price from new signal for exit approx
-            other_current_price = token_data.get("price", other_pos["entry_price"])
-            other_roi = ((other_current_price - other_pos["entry_price"]) / other_pos["entry_price"]) * 100
+            # Use ATH ROI from tracking data (more accurate than current price)
+            # This accounts for the 5-minute upload delay where ATH could have been hit
+            other_roi = other_pos.get("ath_roi", 0.0)
             await self.exit_position(chat_id, other_key, "Signal Type Swap 🔄", app, exit_roi=other_roi)
 
         # Validate capital
@@ -300,7 +339,7 @@ class PortfolioManager:
             f"<b>Entry:</b> ${entry_price:.8f}\n"
             f"<b>Size:</b> ${size_usd:.2f}\n"
             f"<b>Target TP:</b> +{tp_target:.0f}%\n"
-            f"<b>ML Signal:</b> {ml_action}\n"
+            # f"<b>ML Signal:</b> {ml_action}\n"
         )
         
         try:
@@ -364,14 +403,22 @@ class PortfolioManager:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         except: pass
 
-    async def check_and_exit_positions(self, chat_id: str, app: Application):
+    async def check_and_exit_positions(self, chat_id: str, app: Application, active_tracking: Optional[Dict[str, Any]] = None):
         """
         Check analytics data and exit positions if TP hit or tracking ended.
         Updates position data with live analytics values.
+        
+        Args:
+            chat_id: User chat ID
+            app: Telegram application
+            active_tracking: Optional pre-downloaded active_tracking data for efficiency
         """
         portfolio = self.get_portfolio(chat_id)
-        # Always get fresh data
-        active_tracking = await self.download_active_tracking()
+        
+        # Download active tracking only if not provided
+        if active_tracking is None:
+            active_tracking = await self.download_active_tracking()
+        
         now = datetime.now(timezone.utc)
 
         for key, pos in list(portfolio["positions"].items()):
