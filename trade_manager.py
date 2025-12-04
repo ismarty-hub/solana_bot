@@ -198,6 +198,8 @@ class PortfolioManager:
             
             positions_detail.append({
                 "symbol": pos["symbol"],
+                "mint": pos["mint"],
+                "signal_type": pos["signal_type"],
                 "current_price": current_price,
                 "unrealized_pnl_usd": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pct,
@@ -283,13 +285,20 @@ class PortfolioManager:
             other_roi = other_pos.get("ath_roi", 0.0)
             await self.exit_position(chat_id, other_key, "Signal Type Swap 🔄", app, exit_roi=other_roi)
 
-        # Validate capital
+        # Validate capital with reserve and min trade size
         capital = portfolio["capital_usd"]
-        if capital < 10:
+        prefs = user_manager.get_user_prefs(chat_id)
+        reserve = prefs.get("reserve_balance", 0.0)
+        min_trade = prefs.get("min_trade_size", 10.0)
+        
+        available = capital - reserve
+        if available < min_trade:
+            logger.info(f"Skipping trade - Available ${available:.2f} < Min ${min_trade:.2f}")
             return
         
-        # Size: 10% of capital, max $150
-        size_usd = min(capital * 0.10, 150.0)
+        # Size: 10% of available capital, max $150, min = min_trade_size
+        size_usd = max(min_trade, available * 0.10)
+        size_usd = min(size_usd, 150.0)
         token_amount = size_usd / entry_price
         
         # Get TP target
@@ -311,6 +320,8 @@ class PortfolioManager:
             "token_amount": token_amount,
             "status": "active",
             "tp_used": tp_target,
+            # NOTE: sl_used intentionally NOT set for automatic signal-based trades.
+            # Users can manually set SL via /set_sl command if desired.
             # Live tracking fields
             "current_price": entry_price,
             "current_roi": 0.0,
@@ -375,15 +386,27 @@ class PortfolioManager:
         stats["best_trade"] = max(stats["best_trade"], exit_roi)
         stats["worst_trade"] = min(stats["worst_trade"], exit_roi)
 
-        # History
+        # History - Calculate hold duration
+        # Robust timezone handling: strip all potential suffixes and add single UTC
+        entry_time_str = pos["entry_time"]
+        # Remove Z and +00:00 (handle multiple occurrences)
+        entry_time_str = entry_time_str.replace("Z", "").replace("+00:00", "")
+        # Re-append single UTC timezone
+        entry_time_str = entry_time_str + "+00:00"
+        entry_time = datetime.fromisoformat(entry_time_str)
+        exit_time = datetime.now(timezone.utc)
+        hold_duration = exit_time - entry_time
+        hold_duration_minutes = int(hold_duration.total_seconds() / 60)
+        
         history_item = {
             "symbol": pos["symbol"],
             "entry_price": pos["entry_price"],
             "exit_reason": reason,
             "pnl_usd": pnl_usd,
             "pnl_percent": exit_roi,
-            "exit_time": datetime.now(timezone.utc).isoformat() + "Z",
-            "signal_type": pos["signal_type"]
+            "exit_time": exit_time.isoformat() + "Z",
+            "signal_type": pos["signal_type"],
+            "hold_duration_minutes": hold_duration_minutes
         }
         portfolio["trade_history"].append(history_item)
         
@@ -403,6 +426,65 @@ class PortfolioManager:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         except: pass
 
+    def add_manual_position(self, chat_id: str, mint: str, symbol: str, price: float, amount_usd: float, tp_percent: float = 50.0, sl_percent: float = None) -> bool:
+        """Add a manually purchased position.
+        
+        Args:
+            sl_percent: Stop loss percentage. If None, no SL is set and user must set it manually via /set_sl.
+                       If provided, SL will be set to -sl_percent (negative value).
+        """
+        portfolio = self.get_portfolio(chat_id)
+        
+        # Deduct capital
+        if portfolio["capital_usd"] < amount_usd:
+            return False
+            
+        portfolio["capital_usd"] -= amount_usd
+        
+        token_amount = amount_usd / price if price > 0 else 0
+        
+        position_key = f"{mint}_manual"
+        
+        # If position exists, average down/up
+        if position_key in portfolio["positions"]:
+            pos = portfolio["positions"][position_key]
+            total_tokens = pos["token_amount"] + token_amount
+            total_cost = (pos["token_amount"] * pos["entry_price"]) + amount_usd
+            avg_price = total_cost / total_tokens
+            
+            pos["token_amount"] = total_tokens
+            pos["entry_price"] = avg_price
+            pos["avg_buy_price"] = avg_price
+            pos["status"] = "active"
+        else:
+            # Create new position
+            position_dict = {
+                "mint": mint,
+                "symbol": symbol,
+                "signal_type": "manual",
+                "entry_price": price,
+                "avg_buy_price": price,
+                "token_amount": token_amount,
+                "entry_time": datetime.now(timezone.utc).isoformat() + "Z",
+                "tracking_end_time": (datetime.now(timezone.utc) + timedelta(days=365)).isoformat() + "Z",
+                "status": "active",
+                "tp_used": float(tp_percent),
+                "current_price": price,
+                "current_roi": 0.0,
+                "ath_price": price,
+                "ath_roi": 0.0,
+                "last_updated": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+            
+            # Only add sl_used if sl_percent is provided
+            if sl_percent is not None:
+                position_dict["sl_used"] = -abs(float(sl_percent))  # Ensure negative
+            
+            portfolio["positions"][position_key] = position_dict
+            
+        self.save()
+        return True
+    
     async def check_and_exit_positions(self, chat_id: str, app: Application, active_tracking: Optional[Dict[str, Any]] = None):
         """
         Check analytics data and exit positions if TP hit or tracking ended.
@@ -431,20 +513,50 @@ class PortfolioManager:
             data = active_tracking.get(analytics_key)
             
             # --- 1. UPDATE LIVE DATA ---
-            if data:
+            if signal_type == "manual":
+                # Fetch live price for manual position
+                from alerts.price_fetcher import PriceFetcher
+                token_info = await PriceFetcher.get_token_info(mint)
+                if token_info:
+                    pos["current_price"] = token_info["price"]
+                    pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
+                    
+                    # Calculate ROI
+                    entry_price = pos["entry_price"]
+                    if entry_price > 0:
+                        current_roi = ((pos["current_price"] - entry_price) / entry_price) * 100
+                        pos["current_roi"] = current_roi
+                        
+                        # Update ATH
+                        if pos["current_price"] > pos.get("ath_price", 0):
+                            pos["ath_price"] = pos["current_price"]
+                            pos["ath_roi"] = current_roi
+            elif data:
                 pos["current_price"] = data.get("current_price", pos["current_price"])
                 pos["current_roi"] = data.get("current_roi", pos["current_roi"])
                 pos["ath_price"] = data.get("ath_price", pos["ath_price"])
                 pos["ath_roi"] = data.get("ath_roi", pos["ath_roi"])
                 pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
             
-            # --- 2. TP CHECK ---
+                        # --- 2. TP/SL CHECK ---
             # Check actual ATH from analytics against user TP
             ath_roi = float(pos.get("ath_roi", 0))
+            current_roi = float(pos.get("current_roi", 0))
+            
+            # TP Check
             if ath_roi >= user_tp:
                 # Exit at the actual peak recorded
                 await self.exit_position(chat_id, key, "TP Hit 🎯", app, exit_roi=ath_roi)
                 continue
+                
+            # SL Check - only if explicitly set by user
+            # If sl_used is not set, no default SL is applied (user must set it manually)
+            if "sl_used" in pos:
+                sl_threshold = pos.get("sl_used")
+                if current_roi <= sl_threshold:
+                    # Exit at current ROI
+                    await self.exit_position(chat_id, key, "SL Hit 🛑", app, exit_roi=current_roi)
+                    continue
             
             # --- 3. EXPIRY CHECK ---
             end_time = datetime.fromisoformat(pos["tracking_end_time"].rstrip("Z")).replace(tzinfo=timezone.utc)

@@ -137,6 +137,123 @@ async def handle_text_message(
             
             await predict_batch_cmd(update, temp_context, user_manager)
             return
+
+        # ====================================================================
+        # MANUAL BUY - CUSTOM AMOUNT
+        # ====================================================================
+        if context.user_data.get('awaiting_buy_custom'):
+            mint = context.user_data['awaiting_buy_custom']
+            
+            try:
+                amount = float(text)
+                if amount <= 0:
+                    await update.message.reply_text("❌ Amount must be positive.")
+                    return
+
+                # Clear flag
+                del context.user_data['awaiting_buy_custom']
+                
+                from alerts.commands import ask_buy_tp
+                await ask_buy_tp(update, context, mint, str(amount))
+                
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount. Please enter a number (e.g. 100).")
+            return
+
+        # Custom TP for Buy
+        if context.user_data.get("awaiting_tp_custom"):
+            data = context.user_data.pop("awaiting_tp_custom")
+            try:
+                tp = float(text)
+                if tp <= 0:
+                    await update.message.reply_text("❌ TP must be positive.")
+                    return
+                # Proceed to SL
+                from alerts.commands import ask_buy_sl
+                await ask_buy_sl(update, context, data["mint"], data["amount"], tp)
+            except ValueError:
+                await update.message.reply_text("❌ Invalid number.")
+            return
+
+        # Custom SL for Buy
+        if context.user_data.get("awaiting_sl_custom"):
+            data = context.user_data.pop("awaiting_sl_custom")
+            try:
+                sl = float(text)
+                if sl <= 0:
+                    await update.message.reply_text("❌ SL must be positive.")
+                    return
+                # Execute
+                from alerts.commands import _execute_manual_buy
+                await _execute_manual_buy(update, context, user_manager, portfolio_manager, data["mint"], float(data["amount"]), float(data["tp"]), sl)
+            except ValueError:
+                await update.message.reply_text("❌ Invalid number.")
+            return
+                
+            try:
+                amount = float(text)
+                if amount <= 0:
+                    await update.message.reply_text("❌ Amount must be positive.")
+                    return
+                
+                # Execute Buy
+                from alerts.commands import _execute_manual_buy
+                await _execute_manual_buy(update, context, user_manager, portfolio_manager, mint, amount)
+                
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount. Please send a number.")
+            return
+
+        # ====================================================================
+        # CAPITAL MANAGEMENT - CUSTOM RESERVE
+        # ====================================================================
+        if context.user_data.get("awaiting_reserve_custom"):
+            context.user_data["awaiting_reserve_custom"] = False
+            try:
+                amount = float(text)
+                if amount < 0:
+                    await update.message.reply_text("❌ Amount must be positive or zero.")
+                    return
+                
+                user_manager.update_user_prefs(chat_id, {"reserve_balance": amount})
+                msg = f"✅ <b>Reserve Balance Set!</b>\n\n<b>Amount:</b> ${amount:,.2f}\n\nBot will keep this amount untouched."
+                await update.message.reply_html(msg)
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount. Please send a number.")
+            return
+        
+        # ====================================================================
+        # CAPITAL MANAGEMENT - CUSTOM MIN TRADE
+        # ====================================================================
+        if context.user_data.get("awaiting_mintrade_custom"):
+            context.user_data["awaiting_mintrade_custom"] = False
+            try:
+                amount = float(text)
+                if amount <= 0:
+                    await update.message.reply_text("❌ Amount must be positive.")
+                    return
+                
+                user_manager.update_user_prefs(chat_id, {"min_trade_size": amount})
+                msg = f"✅ <b>Min Trade Size Set!</b>\n\n<b>Amount:</b> ${amount:,.2f}\n\nBot will skip trades smaller than this."
+                await update.message.reply_html(msg)
+            except ValueError:
+                await update.message.reply_text("❌ Invalid amount. Please send a number.")
+            return
+        
+                # ====================================================================
+        # IMPLICIT COMMANDS (Mint Address Detection)
+        # ====================================================================
+        import re
+        # Solana Mint Address Regex (Base58, 32-44 chars)
+        mint_pattern = r'^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+        
+        if re.match(mint_pattern, text):
+            # Check if paper trading is enabled
+            prefs = user_manager.get_user_prefs(chat_id)
+            if "papertrade" in prefs.get("modes", []):
+                from alerts.commands import buy_token_process
+                await buy_token_process(update, context, user_manager, portfolio_manager, text)
+                return
         
     except Exception as e:
         logger.error(f"Error handling text message from {chat_id}: {e}")

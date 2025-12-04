@@ -82,6 +82,15 @@ class UserManager:
         if "tp_alpha" not in user:
             user["tp_alpha"] = None
             modified = True
+            
+        # Trading capital management defaults
+        if "reserve_balance" not in user:
+            user["reserve_balance"] = 0.0
+            modified = True
+            
+        if "min_trade_size" not in user:
+            user["min_trade_size"] = 10.0
+            modified = True
 
         if modified:
             prefs[chat_id] = user
@@ -115,7 +124,10 @@ class UserManager:
             # New TP defaults
             "tp_preference": "median",
             "tp_discovery": None,
-            "tp_alpha": None
+            "tp_alpha": None,
+            # Trading capital management
+            "reserve_balance": 0.0,
+            "min_trade_size": 10.0
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]

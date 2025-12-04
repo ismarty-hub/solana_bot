@@ -6,7 +6,7 @@ This module provides a hierarchical menu structure for users to navigate
 the bot's features using buttons instead of commands, while keeping commands
 functional for advanced users.
 
-Menu Structure (REORGANIZED):
+Menu Structure:
 - Main Menu
   ├─ 📊 Dashboard & Trading
   │  ├─ View Portfolio
@@ -25,10 +25,10 @@ Menu Structure (REORGANIZED):
   │  │  ├─ Reset Capital
   │  │  ├─ Set Reserve Balance
   │  │  ├─ Set Min Trade Size
-  │  │  └─ Set Stop Loss (SL) ⭐ NEW
-  │  ├─ Alert Settings (TP Targets)
-  │  │  ├─ Discovery Signal TP
-  │  │  └─ Alpha Signal TP
+  │  │  └─ Set Stop Loss (SL)
+  │  ├─ Alert Settings
+  │  │  ├─ Set TP % (Discovery)
+  │  │  └─ Set TP % (Alpha)
   │  └─ View All Settings
   ├─ 🤖 ML Predictions
   │  ├─ Predict Single Token
@@ -245,219 +245,68 @@ async def show_alpha_alerts_menu(message, user_manager: UserManager, chat_id: st
 
 
 # ============================================================================
-# SETTINGS MENU (Reorganized)
+# PAPER TRADING MENU
 # ============================================================================
 
-async def show_settings_menu(message, user_manager: UserManager, portfolio_manager: PortfolioManager, chat_id: str, edit=False):
-    """Display main settings menu with organized subsections."""
-    user_prefs = user_manager.get_user_prefs(chat_id)
-    modes = user_prefs.get("modes", [])
-    is_trading_enabled = "papertrade" in modes
-    
-    keyboard = [
-        [InlineKeyboardButton("🔄 Bot Modes", callback_data="settings_mode")],
-        [InlineKeyboardButton("📈 Paper Trading Settings", callback_data="settings_trading")],
-        [InlineKeyboardButton("📢 Alert Settings", callback_data="settings_alerts_submenu")],
-        [InlineKeyboardButton("👤 View All Settings", callback_data="mysettings_direct")],
-        [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    mode_text = " & ".join([f"✅ {m.upper()}" for m in modes]) if modes else "⭕ No modes active"
-    
-    menu_text = (
-        f"⚙️ <b>Settings Menu</b>\n\n"
-        f"<b>Current Modes:</b>\n"
-        f"{mode_text}\n\n"
-        f"<b>Customize Your Experience:</b>\n"
-        f"• Bot modes and behavior\n"
-        f"• Trading parameters\n"
-        f"• Alert preferences"
-    )
-    
-    if edit:
-        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
-    else:
-        await message.reply_html(menu_text, reply_markup=reply_markup)
-
-
-async def show_mode_selection_menu(message, edit=False):
-    """Display mode selection menu."""
-    keyboard = [
-        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts_set")],
-        [InlineKeyboardButton("📈 Trading Only", callback_data="mode_papertrade_set")],
-        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both_set")],
-        [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    menu_text = (
-        f"🔄 <b>Select Bot Modes</b>\n\n"
-        f"<b>🔔 Alerts Only</b>\n"
-        f"Receive token alerts with analysis.\n\n"
-        f"<b>📈 Trading Only</b>\n"
-        f"Paper trade without alerts.\n\n"
-        f"<b>🚀 Both Modes</b>\n"
-        f"Get alerts AND paper trade them.\n\n"
-        f"<b>Tip:</b> You can change this anytime."
-    )
-    
-    if edit:
-        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
-    else:
-        await message.reply_html(menu_text, reply_markup=reply_markup)
-
-
-# ============================================================================
-# PAPER TRADING SETTINGS SUBMENU
-# ============================================================================
-
-async def show_trading_settings_menu(message, user_manager: UserManager, portfolio_manager: PortfolioManager, chat_id: str, edit=False):
-    """Display paper trading settings submenu with SL settings."""
+async def show_trading_menu(message, user_manager: UserManager, portfolio_manager: PortfolioManager, chat_id: str, edit=False):
+    """Display paper trading menu."""
     user_prefs = user_manager.get_user_prefs(chat_id)
     is_enabled = "papertrade" in user_prefs.get("modes", [])
     
     if not is_enabled:
         keyboard = [
             [InlineKeyboardButton("▶️ Enable Paper Trading", callback_data="enable_trading")],
-            [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
+            [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         menu_text = (
-            f"📈 <b>Paper Trading Settings</b>\n\n"
+            f"📈 <b>Paper Trading Menu</b>\n\n"
             f"<b>Status:</b> ❌ Disabled\n\n"
-            f"Enable paper trading to configure trading parameters.\n"
-            f"Select an initial capital amount to get started."
+            f"Enable paper trading to start simulating token trades.\n"
+            f"No real money is used."
         )
     else:
         portfolio = portfolio_manager.get_portfolio(chat_id)
         capital = portfolio.get('capital_usd', 0)
-        reserve = user_prefs.get("reserve_balance", 0.0)
-        min_trade = user_prefs.get("min_trade_size", 10.0)
-        available = capital - reserve
-        
-        # Get default SL value if exists
-        default_sl = user_prefs.get("default_sl", None)
-        sl_display = f"{abs(default_sl):.0f}%" if default_sl else "None (User Choice)"
+        positions = len([p for p in portfolio.get('positions', {}).values() if p.get('status') == 'active'])
         
         keyboard = [
+            [InlineKeyboardButton("💼 View Portfolio", callback_data="portfolio_direct")],
+            [InlineKeyboardButton("📊 View P&L", callback_data="pnl_direct")],
+            [InlineKeyboardButton("📜 Trade History", callback_data="history_direct")],
+            [InlineKeyboardButton("📈 Performance Stats", callback_data="performance_direct")],
+            [InlineKeyboardButton("👀 Watchlist", callback_data="watchlist_direct")],
             [InlineKeyboardButton("💰 Reset Capital", callback_data="resetcapital_menu")],
-            [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
-            [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
-            [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
-            [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
+            [InlineKeyboardButton("💵 Set Reserve Balance", callback_data="set_reserve_menu")],
+            [InlineKeyboardButton("📏 Set Min Trade Size", callback_data="set_mintrade_menu")],
+            [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
         ]
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        # Get capital management settings
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        reserve = user_prefs.get("reserve_balance", 0.0)
+        min_trade = user_prefs.get("min_trade_size", 10.0)
+        available = capital - reserve
+        
         menu_text = (
-            f"📈 <b>Paper Trading Settings</b>\n\n"
-            f"<b>Status:</b> ✅ Enabled\n\n"
-            f"<b>Capital Overview:</b>\n"
-            f"• Total Capital: ${capital:,.2f}\n"
-            f"• Reserve: ${reserve:,.2f}\n"
-            f"• Available: ${available:,.2f}\n"
-            f"• Min Trade: ${min_trade:,.2f}\n"
-            f"• Stop Loss: {sl_display}\n\n"
-            f"<b>Adjust settings below:</b>"
+            f"📈 <b>Paper Trading Menu</b>\n\n"
+            f"<b>Status:</b> ✅ Enabled\n"
+            f"<b>Capital:</b> ${capital:,.2f}\n"
+            f"<b>Reserve:</b> ${reserve:,.2f}\n"
+            f"<b>Available:</b> ${available:,.2f}\n"
+            f"<b>Min Trade:</b> ${min_trade:,.2f}\n"
+            f"<b>Open Positions:</b> {positions}\n\n"
+            f"Manage your paper trading portfolio below."
         )
     
     if edit:
         await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         await message.reply_html(menu_text, reply_markup=reply_markup)
-
-
-# ============================================================================
-# STOP LOSS SETTINGS MENU (NEW)
-# ============================================================================
-
-async def show_sl_settings_menu(message, user_manager: UserManager, chat_id: str, edit=False):
-    """Display stop loss settings menu."""
-    user_prefs = user_manager.get_user_prefs(chat_id)
-    current_sl = user_prefs.get("default_sl", None)
-    sl_display = f"{abs(current_sl):.0f}%" if current_sl else "None (User Choice)"
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("No SL (Manual)", callback_data="set_default_sl:none"),
-            InlineKeyboardButton("10%", callback_data="set_default_sl:10")
-        ],
-        [
-            InlineKeyboardButton("20%", callback_data="set_default_sl:20"),
-            InlineKeyboardButton("30%", callback_data="set_default_sl:30")
-        ],
-        [
-            InlineKeyboardButton("50%", callback_data="set_default_sl:50"),
-            InlineKeyboardButton("Custom", callback_data="set_default_sl_custom")
-        ],
-        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    menu_text = (
-        f"🛑 <b>Stop Loss (SL) Settings</b>\n\n"
-        f"<b>Current Setting:</b> {sl_display}\n\n"
-        f"<b>What is Stop Loss?</b>\n"
-        f"Automatically exits trades if they drop below this percentage.\n\n"
-        f"<b>Examples:</b>\n"
-        f"• 20% SL = Exit if trade drops -20%\n"
-        f"• No SL = Never auto-exit (manual only)\n\n"
-        f"<b>Tip:</b> You can still manually set SL on individual trades."
-    )
-    
-    if edit:
-        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
-    else:
-        await message.reply_html(menu_text, reply_markup=reply_markup)
-
-
-# ============================================================================
-# ALERT SETTINGS SUBMENU
-# ============================================================================
-
-async def show_alert_settings_menu(message, edit=False):
-    """Display alert settings submenu (Take Profit settings)."""
-    keyboard = [
-        [InlineKeyboardButton("🔍 Discovery TP", callback_data="tp_discovery_menu")],
-        [InlineKeyboardButton("⭐ Alpha TP", callback_data="tp_alpha_menu")],
-        [InlineKeyboardButton("👀 View Current TP", callback_data="tp_view")],
-        [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    menu_text = (
-        f"📢 <b>Alert Settings</b>\n\n"
-        f"Configure alert-specific parameters:\n\n"
-        f"<b>Take Profit (TP):</b>\n"
-        f"Target profit % when auto-trading alerts.\n\n"
-        f"<b>Signal Types:</b>\n"
-        f"• 🔍 Discovery - Regular token alerts\n"
-        f"• ⭐ Alpha - Premium curated alerts\n\n"
-        f"<b>Note:</b> These apply to auto-traded alerts only.\n"
-        f"Manual trades have their own TP/SL."
-    )
-    
-    if edit:
-        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
-    else:
-        await message.reply_html(menu_text, reply_markup=reply_markup)
-
-
-# ============================================================================
-# PAPER TRADING MENU (Legacy Support)
-# ============================================================================
-
-async def show_trading_menu(message, user_manager: UserManager, portfolio_manager: PortfolioManager, chat_id: str, edit=False):
-    """Display paper trading menu - redirects to new settings."""
-    # Redirect to new trading settings menu for backward compatibility
-    await show_trading_settings_menu(message, user_manager, portfolio_manager, chat_id, edit)
 
 
 async def show_enable_trading_menu(message, edit=False):
@@ -472,7 +321,7 @@ async def show_enable_trading_menu(message, edit=False):
             InlineKeyboardButton("💵 $5000", callback_data="init_capital:5000")
         ],
         [InlineKeyboardButton("💵 Custom Amount", callback_data="custom_capital")],
-        [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_trading")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -502,7 +351,7 @@ async def show_reset_capital_menu(message, edit=False):
             InlineKeyboardButton("💵 $5000", callback_data="reset_capital:5000")
         ],
         [InlineKeyboardButton("💵 Custom Amount", callback_data="reset_capital_custom")],
-        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_trading")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -549,6 +398,91 @@ async def show_ml_menu(message, edit=False):
 
 
 # ============================================================================
+# SETTINGS MENU
+# ============================================================================
+
+async def show_settings_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display settings menu."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    modes = user_prefs.get("modes", [])
+    
+    keyboard = [
+        [InlineKeyboardButton("🔄 Mode Selection", callback_data="settings_mode")],
+        [InlineKeyboardButton("🎯 Take Profit Settings", callback_data="settings_tp")],
+        [InlineKeyboardButton("👤 View My Settings", callback_data="mysettings_direct")],
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    mode_text = " & ".join([f"✅ {m.upper()}" for m in modes]) if modes else "⭕ No modes active"
+    
+    menu_text = (
+        f"⚙️ <b>Settings Menu</b>\n\n"
+        f"<b>Current Modes:</b>\n"
+        f"{mode_text}\n\n"
+        f"Customize your bot experience."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+async def show_mode_selection_menu(message, edit=False):
+    """Display mode selection menu."""
+    keyboard = [
+        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts_set")],
+        [InlineKeyboardButton("📈 Paper Trading Only", callback_data="mode_papertrade_set")],
+        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both_set")],
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        f"🔄 <b>Select Bot Modes</b>\n\n"
+        f"<b>🔔 Alerts Only</b>\n"
+        f"Receive token alerts with security analysis.\n\n"
+        f"<b>📈 Paper Trading Only</b>\n"
+        f"Simulate trading without real money.\n\n"
+        f"<b>🚀 Both Modes</b>\n"
+        f"Get alerts AND paper trade them."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+async def show_tp_settings_menu(message, edit=False):
+    """Display take profit settings menu."""
+    keyboard = [
+        [InlineKeyboardButton("🔍 Discovery Signals TP", callback_data="tp_discovery_menu")],
+        [InlineKeyboardButton("⭐ Alpha Signals TP", callback_data="tp_alpha_menu")],
+        [InlineKeyboardButton("👀 View Current TP", callback_data="tp_view")],
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        f"🎯 <b>Take Profit Settings</b>\n\n"
+        f"Set target profit percentages for automatic position closing.\n\n"
+        f"<b>Discovery Signals:</b> Regular token alerts\n"
+        f"<b>Alpha Signals:</b> Premium curated alerts"
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+
+# ============================================================================
 # CAPITAL MANAGEMENT MENUS
 # ============================================================================
 
@@ -564,7 +498,7 @@ async def show_reserve_balance_menu(message, edit=False):
             InlineKeyboardButton("$200", callback_data="set_reserve:200")
         ],
         [InlineKeyboardButton("💵 Custom Amount", callback_data="set_reserve_custom")],
-        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_trading")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -594,7 +528,7 @@ async def show_min_trade_size_menu(message, edit=False):
             InlineKeyboardButton("$100", callback_data="set_mintrade:100")
         ],
         [InlineKeyboardButton("💵 Custom Amount", callback_data="set_mintrade_custom")],
-        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_trading")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -645,18 +579,16 @@ async def show_help_topic(message, topic: str):
         "getting_started": (
             f"🚀 <b>Getting Started</b>\n\n"
             f"<b>Step 1: Choose Your Mode</b>\n"
-            f"Use Settings menu → Bot Modes\n"
+            f"Use the Settings menu to select between:\n"
             f"• 🔔 Alerts - Receive token notifications\n"
             f"• 📈 Trading - Paper trade simulation\n"
             f"• 🚀 Both - Get alerts and trade them\n\n"
             f"<b>Step 2: Configure Alerts</b>\n"
             f"Go to Alerts menu → Set Alert Grades\n"
             f"Choose which priority levels you want.\n\n"
-            f"<b>Step 3: Configure Trading</b>\n"
-            f"Go to Settings → Paper Trading Settings\n"
-            f"Set capital, reserve, min trade size, and SL.\n\n"
-            f"<b>Step 4: Start!</b>\n"
-            f"View Dashboard & Trading for live portfolio.\n\n"
+            f"<b>Step 3: Start Trading</b>\n"
+            f"Enable paper trading with initial capital.\n"
+            f"Use the Trading menu to manage positions.\n\n"
             f"<b>Quick Tips:</b>\n"
             f"• Use /help anytime for command list\n"
             f"• Click ◀️ Back to go to previous menu\n"
@@ -688,10 +620,6 @@ async def show_help_topic(message, topic: str):
             f"2. Get token alerts\n"
             f"3. Auto-trade or manual entries\n"
             f"4. Track P&L and performance\n\n"
-            f"<b>Key Settings:</b>\n"
-            f"• Reserve - Minimum capital to keep aside\n"
-            f"• Min Trade - Minimum trade size\n"
-            f"• Stop Loss - Auto-exit on loss %\n\n"
             f"<b>Key Metrics:</b>\n"
             f"• Portfolio Value - Total capital\n"
             f"• Unrealized P&L - Current profit/loss\n"
@@ -722,5 +650,4 @@ async def show_help_topic(message, topic: str):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await message.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
-
+    await message.reply_html(text, reply_markup=reply_markup)

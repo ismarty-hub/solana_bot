@@ -13,9 +13,11 @@ from trade_manager import PortfolioManager
 from alerts.menu_navigation import (
     show_main_menu, show_alerts_menu, show_alert_grades_menu, show_alpha_alerts_menu,
     show_trading_menu, show_enable_trading_menu, show_reset_capital_menu,
-    show_ml_menu, show_settings_menu, show_mode_selection_menu, show_tp_settings_menu,
-    show_help_menu, show_help_topic
+    show_ml_menu, show_settings_menu, show_mode_selection_menu,
+    show_help_menu, show_help_topic, show_reserve_balance_menu, show_min_trade_size_menu,
+    show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,62 +41,82 @@ async def handle_menu_callback(
     data = query.data
     chat_id = str(query.from_user.id)
     
-    await query.answer()
+    # Answer callback query with timeout handling
+    try:
+        await query.answer()
+    except Exception as e:
+        logger.debug(f"Failed to answer callback query: {e}")
+        # Continue processing even if answer fails
+
     
     # ========================================================================
     # MAIN MENU
     # ========================================================================
     if data == "menu_main":
-        await show_main_menu(query.message, user_manager, chat_id)
+        await show_main_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     # ========================================================================
     # ALERTS MENU
     # ========================================================================
     elif data == "menu_alerts":
-        await show_alerts_menu(query.message, user_manager, chat_id)
+        await show_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "setalerts_menu":
-        await show_alert_grades_menu(query.message)
+        await show_alert_grades_menu(query.message, edit=True)
         return
     
     elif data == "myalerts_direct":
         # Call the actual myalerts command
-        update.message = query.message
-        await myalerts_cmd(update, context, user_manager)
+        # Create a new Update object with the message from callback_query
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await myalerts_cmd(new_update, context, user_manager)
         return
     
     elif data == "alpha_menu":
-        await show_alpha_alerts_menu(query.message, user_manager, chat_id)
+        await show_alpha_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "alpha_subscribe_menu":
-        update.message = query.message
-        # Create a fake context with no args for the command
+        # Create a new Update object with the message from callback_query
+        from telegram import Update as TgUpdate
         from types import SimpleNamespace
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
         temp_context = SimpleNamespace(args=[])
         temp_context.__dict__.update(context.__dict__)
-        await alpha_subscribe_cmd(update, temp_context, user_manager)
+        await alpha_subscribe_cmd(new_update, temp_context, user_manager)
         return
     
     elif data == "alpha_unsubscribe_menu":
-        update.message = query.message
+        # Create a new Update object with the message from callback_query
+        from telegram import Update as TgUpdate
         from types import SimpleNamespace
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
         temp_context = SimpleNamespace(args=[])
         temp_context.__dict__.update(context.__dict__)
-        await alpha_unsubscribe_cmd(update, temp_context, user_manager)
+        await alpha_unsubscribe_cmd(new_update, temp_context, user_manager)
         return
     
     # ========================================================================
     # TRADING MENU
     # ========================================================================
     elif data == "menu_trading":
-        await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id)
+        await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
     elif data == "enable_trading":
-        await show_enable_trading_menu(query.message)
+        await show_enable_trading_menu(query.message, edit=True)
         return
     
     elif data.startswith("init_capital:"):
@@ -119,35 +141,55 @@ async def handle_menu_callback(
         return
     
     elif data == "portfolio_direct":
-        update.message = query.message
-        await portfolio_cmd(update, context, user_manager, portfolio_manager)
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await portfolio_cmd(new_update, context, user_manager, portfolio_manager)
         return
     
     elif data == "pnl_direct":
-        update.message = query.message
-        await pnl_cmd(update, context, user_manager, portfolio_manager)
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await pnl_cmd(new_update, context, user_manager, portfolio_manager)
         return
     
     elif data == "history_direct":
-        update.message = query.message
-        await history_cmd(update, context, user_manager, portfolio_manager)
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await history_cmd(new_update, context, user_manager, portfolio_manager)
         return
     
     elif data == "performance_direct":
-        update.message = query.message
-        await performance_cmd(update, context, user_manager, portfolio_manager)
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await performance_cmd(new_update, context, user_manager, portfolio_manager)
         return
     
     elif data == "watchlist_direct":
-        update.message = query.message
+        from telegram import Update as TgUpdate
         from types import SimpleNamespace
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
         temp_context = SimpleNamespace(args=[])
         temp_context.__dict__.update(context.__dict__)
-        await watchlist_cmd(update, temp_context, user_manager, portfolio_manager)
+        await watchlist_cmd(new_update, temp_context, user_manager, portfolio_manager)
         return
     
     elif data == "resetcapital_menu":
-        await show_reset_capital_menu(query.message)
+        await show_reset_capital_menu(query.message, edit=True)
         return
     
     elif data.startswith("reset_capital:"):
@@ -174,14 +216,14 @@ async def handle_menu_callback(
     # ML MENU
     # ========================================================================
     elif data == "menu_ml":
-        await show_ml_menu(query.message)
+        await show_ml_menu(query.message, edit=True)
         return
     
     elif data == "predict_single":
         await query.message.reply_html(
             "🎯 <b>ML Prediction - Single Token</b>\n\n"
-            "Send a token mint address or symbol:\n"
-            "Example: <code>SOL</code> or <code>So11111111111111111111111111111111111111112</code>"
+            "Send a token mint address:\n"
+            "Example: <code>So11111111111111111111111111111111111111112</code>"
         )
         context.user_data['awaiting_predict'] = True
         return
@@ -189,21 +231,81 @@ async def handle_menu_callback(
     elif data == "predict_batch_menu":
         await query.message.reply_html(
             "📊 <b>ML Prediction - Batch</b>\n\n"
-            "Send comma-separated tokens:\n"
-            "Example: <code>SOL,BONK,RAY</code>"
+            "Send comma-separated token mint addresses:\n"
+            "Example: <code>So111..., EPjFW...</code>"
         )
         context.user_data['awaiting_predict_batch'] = True
         return
     
     # ========================================================================
-    # SETTINGS MENU
+    # DASHBOARD MENU (New)
+    # ========================================================================
+    elif data == "menu_dashboard":
+        await show_dashboard_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
+        return
+    
+    # ========================================================================
+    # MAIN SETTINGS MENU
     # ========================================================================
     elif data == "menu_settings":
-        await show_settings_menu(query.message, user_manager, chat_id)
+        await show_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
     elif data == "settings_mode":
-        await show_mode_selection_menu(query.message)
+        await show_mode_selection_menu(query.message, edit=True)
+        return
+    
+    # ========================================================================
+    # PAPER TRADING SETTINGS SUBMENU (New)
+    # ========================================================================
+    elif data == "settings_trading":
+        await show_trading_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
+        return
+    
+    # ========================================================================
+    # STOP LOSS SETTINGS MENU (New)
+    # ========================================================================
+    elif data == "settings_sl_menu":
+        await show_sl_settings_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data.startswith("set_default_sl:"):
+        _, sl_value = data.split(":")
+        if sl_value.lower() == "none":
+            user_manager.update_user_prefs(chat_id, {"default_sl": None})
+            await query.message.reply_html("✅ <b>Stop Loss Setting Updated</b>\n\nNo default SL will be applied.\nUsers can set SL on individual trades.")
+        else:
+            sl_percent = float(sl_value)
+            user_manager.update_user_prefs(chat_id, {"default_sl": -sl_percent})
+            await query.message.reply_html(f"✅ <b>Stop Loss Setting Updated</b>\n\nDefault SL set to {sl_percent}%")
+        return
+    
+    elif data == "set_default_sl_custom":
+        await query.message.reply_html(
+            "🛑 <b>Set Custom Stop Loss</b>\n\n"
+            "Send a number for stop loss percentage:\n"
+            "Example: <code>25</code> (for 25%)\n\n"
+            "Or send <code>none</code> for no default SL."
+        )
+        context.user_data['awaiting_default_sl'] = True
+        return
+    
+    # ========================================================================
+    # ALERT SETTINGS SUBMENU (New)
+    # ========================================================================
+    elif data == "settings_alerts_submenu":
+        await show_alert_settings_menu(query.message, edit=True)
+        return
+    
+    # ========================================================================
+    # LEGACY SETTINGS MENU (For backward compat)
+    # ========================================================================
+    elif data == "settings_tp":
+        await show_alert_settings_menu(query.message, edit=True)
+        return
+    
+    elif data == "menu_trading":
+        await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
     elif data == "mode_alerts_set":
@@ -219,10 +321,6 @@ async def handle_menu_callback(
     elif data == "mode_both_set":
         user_manager.update_user_prefs(chat_id, {"modes": ["alerts", "papertrade"]})
         await query.message.reply_text("✅ Mode set to: Both Alerts & Trading")
-        return
-    
-    elif data == "settings_tp":
-        await show_tp_settings_menu(query.message)
         return
     
     elif data == "tp_discovery_menu":
@@ -250,20 +348,72 @@ async def handle_menu_callback(
         return
     
     elif data == "tp_view":
-        update.message = query.message
-        await myalerts_cmd(update, context, user_manager)
+        from telegram import Update as TgUpdate
+        # Import the new command
+        from alerts.commands import view_tp_settings_cmd
+        
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await view_tp_settings_cmd(new_update, context, user_manager)
         return
     
     elif data == "mysettings_direct":
-        update.message = query.message
-        await myalerts_cmd(update, context, user_manager)
+        from telegram import Update as TgUpdate
+        new_update = TgUpdate(
+            update_id=update.update_id,
+            message=query.message
+        )
+        await myalerts_cmd(new_update, context, user_manager)
         return
     
     # ========================================================================
     # HELP MENU
     # ========================================================================
+        # Capital Management
+    elif data == "set_reserve_menu":
+        await show_reserve_balance_menu(query.message, edit=True)
+        await query.answer()
+        return
+    
+    elif data == "set_mintrade_menu":
+        await show_min_trade_size_menu(query.message, edit=True)
+        await query.answer()
+        return
+    
+    elif data.startswith("set_reserve:"):
+        _, amount_str = data.split(":")
+        amount = float(amount_str)
+        user_manager.update_user_prefs(chat_id, {"reserve_balance": amount})
+        msg = f"✅ <b>Reserve Balance Set!</b>\n\n<b>Amount:</b> ${amount:,.2f}\n\nBot will keep this amount untouched."
+        await query.edit_message_text(msg, parse_mode="HTML")
+        return
+    
+    elif data == "set_reserve_custom":
+        msg = "💵 <b>Enter Custom Reserve Balance</b>\n\nSend the amount in USD:\nExample: <code>150</code>"
+        await query.message.reply_text(msg, parse_mode="HTML")
+        context.user_data["awaiting_reserve_custom"] = True
+        await query.answer()
+        return
+    
+    elif data.startswith("set_mintrade:"):
+        _, amount_str = data.split(":")
+        amount = float(amount_str)
+        user_manager.update_user_prefs(chat_id, {"min_trade_size": amount})
+        msg = f"✅ <b>Min Trade Size Set!</b>\n\n<b>Amount:</b> ${amount:,.2f}\n\nBot will skip trades smaller than this."
+        await query.edit_message_text(msg, parse_mode="HTML")
+        return
+    
+    elif data == "set_mintrade_custom":
+        msg = "📏 <b>Enter Custom Min Trade Size</b>\n\nSend the amount in USD:\nExample: <code>25</code>"
+        await query.message.reply_text(msg, parse_mode="HTML")
+        context.user_data["awaiting_mintrade_custom"] = True
+        await query.answer()
+        return
+    
     elif data == "menu_help":
-        await show_help_menu(query.message)
+        await show_help_menu(query.message, edit=True)
         return
     
     elif data == "help_getting_started":
@@ -298,7 +448,7 @@ async def handle_menu_callback(
         user_manager.update_user_prefs(chat_id, {"grades": grades})
         
         # Show updated menu
-        await show_alert_grades_menu(query.message)
+        await show_alert_grades_menu(query.message, edit=True)
         return
     
     elif data == "grades_done":
