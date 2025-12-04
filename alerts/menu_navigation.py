@@ -344,10 +344,20 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
         default_sl = user_prefs.get("default_sl", None)
         sl_display = f"{abs(default_sl):.0f}%" if default_sl else "None (User Choice)"
         
+        # Get trade size mode if exists
+        trade_size_mode = user_prefs.get("trade_size_mode", "percent")
+        trade_size_value = user_prefs.get("trade_size_value", 10)
+        
+        if trade_size_mode == "percent":
+            trade_size_display = f"📊 {trade_size_value}% of portfolio"
+        else:
+            trade_size_display = f"💵 ${trade_size_value:,.2f} per trade"
+        
         keyboard = [
             [InlineKeyboardButton("💰 Reset Capital", callback_data="resetcapital_menu")],
             [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
             [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
+            [InlineKeyboardButton("📊 Trade Size", callback_data="settings_trade_size_menu")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
             [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
         ]
@@ -362,6 +372,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             f"• Reserve: ${reserve:,.2f}\n"
             f"• Available: ${available:,.2f}\n"
             f"• Min Trade: ${min_trade:,.2f}\n"
+            f"• Trade Size Mode: {trade_size_display}\n"
             f"• Stop Loss: {sl_display}\n\n"
             f"<b>Adjust settings below:</b>"
         )
@@ -409,6 +420,48 @@ async def show_sl_settings_menu(message, user_manager: UserManager, chat_id: str
         f"• 20% SL = Exit if trade drops -20%\n"
         f"• No SL = Never auto-exit (manual only)\n\n"
         f"<b>Tip:</b> You can still manually set SL on individual trades."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+# ============================================================================
+# TRADE SIZE MODE MENU (NEW)
+# ============================================================================
+
+async def show_trade_size_mode_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display trade size mode and custom value selection menu."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    current_mode = user_prefs.get("trade_size_mode", "percent")
+    current_value = user_prefs.get("trade_size_value", 10)
+    
+    keyboard = [
+        [InlineKeyboardButton("📊 Percentage-Based", callback_data="set_trade_size_mode_select:percent")],
+        [InlineKeyboardButton("💵 Fixed Amount", callback_data="set_trade_size_mode_select:fixed")],
+        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if current_mode == "percent":
+        current_display = f"📊 Percentage-Based ({current_value}% of portfolio)"
+    else:
+        current_display = f"💵 Fixed Amount (${current_value} per trade)"
+    
+    menu_text = (
+        f"📊 <b>Trade Size Settings</b>\n\n"
+        f"<b>Current Setting:</b> {current_display}\n\n"
+        f"<b>Choose Mode:</b>\n\n"
+        f"📊 <b>Percentage-Based</b>\n"
+        f"• Example: 50 (means 50% of portfolio)\n"
+        f"• Scales with your capital\n\n"
+        f"💵 <b>Fixed Amount</b>\n"
+        f"• Example: 50 (means $50 per trade)\n"
+        f"• Constant size regardless of capital\n\n"
+        f"After selecting mode, you'll enter your custom value."
     )
     
     if edit:
@@ -707,11 +760,11 @@ async def show_help_topic(message, topic: str):
             f"• 🛡️ Security metrics\n"
             f"• 📊 Market data\n"
             f"• 👥 Holder distribution\n"
-            f"• 📈 Volume & price trends\n\n"
+            f"• 📈 Volume &amp; price trends\n\n"
             f"<b>Win Probability Tiers:</b>\n"
             f"🟢 70%+ - Strong buy signal\n"
             f"🟡 50-70% - Moderate opportunity\n"
-            f"🔴 <50% - Wait for better signal"
+            f"🔴 &lt;50% - Wait for better signal"
         )
     }
     

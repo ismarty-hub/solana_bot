@@ -15,7 +15,8 @@ from alerts.menu_navigation import (
     show_trading_menu, show_enable_trading_menu, show_reset_capital_menu,
     show_ml_menu, show_settings_menu, show_mode_selection_menu,
     show_help_menu, show_help_topic, show_reserve_balance_menu, show_min_trade_size_menu,
-    show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu
+    show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
+    show_trade_size_mode_menu
 )
 
 
@@ -288,6 +289,42 @@ async def handle_menu_callback(
             "Or send <code>none</code> for no default SL."
         )
         context.user_data['awaiting_default_sl'] = True
+        return
+    
+    # ========================================================================
+    # TRADE SIZE MODE SETTINGS MENU (New)
+    # ========================================================================
+    elif data == "settings_trade_size_menu":
+        await show_trade_size_mode_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data.startswith("set_trade_size_mode_select:"):
+        _, mode = data.split(":")
+        if mode in ["percent", "fixed"]:
+            # Save the mode and prompt for custom value
+            user_manager.update_user_prefs(chat_id, {"trade_size_mode": mode})
+            context.user_data['awaiting_trade_size_value'] = mode
+            
+            if mode == "percent":
+                await query.message.reply_html(
+                    f"📊 <b>Enter Trade Size Percentage</b>\n\n"
+                    f"Send a number for the percentage of your portfolio:\n\n"
+                    f"<b>Examples:</b>\n"
+                    f"<code>25</code> - Trade 25% of portfolio per trade\n"
+                    f"<code>50</code> - Trade 50% of portfolio per trade\n"
+                    f"<code>10</code> - Trade 10% of portfolio per trade\n\n"
+                    f"<b>Note:</b> Valid range is 1-100%"
+                )
+            else:  # fixed
+                await query.message.reply_html(
+                    f"💵 <b>Enter Fixed Trade Amount</b>\n\n"
+                    f"Send a dollar amount for each trade:\n\n"
+                    f"<b>Examples:</b>\n"
+                    f"<code>10</code> - $10 per trade\n"
+                    f"<code>50</code> - $50 per trade\n"
+                    f"<code>100</code> - $100 per trade\n\n"
+                    f"<b>Note:</b> Will be capped by available capital"
+                )
         return
     
     # ========================================================================

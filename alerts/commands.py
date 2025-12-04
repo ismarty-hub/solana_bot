@@ -1047,7 +1047,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
        data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
        data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_") or data == "mysettings_direct" or \
        data == "set_reserve_menu" or data == "set_mintrade_menu" or data.startswith("set_reserve:") or data.startswith("set_mintrade:") or \
-       data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or data.startswith("set_default_sl:"):
+       data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or data.startswith("set_default_sl:") or \
+       data.startswith("set_trade_size_mode_select:"):
         if portfolio_manager:
             await handle_menu_callback(update, context, user_manager, portfolio_manager)
         return

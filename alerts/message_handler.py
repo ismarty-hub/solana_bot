@@ -240,6 +240,38 @@ async def handle_text_message(
                 await update.message.reply_text("❌ Invalid amount. Please send a number.")
             return
         
+        # ====================================================================
+        # TRADE SIZE SETTINGS - CUSTOM VALUE
+        # ====================================================================
+        if context.user_data.get("awaiting_trade_size_value"):
+            mode = context.user_data.pop("awaiting_trade_size_value")
+            try:
+                value = float(text)
+                
+                if mode == "percent":
+                    if value <= 0 or value > 100:
+                        await update.message.reply_text("❌ Percentage must be between 1 and 100.")
+                        return
+                    user_manager.update_user_prefs(chat_id, {
+                        "trade_size_mode": "percent",
+                        "trade_size_value": value
+                    })
+                    msg = f"✅ <b>Trade Size Set!</b>\n\n<b>Mode:</b> 📊 Percentage-Based\n<b>Value:</b> {value}% of portfolio per trade"
+                else:  # fixed
+                    if value <= 0:
+                        await update.message.reply_text("❌ Amount must be positive.")
+                        return
+                    user_manager.update_user_prefs(chat_id, {
+                        "trade_size_mode": "fixed",
+                        "trade_size_value": value
+                    })
+                    msg = f"✅ <b>Trade Size Set!</b>\n\n<b>Mode:</b> 💵 Fixed Amount\n<b>Value:</b> ${value:,.2f} per trade"
+                
+                await update.message.reply_html(msg)
+            except ValueError:
+                await update.message.reply_text("❌ Invalid number. Please send a valid number.")
+            return
+        
                 # ====================================================================
         # IMPLICIT COMMANDS (Mint Address Detection)
         # ====================================================================
