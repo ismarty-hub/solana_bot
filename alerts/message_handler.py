@@ -154,7 +154,7 @@ async def handle_text_message(
                 del context.user_data['awaiting_buy_custom']
                 
                 from alerts.commands import ask_buy_tp
-                await ask_buy_tp(update, context, mint, str(amount))
+                await ask_buy_tp(update, context, mint, str(amount), portfolio_manager, user_manager)
                 
             except ValueError:
                 await update.message.reply_text("❌ Invalid amount. Please enter a number (e.g. 100).")
@@ -280,12 +280,10 @@ async def handle_text_message(
         mint_pattern = r'^[1-9A-HJ-NP-Za-km-z]{32,44}$'
         
         if re.match(mint_pattern, text):
-            # Check if paper trading is enabled
-            prefs = user_manager.get_user_prefs(chat_id)
-            if "papertrade" in prefs.get("modes", []):
-                from alerts.commands import buy_token_process
-                await buy_token_process(update, context, user_manager, portfolio_manager, text)
-                return
+            # Allow buying regardless of mode - users can trade anytime
+            from alerts.commands import buy_token_process
+            await buy_token_process(update, context, user_manager, portfolio_manager, text)
+            return
         
     except Exception as e:
         logger.error(f"Error handling text message from {chat_id}: {e}")

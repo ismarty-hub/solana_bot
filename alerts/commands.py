@@ -2316,18 +2316,9 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     price = token_info.get("price", 0.0)
     source = token_info.get("source", "unknown")
     
-    # Check if user has paper trading enabled
-    chat_id = str(update.effective_chat.id)
-    prefs = user_manager.get_user_prefs(chat_id)
-    if "papertrade" not in prefs.get("modes", []):
-        await status_msg.edit_text(
-            f"found <b>{symbol}</b> (${price:.6f})\n\n"
-            "⚠️ Paper trading is not enabled.\n"
-            "Enable it in the Trading menu to buy tokens.",
-            parse_mode="HTML"
-        )
-        return
-
+    # Allow purchasing anytime, regardless of mode setting
+    # Users can trade whenever they want by sending mint addresses
+    
     # Ask for amount
     keyboard = [
         [
@@ -2441,11 +2432,45 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 
 
-async def ask_buy_tp(update, context, mint, amount):
+async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user_manager=None):
     """Step 2: Ask for Take Profit percentage."""
     # Store mint and amount in context to avoid callback_data length limit (64 bytes)
     context.user_data["buy_mint"] = mint
     context.user_data["buy_amount"] = amount
+    
+    # Validate available capital
+    chat_id = str(update.effective_user.id)
+    
+    if portfolio_manager:
+        portfolio = portfolio_manager.get_portfolio(chat_id)
+        
+        capital = portfolio.get('capital_usd', 0)
+        reserve = portfolio.get('reserve_balance', 0)
+        # Check user preferences for reserve balance if not in portfolio
+        if reserve == 0 and user_manager:
+            prefs = user_manager.get_user_prefs(chat_id)
+            reserve = prefs.get("reserve_balance", 0.0)
+        
+        available = capital - reserve
+        amount_float = float(amount)
+        
+        # Check if amount exceeds available capital
+        if amount_float > available:
+            error_msg = (
+                f"❌ <b>Insufficient Capital</b>\n\n"
+                f"<b>Amount Requested:</b> ${amount_float:,.2f}\n"
+                f"<b>Available Capital:</b> ${available:,.2f}\n"
+                f"<b>Total Capital:</b> ${capital:,.2f}\n"
+                f"<b>Reserve:</b> ${reserve:,.2f}\n\n"
+                f"You don't have enough available capital for this trade."
+            )
+            
+            if update.callback_query:
+                await update.callback_query.answer("❌ Insufficient capital!", show_alert=True)
+                await update.callback_query.message.edit_text(error_msg, parse_mode="HTML")
+            else:
+                await update.message.reply_html(error_msg)
+            return
     
     keyboard = [
         [
@@ -2529,7 +2554,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
     # Step 1: Amount Selected -> Ask TP
     if data.startswith("buy_amount:"):
         _, mint, amount_str = data.split(":")
-        await ask_buy_tp(update, context, mint, amount_str)
+        await ask_buy_tp(update, context, mint, amount_str, portfolio_manager, user_manager)
         
     # Step 2: TP Selected -> Ask SL
     elif data.startswith("buy_tp:"):
