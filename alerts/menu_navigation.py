@@ -358,6 +358,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
             [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
             [InlineKeyboardButton("📊 Trade Size", callback_data="settings_trade_size_menu")],
+            [InlineKeyboardButton("🎯 Take Profit (TP)", callback_data="settings_tp")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
             [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
         ]

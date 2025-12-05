@@ -27,10 +27,8 @@ load_dotenv()
 
 # LIST THE TOKENS TO DELETE HERE
 TOKENS_TO_DELETE = [
-    "9DjLxqbtcBts43ZBafukyD7yY48AQu6p8ndMN5Lxpump",
-    "xgFPkGBCCUPu93p4TgP74SYBsnCtJGHLAnTfXoqpump",
-    "C4AYLYoVzfe3RvhuKgteeg5a3NUjFwpDgbTJHMNepump",
-    "HtDcdGXRvgUnx39kkRuWoBECjE8PK3TTRmojmKqYpump"
+    "5Wx4aQBP1eUupYQGjXQqXaYbhCQVM2ZzCacoUrYtpump",
+    "Aza2K62KypS5MVvFpQLBUG7YKgSLdFf75QC9eUWPpump"
 ]
 
 BUCKET_NAME = "monitor-data"
