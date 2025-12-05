@@ -473,21 +473,23 @@ class PortfolioManager:
         # Check for signal-type specific overrides first (highest priority)
         if signal_type == "discovery" and "tp_discovery" in prefs and prefs["tp_discovery"] is not None:
             override_val = prefs["tp_discovery"]
-            # Try to convert to float, if it fails it might be a string like "mode"
+            # Try to convert to float first (fixed percentage)
             try:
                 tp_target = float(override_val)
             except (ValueError, TypeError):
-                # It's a string like "mode", "mean", "median" - treat as preference
-                override_val = None
+                # It's a string like "mode", "mean", "median" - look up from metrics
+                if override_val in ["median", "mean", "mode"]:
+                    tp_target = self.tp_metrics.get(signal_type, {}).get(f"{override_val}_ath", None)
         
         elif signal_type == "alpha" and "tp_alpha" in prefs and prefs["tp_alpha"] is not None:
             override_val = prefs["tp_alpha"]
-            # Try to convert to float, if it fails it might be a string like "mode"
+            # Try to convert to float first (fixed percentage)
             try:
                 tp_target = float(override_val)
             except (ValueError, TypeError):
-                # It's a string like "mode", "mean", "median" - treat as preference
-                override_val = None
+                # It's a string like "mode", "mean", "median" - look up from metrics
+                if override_val in ["median", "mean", "mode"]:
+                    tp_target = self.tp_metrics.get(signal_type, {}).get(f"{override_val}_ath", None)
         
         # If no override, use global tp_preference
         if tp_target is None:
@@ -509,6 +511,10 @@ class PortfolioManager:
                 except (ValueError, TypeError):
                     # Fallback to defaults if invalid
                     tp_target = 45.0 if signal_type == "discovery" else 50.0
+        
+        # Final safety check
+        if tp_target is None or tp_target <= 0:
+            tp_target = 45.0 if signal_type == "discovery" else 50.0
         
         # Create position
         portfolio["positions"][position_key] = {
@@ -550,10 +556,31 @@ class PortfolioManager:
         
         # Determine TP source for display
         tp_source = "default"
-        if signal_type == "discovery" and "tp_discovery" in prefs:
-            tp_source = "discovery override"
-        elif signal_type == "alpha" and "tp_alpha" in prefs:
-            tp_source = "alpha override"
+        
+        # Check for signal-type specific overrides first
+        if signal_type == "discovery" and "tp_discovery" in prefs and prefs["tp_discovery"] is not None:
+            override_val = prefs["tp_discovery"]
+            if override_val in ["median", "mean", "mode"]:
+                tp_source = f"{override_val} ATH (discovery override)"
+            else:
+                try:
+                    float(override_val)
+                    tp_source = "discovery override"
+                except:
+                    tp_source = "discovery override"
+        
+        elif signal_type == "alpha" and "tp_alpha" in prefs and prefs["tp_alpha"] is not None:
+            override_val = prefs["tp_alpha"]
+            if override_val in ["median", "mean", "mode"]:
+                tp_source = f"{override_val} ATH (alpha override)"
+            else:
+                try:
+                    float(override_val)
+                    tp_source = "alpha override"
+                except:
+                    tp_source = "alpha override"
+        
+        # If no override, check global preference
         elif "tp_preference" in prefs:
             pref = prefs["tp_preference"]
             if pref in ["median", "mean", "mode"]:
