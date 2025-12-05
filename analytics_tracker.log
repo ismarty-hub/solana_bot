@@ -3028,3 +3028,76 @@ Traceback (most recent call last):
   File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
     self._write_fut = self._loop._proactor.send(self._sock, data)
 AttributeError: 'NoneType' object has no attribute 'send'
+2025-12-05 08:59:42,861 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-12-05 08:59:45,150 - __main__ - INFO - Initialized with 270 active tokens.
+2025-12-05 08:59:45,163 - __main__ - INFO - Downloading signals...
+2025-12-05 08:59:45,748 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-12-05 08:59:47,499 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-12-05 08:59:49,814 - __main__ - WARNING - Jupiter API error: 413
+2025-12-05 09:00:18,121 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-12-05.json "HTTP/2 200 OK"
+2025-12-05 09:00:19,591 - __main__ - INFO - Updated entry for EzYh3VDW27rjKPpPyVPQPWrAgdU8Hy8mzr6XQHZWpump_alpha in analytics/alpha/daily/2025-12-05.json (is_final=False)
+2025-12-05 09:00:20,402 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/daily/2025-12-05.json "HTTP/2 200 OK"
+2025-12-05 09:00:20,403 - __main__ - INFO - Successfully uploaded analytics/alpha/daily/2025-12-05.json
+2025-12-05 09:01:26,590 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-12-05 09:01:26,990 - __main__ - INFO - Generating summary stats for discovery...
+2025-12-05 09:01:27,402 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-12-05 09:01:29,443 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-12-01.json "HTTP/2 200 OK"
+2025-12-05 09:01:30,983 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-12-02.json "HTTP/2 200 OK"
+2025-12-05 09:01:32,821 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-12-03.json "HTTP/2 200 OK"
+2025-12-05 09:01:34,388 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-12-04.json "HTTP/2 200 OK"
+2025-12-05 09:01:35,730 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/discovery/daily/2025-12-05.json "HTTP/2 200 OK"
+2025-12-05 09:01:37,465 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/discovery/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:01:37,612 - __main__ - INFO - Generating summary stats for alpha...
+2025-12-05 09:01:37,959 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-12-05 09:01:40,687 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-12-01.json "HTTP/2 200 OK"
+2025-12-05 09:01:42,409 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-12-02.json "HTTP/2 200 OK"
+2025-12-05 09:01:44,230 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-12-03.json "HTTP/2 200 OK"
+2025-12-05 09:01:46,290 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/alpha/daily/2025-12-04.json "HTTP/2 200 OK"
+2025-12-05 09:01:48,586 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:01:48,817 - __main__ - INFO - Generating overall analytics...
+2025-12-05 09:01:49,499 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/overall/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:01:50,521 - __main__ - INFO - Downloading signals...
+2025-12-05 09:01:50,907 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-12-05 09:21:14,932 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-12-05 09:21:16,709 - __main__ - INFO - Initialized with 268 active tokens.
+2025-12-05 09:21:16,758 - __main__ - INFO - Downloading signals...
+2025-12-05 09:21:17,106 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-12-05 09:21:18,511 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-12-05 09:21:20,764 - __main__ - WARNING - Jupiter API error: 413
+2025-12-05 09:22:27,554 - __main__ - INFO - Updated entry for 927AoKzAgJ9rFD9GU5fJNL6bjfEHXiysJuBzBsCipump_alpha in analytics/alpha/daily/2025-12-04.json (is_final=False)
+2025-12-05 09:22:29,997 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/daily/2025-12-04.json "HTTP/2 200 OK"
+2025-12-05 09:22:30,009 - __main__ - INFO - Successfully uploaded analytics/alpha/daily/2025-12-04.json
+2025-12-05 09:22:57,182 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-12-05 09:22:57,195 - __main__ - INFO - Generating summary stats for discovery...
+2025-12-05 09:22:57,621 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-12-05 09:22:58,414 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/discovery/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:22:58,416 - __main__ - INFO - Generating summary stats for alpha...
+2025-12-05 09:22:58,833 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/list/monitor-data "HTTP/2 200 OK"
+2025-12-05 09:22:59,740 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/alpha/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:22:59,743 - __main__ - INFO - Generating overall analytics...
+2025-12-05 09:23:00,433 - httpx - INFO - HTTP Request: PUT https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/monitor-data/analytics/overall/summary_stats.json "HTTP/2 200 OK"
+2025-12-05 09:23:01,442 - __main__ - INFO - Downloading signals...
+2025-12-05 09:23:01,752 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results.json "HTTP/2 200 OK"
+2025-12-05 09:23:03,175 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"
+2025-12-05 09:23:15,147 - asyncio - ERROR - Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x0000022EBD496C80>
+transport: <_ProactorSocketTransport fd=-1 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Python310\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 361, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'
+2025-12-05 09:23:15,838 - asyncio - ERROR - Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x0000022EBD495C60>
+transport: <_ProactorSocketTransport fd=-1 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Python310\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 361, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'

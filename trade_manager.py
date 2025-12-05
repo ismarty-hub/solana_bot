@@ -86,6 +86,28 @@ class PortfolioManager:
             }
         return self.portfolios[chat_id]
 
+    def init_portfolio(self, chat_id: str, capital: float):
+        """Initialize a new portfolio for a user."""
+        chat_id = str(chat_id)
+        self.portfolios[chat_id] = {
+            "capital_usd": float(capital),
+            "positions": {},
+            "trade_history": [],
+            "blacklist": {},
+            "stats": {
+                "total_trades": 0, "wins": 0, "losses": 0, "total_pnl": 0.0,
+                "best_trade": 0.0, "worst_trade": 0.0
+            }
+        }
+        self.save()
+        logger.info(f"Initialized portfolio for {chat_id} with ${capital}")
+
+    def reset_portfolio(self, chat_id: str, capital: float):
+        """Reset an existing portfolio."""
+        self.init_portfolio(chat_id, capital)
+        logger.info(f"Reset portfolio for {chat_id} to ${capital}")
+
+
     async def get_final_data_from_daily_file(self, mint: str, signal_type: str, tracking_end_date: str) -> Optional[Dict[str, Any]]:
         """
         Downloads daily file and extracts final token data.

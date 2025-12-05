@@ -42,6 +42,18 @@ TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days
 MCAP_LIQUIDITY_RATIO_THRESHOLD = 10.0 # If Mcap / Liquidity > 10, verify
 MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious pump
 
+# Maximum realistic price increases
+MAX_REALISTIC_PRICE_MULTIPLE = 100.0  # Price can't be >100x entry price
+MAX_REALISTIC_ROI = 10000.0           # 10,000% (100x) maximum
+
+# Minimum liquidity requirements
+MIN_ABSOLUTE_LIQUIDITY_USD = 5000.0   # $5K minimum liquidity
+MIN_LIQUIDITY_FOR_HIGH_ROI = 20000.0  # $20K minimum if ROI > 500%
+
+# Consensus validation
+SUSPICIOUS_PRICE_MULTIPLE = 5.0       # Trigger consensus check if price >5x entry
+CONSENSUS_AGREEMENT_THRESHOLD = 20.0  # Sources must agree within 20%
+
 # Retry Logic
 RETRY_INTERVAL = 5              # Check every 5 seconds during retry
 
@@ -265,7 +277,7 @@ def parse_ts(ts_str: str) -> datetime:
 # --- Price Fetching & Validation Functions ---
 
 async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
-    """Fetch prices from Jupiter API in a batch."""
+    """Fetch prices from Jupiter API in a batch with rate limit handling."""
     global http_session
     if not http_session or http_session.closed:
         http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=JUPITER_TIMEOUT))
@@ -274,18 +286,33 @@ async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
     params = {"ids": ",".join(mints)}
     prices = {}
     
-    try:
-        async with http_session.get(url, params=params) as response:
-            if response.status != 200:
-                return {}
-            data = await response.json()
-            for mint, info in data.items():
-                if info and info.get("usdPrice"):
-                    prices[mint] = float(info["usdPrice"])
-            return prices
-    except Exception as e:
-        logger.error(f"Error fetching Jupiter prices: {e}")
-        return {}
+    retries = 3
+    base_delay = 1
+    
+    for attempt in range(retries):
+        try:
+            async with http_session.get(url, params=params) as response:
+                if response.status == 429:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(f"Jupiter 429 (Rate Limit). Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                
+                if response.status != 200:
+                    logger.warning(f"Jupiter API error: {response.status}")
+                    return {}
+                    
+                data = await response.json()
+                for mint, info in data.items():
+                    if info and info.get("usdPrice"):
+                        prices[mint] = float(info["usdPrice"])
+                return prices
+        except Exception as e:
+            logger.error(f"Error fetching Jupiter prices (attempt {attempt + 1}): {e}")
+            if attempt < retries - 1:
+                await asyncio.sleep(base_delay)
+            
+    return {}
 
 async def fetch_price_dexscreener(mint: str) -> float | None:
     """Simple Dexscreener fetch for fallback purposes (returns price only)."""
@@ -422,6 +449,59 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
         logger.warning(f"Jupiter error for {mint}: {e}")
 
     if jupiter_price:
+        # Use baseline price for comparison (defaults to entry_price if not set)
+        baseline_price = token_data.get("consensus_baseline_price") or entry_price
+        
+        # Check if price increase is suspicious (>5x baseline) - trigger consensus validation
+        if baseline_price and baseline_price > 0 and (jupiter_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
+            price_multiple = jupiter_price / entry_price
+            logger.warning(f"SUSPICIOUS PRICE {mint}: {price_multiple:.1f}x entry. Triggering consensus...")
+            
+            # Fetch Dexscreener for consensus
+            dex_data = await verify_suspicious_price_dexscreener(mint)
+            
+            if dex_data:
+                dex_price = dex_data["price"]
+                dex_liquidity = dex_data["liquidity"]
+                dex_volume_5m = dex_data["volume_5m"]
+                
+                # Check minimum absolute liquidity
+                if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
+                    logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
+                    return None
+                
+                # Calculate consensus
+                price_diff_pct = abs(jupiter_price - dex_price) / min(jupiter_price, dex_price) * 100
+                
+                if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
+                    logger.warning(f"CONSENSUS FAIL {mint}: Jup=${jupiter_price:.8f} vs Dex=${dex_price:.8f} ({price_diff_pct:.1f}%)")
+                    validated_price = min(jupiter_price, dex_price)
+                    logger.info(f"Using conservative price: ${validated_price:.8f}")
+                else:
+                    validated_price = (jupiter_price + dex_price) / 2
+                    logger.info(f"CONSENSUS OK {mint}: {price_diff_pct:.1f}% diff. Avg: ${validated_price:.8f}")
+                
+                # Higher liquidity for extreme gains
+                potential_roi = calculate_roi(entry_price, validated_price)
+                if potential_roi > 500 and dex_liquidity < MIN_LIQUIDITY_FOR_HIGH_ROI:
+                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_LIQUIDITY_FOR_HIGH_ROI} liq, got ${dex_liquidity:.0f}")
+                    return None
+                
+                # Volume requirement
+                if potential_roi > 200 and dex_volume_5m < MIN_VOLUME_5M_USD:
+                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_VOLUME_5M_USD} vol, got ${dex_volume_5m:.0f}")
+                    return None
+                
+                # Update baseline after successful consensus validation
+                token_data["consensus_baseline_price"] = validated_price
+                logger.info(f"Updated consensus baseline for {mint} to ${validated_price:.8f}")
+                
+                return validated_price
+            else:
+                logger.warning(f"REJECTED {mint}: Consensus check failed - no Dex data")
+                return None
+        
+        # Existing mcap/liquidity ratio check
         if entry_price and entry_mcap and entry_liquidity and entry_liquidity > 0:
             current_mcap_est = entry_mcap * (jupiter_price / entry_price)
             ratio = current_mcap_est / entry_liquidity
@@ -436,6 +516,11 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
                     dex_mcap = dex_data["mcap"]
                     dex_liquidity = dex_data["liquidity"]
                     dex_vol_5m = dex_data["volume_5m"]
+                    
+                    # NEW: Check minimum absolute liquidity
+                    if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
+                        logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
+                        return None
                     
                     verified_ratio = dex_mcap / dex_liquidity if dex_liquidity > 0 else 9999
                     
@@ -765,6 +850,7 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "ath_time": to_iso(entry_time),
         "status": "active",
         
+        "consensus_baseline_price": None,  # Updated after consensus validation to avoid redundant checks
         "hit_50_percent": False,
         "hit_50_percent_time": None,
         "time_to_ath_minutes": 0.0,

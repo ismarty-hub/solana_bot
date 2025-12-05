@@ -16,12 +16,21 @@ import asyncio
 import aiohttp
 import logging
 from datetime import datetime, timedelta, timezone
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("⚠️ Supabase module not installed. Will only clean local files.")
+    SUPABASE_AVAILABLE = False
+    Client = None
 from dateutil import parser
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not required
 import requests
-
-load_dotenv()
 
 # --- Configuration ---
 
@@ -43,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 # --- Supabase & File Helpers (Reused from Tracker) ---
 
-supabase: Client | None = None
+supabase = None  # Type: Client | None (when available)
 
 def get_supabase_client() -> Client:
     global supabase
@@ -138,34 +147,69 @@ def parse_ts(ts_str: str) -> datetime:
 # --- Cleanup Logic ---
 
 async def clean_active_tracking():
-    """Removes tokens from the active tracking file."""
+    """Removes tokens from active_tracking.json (both Supabase and local)."""
     logger.info("Cleaning active_tracking.json...")
-    remote_path = "analytics/active_tracking.json"
-    local_path = os.path.join(TEMP_DIR, remote_path)
+    removed_from_supabase = 0
+    removed_from_local = 0
     
-    if await download_file_from_supabase(remote_path, local_path):
-        data = load_json(local_path)
-        if not data: return
-
-        initial_count = len(data)
+    # 1. Clean Supabase version (if available)
+    if SUPABASE_AVAILABLE:
+        remote_path = "analytics/active_tracking.json"
+        local_path = os.path.join(TEMP_DIR, remote_path)
         
-        # Filter dictionary keys (composite keys)
-        # Note: composite key is usually "mint_type", so we check if key STARTS with mint
-        # OR we check the 'mint' field inside the value.
-        keys_to_remove = []
-        for key, token_data in data.items():
-            if token_data.get("mint") in TOKENS_TO_DELETE:
-                keys_to_remove.append(key)
-        
-        for k in keys_to_remove:
-            del data[k]
-        
-        if len(keys_to_remove) > 0:
-            logger.info(f"Removed {len(keys_to_remove)} tokens from active tracking.")
-            save_json(data, local_path)
-            await upload_file_to_supabase(local_path, remote_path)
+        if await download_file_from_supabase(remote_path, local_path):
+            data = load_json(local_path)
+            if data:
+                initial_count = len(data)
+                
+                # Filter dictionary keys
+                keys_to_remove = []
+                for key, token_data in data.items():
+                    if token_data.get("mint") in TOKENS_TO_DELETE:
+                        keys_to_remove.append(key)
+                
+                for k in keys_to_remove:
+                    del data[k]
+                
+                if len(keys_to_remove) > 0:
+                    removed_from_supabase = len(keys_to_remove)
+                    logger.info(f"✅ Removed {removed_from_supabase} tokens from Supabase active_tracking.json")
+                    save_json(data, local_path)
+                    await upload_file_to_supabase(local_path, remote_path)
+                else:
+                    logger.info("No target tokens found in Supabase active_tracking.json")
         else:
-            logger.info("No target tokens found in active tracking.")
+            logger.warning("Could not download active_tracking.json from Supabase")
+    else:
+        logger.info("Skipping Supabase active_tracking (module not available)")
+    
+    # 2. Clean local version (if exists)
+    local_data_path = "data/active_tracking.json"
+    if os.path.exists(local_data_path):
+        logger.info(f"Found local file at {local_data_path}")
+        data = load_json(local_data_path)
+        if data:
+            initial_count = len(data)
+            
+            keys_to_remove = []
+            for key, token_data in data.items():
+                if token_data.get("mint") in TOKENS_TO_DELETE:
+                    keys_to_remove.append(key)
+            
+            for k in keys_to_remove:
+                del data[k]
+            
+            if len(keys_to_remove) > 0:
+                removed_from_local = len(keys_to_remove)
+                logger.info(f"✅ Removed {removed_from_local} tokens from LOCAL active_tracking.json")
+                save_json(data, local_data_path)
+            else:
+                logger.info("No target tokens found in local active_tracking.json")
+    else:
+        logger.info(f"Local file {local_data_path} not found")
+    
+    total_removed = removed_from_supabase + removed_from_local
+    logger.info(f"📊 Total removed from active_tracking: {total_removed} tokens")
 
 def recalculate_daily_summary(daily_data: dict):
     tokens = daily_data.get("tokens", [])
@@ -173,9 +217,11 @@ def recalculate_daily_summary(daily_data: dict):
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(tokens)
     
-    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi_all = sum(t.get("final_roi", 0) for t in tokens)
-    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
+    # Use 'or 0' to handle None values
+    # For active tokens without final_roi, use ath_roi as fallback
+    total_ath_roi_all = sum((t.get("ath_roi") or 0) for t in tokens)
+    total_final_roi_all = sum((t.get("final_roi") or t.get("ath_roi") or 0) for t in tokens)
+    total_ath_roi_wins = sum((t.get("ath_roi") or 0) for t in wins)
     
     daily_data["daily_summary"] = {
         "total_tokens": total_valid,
@@ -185,7 +231,7 @@ def recalculate_daily_summary(daily_data: dict):
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+        "max_roi": max(((t.get("ath_roi") or 0) for t in tokens), default=0),
     }
     return daily_data
 
@@ -232,11 +278,13 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(wins) + len(losses)
     
-    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi_all = sum(t.get("final_roi", 0) for t in tokens)
-    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
+    # Use 'or 0' to handle None values
+    # For active tokens without final_roi, use ath_roi as fallback
+    total_ath_roi_all = sum((t.get("ath_roi") or 0) for t in tokens)
+    total_final_roi_all = sum((t.get("final_roi") or t.get("ath_roi") or 0) for t in tokens)
+    total_ath_roi_wins = sum((t.get("ath_roi") or 0) for t in wins)
 
-    top_tokens = sorted(tokens, key=lambda x: x.get("ath_roi", 0), reverse=True)
+    top_tokens = sorted(tokens, key=lambda x: x.get("ath_roi") or 0, reverse=True)
 
     return {
         "total_tokens": total_valid,
@@ -246,7 +294,7 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+        "max_roi": max(((t.get("ath_roi") or 0) for t in tokens), default=0),
         "top_tokens": top_tokens[:10]
     }
 
@@ -354,24 +402,33 @@ async def regenerate_overall_stats():
 # --- Main ---
 
 async def main():
+    logger.info("="*60)
     logger.info("Starting cleanup process...")
     logger.info(f"Tokens to delete: {TOKENS_TO_DELETE}")
+    logger.info(f"Supabase available: {SUPABASE_AVAILABLE}")
+    logger.info("="*60)
     
-    # 1. Active Tracking
+    # 1. Active Tracking (both Supabase and local)
     await clean_active_tracking()
     
-    # 2. Discovery
-    await clean_daily_files_for_signal("discovery")
-    await regenerate_summary_stats("discovery")
+    if SUPABASE_AVAILABLE:
+        # 2. Discovery
+        await clean_daily_files_for_signal("discovery")
+        await regenerate_summary_stats("discovery")
+        
+        # 3. Alpha
+        await clean_daily_files_for_signal("alpha")
+        await regenerate_summary_stats("alpha")
+        
+        # 4. Overall
+        await regenerate_overall_stats()
+    else:
+        logger.warning("⚠️ Skipping Supabase daily files and stats (module not available)")
+        logger.info("💡 To clean Supabase files, install: pip install supabase")
     
-    # 3. Alpha
-    await clean_daily_files_for_signal("alpha")
-    await regenerate_summary_stats("alpha")
-    
-    # 4. Overall
-    await regenerate_overall_stats()
-    
-    logger.info("Cleanup complete. All files updated.")
+    logger.info("="*60)
+    logger.info("✅ Cleanup complete!")
+    logger.info("="*60)
 
 if __name__ == "__main__":
     asyncio.run(main())
