@@ -62,11 +62,23 @@ async def send_pnl_page(message, chat_id: str, portfolio: dict, pnl_data: dict, 
     
     for i, pos in enumerate(page_positions, start=start_idx + 1):
         pos_emoji = "🟢" if pos.get("unrealized_pnl_usd", 0) > 0 else "🔴"
+        
+        # Get TP and SL from portfolio positions
+        mint = pos.get('mint')
+        signal_type = pos.get('signal_type')
+        position_key = f"{mint}_{signal_type}"
+        portfolio_pos = portfolio.get('positions', {}).get(position_key, {})
+        
+        tp = portfolio_pos.get('tp_used')
+        sl = portfolio_pos.get('sl_used')
+        tp_display = f"+{float(tp):.0f}%" if tp else "N/A"
+        sl_display = f"{float(sl):.0f}%" if sl else "N/A"
+        
         msg += (
             f"{i}. {pos_emoji} <b>{pos.get('symbol', 'N/A')}</b>\n"
             f"   Price: ${pos.get('current_price', 0):.8f}\n"
-            f"   P/L: ${pos.get('unrealized_pnl_usd', 0):+,.2f} "
-            f"({pos.get('unrealized_pnl_pct', 0):+.2f}%)\n"
+            f"   P/L: ${pos.get('unrealized_pnl_usd', 0):+,.2f} ({pos.get('unrealized_pnl_pct', 0):+.2f}%)\n"
+            f"   TP: {tp_display} | SL: {sl_display}\n"
         )
     
     # Build keyboard
@@ -135,7 +147,18 @@ async def send_portfolio_page(message, chat_id: str, portfolio: dict, page: int 
             symbol = pos.get('symbol', 'N/A')
             entry = pos.get('entry_price', 0)
             invested = pos.get('investment_usd', 0)
-            msg += f"{i}. <b>{symbol}</b> – Entry: ${entry:.6f}, Invested: ${invested:,.2f}\n"
+            
+            # Get TP and SL values
+            tp = pos.get('tp_used')
+            sl = pos.get('sl_used')
+            tp_display = f"+{float(tp):.0f}%" if tp else "N/A"
+            sl_display = f"{float(sl):.0f}%" if sl else "N/A"
+            
+            msg += (
+                f"{i}. <b>{symbol}</b>\n"
+                f"   Entry: ${entry:.6f} | Invested: ${invested:,.2f}\n"
+                f"   TP: {tp_display} | SL: {sl_display}\n"
+            )
     
     # Build keyboard
     keyboard = []

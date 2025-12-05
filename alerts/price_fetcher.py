@@ -85,7 +85,7 @@ class PriceFetcher:
                 if pairs:
                     # Get the most liquid pair (usually the first one)
                     best_pair = pairs[0]
-                    return {
+                    result = {
                         "price": float(best_pair.get("priceUsd", 0)),
                         "symbol": best_pair.get("baseToken", {}).get("symbol", "UNKNOWN"),
                         "name": best_pair.get("baseToken", {}).get("name", "Unknown Token"),
@@ -96,6 +96,26 @@ class PriceFetcher:
                         "liquidity": float(best_pair.get("liquidity", {}).get("usd", 0)),
                         "price_change_24h": float(best_pair.get("priceChange", {}).get("h24", 0))
                     }
+                    
+                    # Try to get creation time if available
+                    if "pairCreatedAt" in best_pair:
+                        try:
+                            from datetime import datetime as dt
+                            created_at = best_pair.get("pairCreatedAt")
+                            if isinstance(created_at, (int, float)):
+                                # Unix timestamp
+                                created_dt = dt.fromtimestamp(created_at / 1000)
+                            else:
+                                # ISO format
+                                created_dt = dt.fromisoformat(created_at.replace("Z", "+00:00"))
+                            
+                            now = dt.now(created_dt.tzinfo)
+                            age = (now - created_dt).total_seconds() / 3600  # Convert to hours
+                            result["token_age_hours"] = age
+                        except:
+                            pass
+                    
+                    return result
         return None
 
     @classmethod

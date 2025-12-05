@@ -54,7 +54,7 @@ from alerts.admin_commands import (
 from alerts.monitoring import (
     background_loop, monthly_expiry_notifier,
     download_bot_data_from_supabase, 
-    periodic_supabase_sync
+    periodic_supabase_sync, tp_metrics_update_loop
 )
 # Add new alpha monitoring loop
 from alerts.alpha_monitoring import alpha_monitoring_loop, ALPHA_OVERLAP_FILE
@@ -276,6 +276,8 @@ async def on_startup(app: Application):
     asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
     # 6. Alpha alerts monitoring
     asyncio.create_task(alpha_monitoring_loop(app, user_manager))
+    # 7. 📈 TP Metrics calculation (from past 3 days of analytics)
+    asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
 
     logger.info("🚀 Bot startup complete.")
 

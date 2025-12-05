@@ -9,7 +9,7 @@ import os
 import asyncio
 import logging
 import joblib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -559,3 +559,50 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
         except Exception as e:
             logger.exception(f"❌ Error in background loop: {e}")
             await asyncio.sleep(POLL_INTERVAL_SECS)
+
+
+async def tp_metrics_update_loop(portfolio_manager):
+    """
+    Background loop: Calculates TP metrics (median, mean, mode)
+    from the past 3 days of analytics daily files.
+    
+    Runs at 2 AM UTC daily, or on first startup.
+    - Tokens are filtered by signal_type (discovery calculates from discovery tokens, etc.)
+    - ATH ROI values are rounded to nearest multiple of 5 before calculating mode
+    """
+    logger.info("📈 TP Metrics update loop started! Will run at 2 AM UTC daily.")
+    
+    # Run immediately on startup
+    try:
+        logger.info("🔄 Initial TP metrics calculation on startup...")
+        await portfolio_manager.calculate_tp_metrics_from_daily_files()
+        logger.info(f"✅ Initial TP metrics: {portfolio_manager.tp_metrics}")
+    except Exception as e:
+        logger.error(f"❌ Error on initial TP metrics calculation: {e}")
+    
+    while True:
+        try:
+            # Calculate next 2 AM UTC
+            now = datetime.now(timezone.utc)
+            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
+            
+            # If 2 AM has already passed today, schedule for tomorrow's 2 AM
+            if now >= next_run:
+                next_run += timedelta(days=1)
+            
+            time_until_next_run = (next_run - now).total_seconds()
+            logger.info(f"⏰ Next TP metrics calculation in {time_until_next_run:.0f} seconds at {next_run.isoformat()}")
+            
+            # Sleep until 2 AM UTC
+            await asyncio.sleep(time_until_next_run)
+            
+            # Run the calculation
+            logger.info("🔄 Calculating TP metrics from past 3 days of analytics...")
+            await portfolio_manager.calculate_tp_metrics_from_daily_files()
+            logger.info(f"✅ TP metrics updated: {portfolio_manager.tp_metrics}")
+        
+        except Exception as e:
+            logger.error(f"❌ Error updating TP metrics: {e}")
+            # If something goes wrong, retry after 1 hour
+            await asyncio.sleep(3600)
+

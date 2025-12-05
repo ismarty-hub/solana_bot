@@ -37,11 +37,126 @@ class PortfolioManager:
         self.portfolios = safe_load(self.file, {})
         self.tp_metrics = {
             "calculated_at": None,
-            "discovery": {"median_ath": 45.0, "mean_ath": 60.0},
-            "alpha": {"median_ath": 50.0, "mean_ath": 70.0}
+            "discovery": {"median_ath": 45.0, "mean_ath": 60.0, "mode_ath": 40.0},
+            "alpha": {"median_ath": 50.0, "mean_ath": 70.0, "mode_ath": 45.0}
         }
         self._ensure_portfolio_structure()
         logger.info(f"📈 PortfolioManager initialized. Loaded {len(self.portfolios)} portfolios.")
+
+    async def calculate_tp_metrics_from_daily_files(self):
+        """
+        Calculate TP metrics (median, mean, mode) from past 3 days of daily files.
+        - Only processes tokens matching the signal type (discovery calculates from discovery tokens, alpha from alpha tokens)
+        - Includes ALL tokens (wins and losses), just excludes those with ATH ROI = 0
+        - Rounds each ATH ROI to nearest multiple of 5 before calculating mode
+        - If any metric is 0, defaults to 40%
+        - Called at 2 AM UTC and on startup
+        """
+        if not download_file:
+            logger.warning("Supabase not available, using default TP metrics")
+            return
+        
+        try:
+            now = datetime.now(timezone.utc)
+            ath_roi_by_type = {"discovery": [], "alpha": []}
+            files_downloaded = 0
+            files_failed = 0
+            tokens_processed = {"discovery": 0, "alpha": 0}
+            
+            logger.info("📥 Starting to download past 3 days of daily files...")
+            
+            # Collect ATH ROI from past 3 days
+            for days_back in range(0, 3):
+                check_date = now - timedelta(days=days_back)
+                date_str = check_date.strftime('%Y-%m-%d')
+                
+                for signal_type in ["discovery", "alpha"]:
+                    remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
+                    local_path = DATA_DIR / f"daily_{date_str}_{signal_type}.json"
+                    
+                    try:
+                        logger.debug(f"Downloading {remote_path}...")
+                        result = download_file(str(local_path), remote_path, bucket=BUCKET_NAME)
+                        
+                        if result is not None:
+                            # File was downloaded successfully
+                            files_downloaded += 1
+                            logger.debug(f"✅ Downloaded {remote_path}")
+                            
+                            if os.path.exists(local_path):
+                                with open(local_path, 'r') as f:
+                                    daily_data = json.load(f)
+                                    
+                                if daily_data and "tokens" in daily_data:
+                                    for token in daily_data["tokens"]:
+                                        # CRITICAL: Only include tokens matching this signal type
+                                        if token.get("signal_type") != signal_type:
+                                            continue
+                                        
+                                        ath_roi = token.get("ath_roi")
+                                        if ath_roi is not None and isinstance(ath_roi, (int, float)):
+                                            roi_val = float(ath_roi)
+                                            # Filter out tokens with 0 ATH ROI, but include all others (wins and losses)
+                                            if roi_val != 0:
+                                                # Round to nearest multiple of 5
+                                                rounded_roi = round(roi_val / 5) * 5
+                                                ath_roi_by_type[signal_type].append(rounded_roi)
+                                                tokens_processed[signal_type] += 1
+                                
+                                # Clean up local file to save space
+                                try:
+                                    os.remove(local_path)
+                                except:
+                                    pass
+                        else:
+                            files_failed += 1
+                            logger.debug(f"❌ Failed to download {remote_path}")
+                    
+                    except Exception as e:
+                        files_failed += 1
+                        logger.debug(f"Error processing {remote_path}: {e}")
+            
+            logger.info(f"Downloaded {files_downloaded} files, {files_failed} failed | Processed discovery: {tokens_processed['discovery']} tokens, alpha: {tokens_processed['alpha']} tokens")
+            
+            # Calculate metrics for each signal type
+            for signal_type in ["discovery", "alpha"]:
+                roi_values = ath_roi_by_type[signal_type]
+                
+                if roi_values:
+                    median_val = statistics.median(roi_values)
+                    mean_val = statistics.mean(roi_values)
+                    
+                    # Calculate mode (most frequent value)
+                    try:
+                        mode_val = statistics.mode(roi_values)
+                    except statistics.StatisticsError:
+                        # If no mode exists (all values unique), use median as fallback
+                        mode_val = median_val
+                    
+                    # Ensure no zero or negative values - default to 40% if any are 0
+                    if median_val <= 0: median_val = 40.0
+                    if mean_val <= 0: mean_val = 40.0
+                    if mode_val <= 0: mode_val = 40.0
+                    
+                    self.tp_metrics[signal_type] = {
+                        "median_ath": round(median_val, 1),
+                        "mean_ath": round(mean_val, 1),
+                        "mode_ath": round(mode_val, 1)
+                    }
+                    
+                    logger.info(f"✅ Updated TP metrics for {signal_type}: median={median_val:.1f}%, mean={mean_val:.1f}%, mode={mode_val:.1f}% (from {len(roi_values)} tokens)")
+                else:
+                    logger.warning(f"⚠️ No {signal_type} tokens found in past 3 days. Using defaults.")
+                    self.tp_metrics[signal_type] = {
+                        "median_ath": 40.0,
+                        "mean_ath": 40.0,
+                        "mode_ath": 40.0
+                    }
+            
+            self.tp_metrics["calculated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+        
+        except Exception as e:
+            logger.error(f"Failed to calculate TP metrics: {e}")
 
     def _ensure_portfolio_structure(self):
         """Clean up portfolios."""
@@ -204,11 +319,16 @@ class PortfolioManager:
                 continue
             
             mint = pos.get("mint")
-            token_balance = pos["token_amount"]
-            avg_buy_price = pos.get("avg_buy_price", pos["entry_price"])
+            token_balance = pos.get("token_amount", 0)
+            entry_price = pos.get("entry_price", 0)
+            avg_buy_price = pos.get("avg_buy_price", entry_price)
+            
+            # Skip if missing critical fields
+            if not mint or token_balance <= 0 or entry_price <= 0:
+                continue
             
             # Use provided live price or fallback to tracked price
-            current_price = live_prices.get(mint, pos.get("current_price", pos["entry_price"]))
+            current_price = live_prices.get(mint, pos.get("current_price", entry_price))
             
             unrealized_pnl = token_balance * (current_price - avg_buy_price)
             cost_basis = token_balance * avg_buy_price
@@ -219,9 +339,9 @@ class PortfolioManager:
             total_cost_basis += cost_basis
             
             positions_detail.append({
-                "symbol": pos["symbol"],
-                "mint": pos["mint"],
-                "signal_type": pos["signal_type"],
+                "symbol": pos.get("symbol", "UNKNOWN"),
+                "mint": mint,
+                "signal_type": pos.get("signal_type", "unknown"),
                 "current_price": current_price,
                 "unrealized_pnl_usd": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pct,
@@ -318,17 +438,77 @@ class PortfolioManager:
             logger.info(f"Skipping trade - Available ${available:.2f} < Min ${min_trade:.2f}")
             return
         
-        # Size: 10% of available capital, max $150, min = min_trade_size
-        size_usd = max(min_trade, available * 0.10)
+        # Size: Respect user's trade_size_mode and trade_size_value settings
+        trade_size_mode = prefs.get("trade_size_mode", "percent")
+        trade_size_value = prefs.get("trade_size_value", 10)
+        
+        if trade_size_mode == "fixed":
+            # Fixed dollar amount per trade
+            size_usd = float(trade_size_value)
+        else:
+            # Percentage-based
+            size_usd = available * (float(trade_size_value) / 100)
+        
+        # Enforce minimum trade size
+        if size_usd < min_trade:
+            size_usd = min_trade
+        
+        # Enforce maximum
         size_usd = min(size_usd, 150.0)
+        
+        # Final check: ensure we have enough capital
+        if size_usd > available:
+            logger.info(f"Skipping trade - Trade size ${size_usd:.2f} exceeds available ${available:.2f}")
+            return
+        
         token_amount = size_usd / entry_price
         
-        # Get TP target
-        # Assuming self.get_tp_for_signal_type exists or defaults
-        prefs = user_manager.get_user_prefs(chat_id)
-        tp_target = 50.0 # Default
-        if signal_type == "discovery":
-             tp_target = 45.0
+        # Get TP target for auto trades - supports mean/median/mode/custom percentage
+        # Priority 1: Signal-type specific overrides (tp_discovery or tp_alpha)
+        # Priority 2: Global tp_preference (median, mean, mode, or custom percentage)
+        # Priority 3: Default based on signal type
+        
+        tp_target = None
+        
+        # Check for signal-type specific overrides first (highest priority)
+        if signal_type == "discovery" and "tp_discovery" in prefs and prefs["tp_discovery"] is not None:
+            override_val = prefs["tp_discovery"]
+            # Try to convert to float, if it fails it might be a string like "mode"
+            try:
+                tp_target = float(override_val)
+            except (ValueError, TypeError):
+                # It's a string like "mode", "mean", "median" - treat as preference
+                override_val = None
+        
+        elif signal_type == "alpha" and "tp_alpha" in prefs and prefs["tp_alpha"] is not None:
+            override_val = prefs["tp_alpha"]
+            # Try to convert to float, if it fails it might be a string like "mode"
+            try:
+                tp_target = float(override_val)
+            except (ValueError, TypeError):
+                # It's a string like "mode", "mean", "median" - treat as preference
+                override_val = None
+        
+        # If no override, use global tp_preference
+        if tp_target is None:
+            tp_preference = prefs.get("tp_preference", "median")
+            
+            if tp_preference == "median":
+                # Use median ATH from historical metrics
+                tp_target = self.tp_metrics.get(signal_type, {}).get("median_ath", 50.0)
+            elif tp_preference == "mean":
+                # Use mean ATH from historical metrics
+                tp_target = self.tp_metrics.get(signal_type, {}).get("mean_ath", 60.0)
+            elif tp_preference == "mode":
+                # Use mode (most frequent) ATH from historical metrics
+                tp_target = self.tp_metrics.get(signal_type, {}).get("mode_ath", 40.0)
+            else:
+                # Assume it's a fixed percentage
+                try:
+                    tp_target = float(tp_preference)
+                except (ValueError, TypeError):
+                    # Fallback to defaults if invalid
+                    tp_target = 45.0 if signal_type == "discovery" else 50.0
         
         # Create position
         portfolio["positions"][position_key] = {
@@ -364,6 +544,27 @@ class PortfolioManager:
         ml_action = token_data.get("ml_prediction", {}).get("action", "N/A")
         grade = token_data.get("grade", "N/A")
         
+        # Get default SL if available
+        default_sl = prefs.get("default_sl")
+        sl_display = f"{abs(default_sl):.0f}%" if default_sl else "Not set"
+        
+        # Determine TP source for display
+        tp_source = "default"
+        if signal_type == "discovery" and "tp_discovery" in prefs:
+            tp_source = "discovery override"
+        elif signal_type == "alpha" and "tp_alpha" in prefs:
+            tp_source = "alpha override"
+        elif "tp_preference" in prefs:
+            pref = prefs["tp_preference"]
+            if pref in ["median", "mean", "mode"]:
+                tp_source = f"{pref} ATH"
+            else:
+                try:
+                    float(pref)
+                    tp_source = "custom"
+                except:
+                    tp_source = pref
+        
         msg = (
             f"🟢 <b>PAPER TRADE OPENED</b>\n\n"
             f"<b>Token:</b> {symbol}\n"
@@ -371,7 +572,8 @@ class PortfolioManager:
             f"<b>Grade:</b> {grade}\n"
             f"<b>Entry:</b> ${entry_price:.8f}\n"
             f"<b>Size:</b> ${size_usd:.2f}\n"
-            f"<b>Target TP:</b> +{tp_target:.0f}%\n"
+            f"<b>Target TP:</b> +{tp_target:.0f}% ({tp_source})\n"
+            f"<b>Stop Loss:</b> {sl_display}\n"
             # f"<b>ML Signal:</b> {ml_action}\n"
         )
         
@@ -390,7 +592,17 @@ class PortfolioManager:
         pos = portfolio["positions"].get(position_key)
         if not pos: return
 
-        investment = pos["investment_usd"]
+        # Get investment amount - calculate if missing for legacy positions
+        if "investment_usd" in pos:
+            investment = pos["investment_usd"]
+        else:
+            # Calculate from token amount and entry price
+            investment = pos.get("token_amount", 0) * pos.get("entry_price", 0)
+        
+        # If still can't determine investment, skip this position
+        if investment <= 0:
+            logger.warning(f"Cannot determine investment for position {position_key}, skipping exit")
+            return
         
         # Calculate PnL
         final_value = investment * (1 + exit_roi/100)
@@ -410,24 +622,28 @@ class PortfolioManager:
 
         # History - Calculate hold duration
         # Robust timezone handling: strip all potential suffixes and add single UTC
-        entry_time_str = pos["entry_time"]
-        # Remove Z and +00:00 (handle multiple occurrences)
-        entry_time_str = entry_time_str.replace("Z", "").replace("+00:00", "")
-        # Re-append single UTC timezone
-        entry_time_str = entry_time_str + "+00:00"
-        entry_time = datetime.fromisoformat(entry_time_str)
+        entry_time_str = pos.get("entry_time")
+        if not entry_time_str:
+            # If entry_time is missing, use current time as fallback
+            entry_time = datetime.now(timezone.utc)
+        else:
+            # Remove Z and +00:00 (handle multiple occurrences)
+            entry_time_str = entry_time_str.replace("Z", "").replace("+00:00", "")
+            # Re-append single UTC timezone
+            entry_time_str = entry_time_str + "+00:00"
+            entry_time = datetime.fromisoformat(entry_time_str)
         exit_time = datetime.now(timezone.utc)
         hold_duration = exit_time - entry_time
         hold_duration_minutes = int(hold_duration.total_seconds() / 60)
         
         history_item = {
-            "symbol": pos["symbol"],
-            "entry_price": pos["entry_price"],
+            "symbol": pos.get("symbol", "UNKNOWN"),
+            "entry_price": pos.get("entry_price", 0),
             "exit_reason": reason,
             "pnl_usd": pnl_usd,
             "pnl_percent": exit_roi,
             "exit_time": exit_time.isoformat() + "Z",
-            "signal_type": pos["signal_type"],
+            "signal_type": pos.get("signal_type", "unknown"),
             "hold_duration_minutes": hold_duration_minutes
         }
         portfolio["trade_history"].append(history_item)
@@ -436,24 +652,34 @@ class PortfolioManager:
 
         # Notify
         emoji = "🟢" if pnl_usd > 0 else "🔴"
+        
+        # Get TP/SL info
+        tp = pos.get('tp_used')
+        sl = pos.get('sl_used')
+        tp_display = f"+{float(tp):.0f}%" if tp else "N/A"
+        sl_display = f"{float(sl):.0f}%" if sl else "N/A"
+        
         msg = (
             f"{emoji} <b>PAPER TRADE CLOSED</b>\n\n"
-            f"<b>Token:</b> {pos['symbol']}\n"
+            f"<b>Token:</b> {pos.get('symbol', 'UNKNOWN')}\n"
             f"<b>Reason:</b> {reason}\n"
             f"<b>ROI:</b> {exit_roi:+.2f}%\n"
             f"<b>P/L:</b> ${pnl_usd:+.2f}\n"
+            f"<b>Targets:</b> TP: {tp_display}, SL: {sl_display}\n"
             f"<b>Capital:</b> ${portfolio['capital_usd']:,.2f}"
         )
         try:
             await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
         except: pass
 
-    def add_manual_position(self, chat_id: str, mint: str, symbol: str, price: float, amount_usd: float, tp_percent: float = 50.0, sl_percent: float = None) -> bool:
+    def add_manual_position(self, chat_id: str, mint: str, symbol: str, price: float, amount_usd: float, tp_percent: float = 50.0, sl_percent: float = None, token_age_hours: float = None) -> bool:
         """Add a manually purchased position.
         
         Args:
             sl_percent: Stop loss percentage. If None, no SL is set and user must set it manually via /set_sl.
                        If provided, SL will be set to -sl_percent (negative value).
+            token_age_hours: Age of token in hours at time of trade execution.
+                            If None, will try to estimate or default to 24 hours.
         """
         portfolio = self.get_portfolio(chat_id)
         
@@ -480,6 +706,10 @@ class PortfolioManager:
             pos["status"] = "active"
         else:
             # Create new position
+            # Default token age to 24 hours if not provided
+            if token_age_hours is None:
+                token_age_hours = 24
+            
             position_dict = {
                 "mint": mint,
                 "symbol": symbol,
@@ -495,7 +725,8 @@ class PortfolioManager:
                 "current_roi": 0.0,
                 "ath_price": price,
                 "ath_roi": 0.0,
-                "last_updated": datetime.now(timezone.utc).isoformat() + "Z"
+                "last_updated": datetime.now(timezone.utc).isoformat() + "Z",
+                "manual_token_age_hours": float(token_age_hours)
             }
             
             # Only add sl_used if sl_percent is provided
@@ -507,7 +738,7 @@ class PortfolioManager:
         self.save()
         return True
     
-    async def check_and_exit_positions(self, chat_id: str, app: Application, active_tracking: Optional[Dict[str, Any]] = None):
+    async def check_and_exit_positions(self, chat_id: str, app: Application, user_manager, active_tracking: Optional[Dict[str, Any]] = None):
         """
         Check analytics data and exit positions if TP hit or tracking ended.
         Updates position data with live analytics values.
@@ -515,6 +746,7 @@ class PortfolioManager:
         Args:
             chat_id: User chat ID
             app: Telegram application
+            user_manager: UserManager instance for getting user preferences
             active_tracking: Optional pre-downloaded active_tracking data for efficiency
         """
         portfolio = self.get_portfolio(chat_id)
@@ -526,33 +758,78 @@ class PortfolioManager:
         now = datetime.now(timezone.utc)
 
         for key, pos in list(portfolio["positions"].items()):
-            mint = pos["mint"]
-            signal_type = pos["signal_type"]
-            user_tp = pos["tp_used"]
+            mint = pos.get("mint")
+            signal_type = pos.get("signal_type")
+            user_tp = pos.get("tp_used", 50.0)  # Default to 50% if not set
+            
+            # Skip positions with missing critical fields
+            if not mint or not signal_type:
+                logger.warning(f"Skipping position {key} - missing mint or signal_type")
+                continue
             
             # Find in analytics
             analytics_key = f"{mint}_{signal_type}"
             data = active_tracking.get(analytics_key)
             
+            # Get user's default SL if no position-specific SL is set
+            prefs = user_manager.get_user_prefs(str(chat_id))
+            position_sl = pos.get("sl_used")
+            if position_sl is None:
+                # Apply user's default SL if they have one set
+                position_sl = prefs.get("default_sl")
+            
             # --- 1. UPDATE LIVE DATA ---
             if signal_type == "manual":
-                # Fetch live price for manual position
+                # For manual trades, respect token age-based fetch intervals
+                # Tokens < 12 hours old: fetch every 5 seconds
+                # Tokens >= 12 hours old: fetch every 4 minutes
+                
                 from alerts.price_fetcher import PriceFetcher
-                token_info = await PriceFetcher.get_token_info(mint)
-                if token_info:
-                    pos["current_price"] = token_info["price"]
-                    pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
+                
+                entry_time_str = pos.get("entry_time")
+                if not entry_time_str:
+                    logger.warning(f"Position {key} missing entry_time, skipping update")
+                    continue
                     
-                    # Calculate ROI
-                    entry_price = pos["entry_price"]
-                    if entry_price > 0:
-                        current_roi = ((pos["current_price"] - entry_price) / entry_price) * 100
-                        pos["current_roi"] = current_roi
+                entry_time = datetime.fromisoformat(entry_time_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+                time_since_entry = datetime.now(timezone.utc) - entry_time
+                
+                # Determine token age at entry time (store if not present)
+                if "manual_token_age_hours" not in pos:
+                    # If not explicitly stored, we can try to estimate
+                    # In the future, this should be passed from the buy command
+                    pos["manual_token_age_hours"] = 24  # Default assumption
+                
+                token_age_hours = pos.get("manual_token_age_hours", 24)
+                
+                # Determine fetch interval based on token age
+                if token_age_hours < 12:
+                    fetch_interval = 5  # 5 seconds for young tokens
+                else:
+                    fetch_interval = 240  # 4 minutes for older tokens
+                
+                # Check if enough time has passed since last update
+                last_updated_str = pos.get("last_updated", pos.get("entry_time"))
+                last_updated = datetime.fromisoformat(last_updated_str.rstrip("Z")).replace(tzinfo=timezone.utc)
+                time_since_update = (datetime.now(timezone.utc) - last_updated).total_seconds()
+                
+                # Only fetch if enough time has passed
+                if time_since_update >= fetch_interval:
+                    token_info = await PriceFetcher.get_token_info(mint)
+                    if token_info:
+                        pos["current_price"] = token_info["price"]
+                        pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
                         
-                        # Update ATH
-                        if pos["current_price"] > pos.get("ath_price", 0):
-                            pos["ath_price"] = pos["current_price"]
-                            pos["ath_roi"] = current_roi
+                        # Calculate ROI
+                        entry_price = pos["entry_price"]
+                        if entry_price > 0:
+                            current_roi = ((pos["current_price"] - entry_price) / entry_price) * 100
+                            pos["current_roi"] = current_roi
+                            
+                            # Update ATH
+                            if pos["current_price"] > pos.get("ath_price", 0):
+                                pos["ath_price"] = pos["current_price"]
+                                pos["ath_roi"] = current_roi
             elif data:
                 pos["current_price"] = data.get("current_price", pos["current_price"])
                 pos["current_roi"] = data.get("current_roi", pos["current_roi"])
@@ -571,17 +848,21 @@ class PortfolioManager:
                 await self.exit_position(chat_id, key, "TP Hit 🎯", app, exit_roi=ath_roi)
                 continue
                 
-            # SL Check - only if explicitly set by user
-            # If sl_used is not set, no default SL is applied (user must set it manually)
-            if "sl_used" in pos:
-                sl_threshold = pos.get("sl_used")
+            # SL Check - apply position SL if set (either explicit or from user default)
+            if position_sl is not None:
+                sl_threshold = float(position_sl)
                 if current_roi <= sl_threshold:
                     # Exit at current ROI
                     await self.exit_position(chat_id, key, "SL Hit 🛑", app, exit_roi=current_roi)
                     continue
             
             # --- 3. EXPIRY CHECK ---
-            end_time = datetime.fromisoformat(pos["tracking_end_time"].rstrip("Z")).replace(tzinfo=timezone.utc)
+            tracking_end_time_str = pos.get("tracking_end_time")
+            if not tracking_end_time_str:
+                # If no tracking end time, skip expiry check for this position
+                continue
+                
+            end_time = datetime.fromisoformat(tracking_end_time_str.rstrip("Z")).replace(tzinfo=timezone.utc)
             
             if now >= end_time:
                 current_roi = 0.0

@@ -88,7 +88,8 @@ async def trade_monitoring_loop(app: Application, user_manager, portfolio_manage
                         # Pass shared active_tracking data to avoid redundant downloads
                         await portfolio_manager.check_and_exit_positions(
                             chat_id, 
-                            app, 
+                            app,
+                            user_manager,
                             active_tracking=active_tracking
                         )
                 except Exception as e:

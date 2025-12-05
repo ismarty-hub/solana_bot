@@ -2220,15 +2220,16 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
     chat_id = str(update.effective_chat.id)
     if not context.args:
         await update.message.reply_html(
-            "<b>Usage:</b> <code>/set_tp [median|mean|number]</code>\n"
-            "• median: Use median historical ATH (Recommended)\n"
-            "• mean: Use average historical ATH (Aggressive)\n"
+            "<b>Usage:</b> <code>/set_tp [median|mean|mode|number]</code>\n"
+            "• median: Use median historical ATH (Recommended - middle value)\n"
+            "• mean: Use average historical ATH (Aggressive - higher)\n"
+            "• mode: Use most frequent ATH (Conservative - most common)\n"
             "• number: Fixed percentage (e.g., 50)"
         )
         return
         
     val = context.args[0].lower()
-    if val not in ["median", "mean"]:
+    if val not in ["median", "mean", "mode"]:
         try:
             float(val)
         except ValueError:
@@ -2627,17 +2628,25 @@ async def _execute_manual_buy(update, context, user_manager, portfolio_manager, 
         
     price = token_info.get("price", 0.0)
     symbol = token_info.get("symbol", "UNKNOWN")
+    token_age_hours = token_info.get("token_age_hours")  # May be None if not available
     
     # Add position
     chat_id = str(update.effective_chat.id)
     
-    success = portfolio_manager.add_manual_position(chat_id, mint, symbol, price, amount, tp, sl)
+    success = portfolio_manager.add_manual_position(chat_id, mint, symbol, price, amount, tp, sl, token_age_hours=token_age_hours)
+    
+    # Format TP and SL for display
+    tp_display = f"{float(tp):.0f}%" if float(tp) < 99999 else "None"
+    sl_display = f"-{abs(float(sl)):.0f}%" if sl and sl != -999 else "None"
     
     msg = (
         f"✅ <b>Buy Successful!</b>\n\n"
         f"💎 <b>Token:</b> {symbol}\n"
         f"💵 <b>Amount:</b> ${amount:,.2f}\n"
         f"💲 <b>Entry Price:</b> ${price:.6f}\n\n"
+        f"<b>Trading Parameters:</b>\n"
+        f"🎯 <b>Take Profit:</b> +{tp_display}\n"
+        f"🛑 <b>Stop Loss:</b> {sl_display}\n\n"
         f"Position added to portfolio."
     )
     
