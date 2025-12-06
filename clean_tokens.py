@@ -262,7 +262,7 @@ async def clean_daily_files_for_signal(signal_type: str):
                 logger.info(f"Removing {removed_count} tokens from {filename}")
                 
                 # Recalculate stats for this day
-                data = recalculate_daily_summary(data)
+                # data = recalculate_daily_summary(data)
                 
                 save_json(data, local_path)
                 await upload_file_to_supabase(local_path, remote_path)
@@ -413,14 +413,14 @@ async def main():
     if SUPABASE_AVAILABLE:
         # 2. Discovery
         await clean_daily_files_for_signal("discovery")
-        await regenerate_summary_stats("discovery")
+        # await regenerate_summary_stats("discovery")
         
         # 3. Alpha
         await clean_daily_files_for_signal("alpha")
-        await regenerate_summary_stats("alpha")
+        # await regenerate_summary_stats("alpha")
         
         # 4. Overall
-        await regenerate_overall_stats()
+        # await regenerate_overall_stats()
     else:
         logger.warning("⚠️ Skipping Supabase daily files and stats (module not available)")
         logger.info("💡 To clean Supabase files, install: pip install supabase")
