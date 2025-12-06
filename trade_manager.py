@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, List
 from telegram.ext import Application
 from shared.file_io import safe_load, safe_save
 
-from config import PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, DATA_DIR
+from config import PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, DATA_DIR, SIGNAL_FRESHNESS_WINDOW
 
 # Import download_file for daily fallback checks
 try:
@@ -409,6 +409,21 @@ class PortfolioManager:
             token_age_hours = token_data.get("token_age_hours", 0)
             hours = 168 if token_age_hours >= 12 else 24
             tracking_end_time = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat() + "Z"
+
+        # Defensive Freshness Check
+        # Ensure we don't execute old signals even if they passed upstream checks
+        entry_time_str = token_data.get("entry_time")
+        if entry_time_str:
+            try:
+                # Handle standard ISO format with Z
+                entry_dt = datetime.fromisoformat(entry_time_str.replace("Z", "+00:00"))
+                age_seconds = (datetime.now(timezone.utc) - entry_dt).total_seconds()
+                
+                if age_seconds > SIGNAL_FRESHNESS_WINDOW:
+                    logger.warning(f"🛑 Skipping stale signal in trade manager: {mint} ({age_seconds:.0f}s old > {SIGNAL_FRESHNESS_WINDOW}s limit)")
+                    return
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to parse entry_time for freshness check: {e}")
 
         # Check if position already exists
         position_key = f"{mint}_{signal_type}"

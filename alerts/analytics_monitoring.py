@@ -32,7 +32,7 @@ from typing import Dict, Any, Optional
 from telegram.ext import Application
 
 # Config imports
-from config import DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALL_GRADES
+from config import DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALL_GRADES, SIGNAL_FRESHNESS_WINDOW
 
 # File IO helpers
 from shared.file_io import safe_load, safe_save
@@ -276,6 +276,16 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         )
                         continue
 
+                    # CRITICAL: Signal Freshness Check
+                    # Skip signals that are older than the configured window (e.g. 5 mins)
+                    # This prevents executing stale signals if the user adds capital later
+                    now = datetime.now(timezone.utc)
+                    age_seconds = (now - entry_dt).total_seconds()
+                    
+                    if age_seconds > SIGNAL_FRESHNESS_WINDOW:
+                        logger.debug(f"Skipping {mint} - signal stale used {age_seconds:.0f}s > {SIGNAL_FRESHNESS_WINDOW}s limit")
+                        continue
+
                     key = get_composite_key(mint, signal_type)
                     last_entry_time = snapshot.get(key, {}).get("entry_time")
 
@@ -338,6 +348,7 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                                 "grade": grade,
                                 "token_age_hours": data.get("token_age_hours"),
                                 "tracking_end_time": data.get("tracking_end_time"),
+                                "entry_time": data.get("entry_time"),
                                 "entry_mcap": data.get("entry_mcap"),
                                 "entry_liquidity": data.get("entry_liquidity"),
                                 "ml_prediction": data.get("ml_prediction") if isinstance(data.get("ml_prediction"), dict) else {},

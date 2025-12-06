@@ -47,6 +47,7 @@ PORTFOLIOS_FILE = DATA_DIR / "bot_portfolios.pkl"
 # ----------------------
 ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
 ANALYTICS_POLL_INTERVAL = 300  # 5 minutes
+SIGNAL_FRESHNESS_WINDOW = 300  # 5 minutes - only execute signals this fresh
 
 # ----------------------
 # Bot Configuration
