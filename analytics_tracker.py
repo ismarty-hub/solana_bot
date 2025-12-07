@@ -6,6 +6,9 @@ Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
 REVISION: ROBUST DATA INTEGRITY & TIMEFRAME ATTRIBUTION
+- CRITICAL FIX: "Fake Pump" Prevention. Added strict Consensus Verification to batch loop.
+  Previously, high ROI glitches were accepted if liquidity ratios were "okay".
+  Now, ANY price > 5x (SUSPICIOUS_PRICE_MULTIPLE) trigger strict Dexscreener verification.
 - CRITICAL FIX: "Timeframe Inflation" fixed. Wins are now attributed to the time they
   hit the target (hit_50_percent_time), not when tracking completes.
 - CRITICAL FIX: "Zombie Wins" prevented. 'hit_50_percent' flag only sets after confirmed Supabase write.
@@ -434,6 +437,7 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
 async def fetch_current_price_validated(mint: str, token_data: dict) -> float | None:
     """
     Fetch price with validation logic (Jupiter -> Dexscreener if suspicious).
+    Used primarily during RETRY loops.
     """
     entry_price = token_data.get("entry_price")
     entry_mcap = token_data.get("entry_mcap")
@@ -939,31 +943,68 @@ async def update_active_token_prices():
                     entry_price = token_data.get("entry_price")
                     entry_mcap = token_data.get("entry_mcap")
                     entry_liq = token_data.get("entry_liquidity")
+                    baseline_price = token_data.get("consensus_baseline_price") or entry_price
 
                     is_suspicious = False
+                    
+                    # CHECK 1: Mcap / Liquidity Ratio
                     if entry_price and entry_mcap and entry_liq and entry_liq > 0:
                          current_mcap_est = entry_mcap * (raw_jup_price / entry_price)
                          ratio = current_mcap_est / entry_liq
                          if ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD:
+                             logger.warning(f"SUSPICIOUS: {mint} Ratio {ratio:.1f} > {MCAP_LIQUIDITY_RATIO_THRESHOLD}. Verify.")
                              is_suspicious = True
-                    
+                             
+                    # CHECK 2: Pure Price Multiple (> 5x Entry)
+                    # This captures "Fake Pumps" even if liquidity ratio looks okay
+                    if not is_suspicious and baseline_price and baseline_price > 0:
+                        if (raw_jup_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
+                             logger.warning(f"SUSPICIOUS: {mint} Price {raw_jup_price} is > 5x baseline {baseline_price}. Verify.")
+                             is_suspicious = True
+
                     if is_suspicious:
                         verified_data = await verify_suspicious_price_dexscreener(mint)
                         if verified_data:
+                            dex_price = verified_data["price"]
                             dex_mcap = verified_data["mcap"]
                             dex_liq = verified_data["liquidity"]
                             dex_vol = verified_data["volume_5m"]
-                            verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
                             
-                            if verified_ratio <= MCAP_LIQUIDITY_RATIO_THRESHOLD and dex_vol >= MIN_VOLUME_5M_USD:
-                                price = verified_data["price"]
+                            # Validation Logic
+                            is_valid = True
+                            
+                            # 1. Absolute Liquidity Check
+                            if dex_liq < MIN_ABSOLUTE_LIQUIDITY_USD:
+                                logger.warning(f"REJECTED {mint}: Low Liq ${dex_liq}")
+                                is_valid = False
+
+                            # 2. Ratio Check (if applicable)
+                            verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
+                            if verified_ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD and is_valid:
+                                # Only fail if ratio is bad AND we don't have enough volume
+                                if dex_vol < MIN_VOLUME_5M_USD:
+                                    logger.warning(f"REJECTED {mint}: High Ratio & Low Vol")
+                                    is_valid = False
+                            
+                            # 3. Consensus Check (Price Diff)
+                            price_diff_pct = abs(raw_jup_price - dex_price) / min(raw_jup_price, dex_price) * 100
+                            if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
+                                logger.info(f"Consensus Diff {price_diff_pct:.1f}%. Using safe lower price.")
+                                price = min(raw_jup_price, dex_price)
                             else:
-                                price = None
+                                price = (raw_jup_price + dex_price) / 2
+                                
+                            if is_valid:
+                                # Update consensus baseline
+                                token_data["consensus_baseline_price"] = price
+                            else:
+                                price = None # Failed validation
                         else:
-                            price = None
+                            price = None # Failed to verify
                     else:
                         price = raw_jup_price
                 
+                # Fallback to Dexscreener if Jupiter missed it completely
                 if price is None and mint not in jupiter_prices:
                      try:
                         d_data = await verify_suspicious_price_dexscreener(mint)
