@@ -5,15 +5,12 @@ analytics_tracker.py
 Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
-REVISION: ROBUST DATA INTEGRITY & TIMEFRAME ATTRIBUTION
-- CRITICAL FIX: "Fake Pump" Prevention. Added strict Consensus Verification to batch loop.
-  Previously, high ROI glitches were accepted if liquidity ratios were "okay".
-  Now, ANY price > 5x (SUSPICIOUS_PRICE_MULTIPLE) trigger strict Dexscreener verification.
-- CRITICAL FIX: "Timeframe Inflation" fixed. Wins are now attributed to the time they
-  hit the target (hit_50_percent_time), not when tracking completes.
-- CRITICAL FIX: "Zombie Wins" prevented. 'hit_50_percent' flag only sets after confirmed Supabase write.
-- CRITICAL FIX: "Archival Loss" prevented. Tokens are only removed from active tracking after confirmed Supabase write.
-- Fixed: Async handling for all Supabase file operations.
+REVISION: ENHANCED PRICE VALIDATION & LIQUIDITY MANIPULATION DETECTION
+- CRITICAL FIX: Multi-level validation system for extreme price movements
+- CRITICAL FIX: Liquidity manipulation detection (rug pull prevention)
+- CRITICAL FIX: Three-tier validation (Normal, Suspicious, Extreme)
+- CRITICAL FIX: Final safety check prevents astronomical ROIs from persisting
+- Enhanced logging for better debugging of edge cases
 """
 
 import os
@@ -48,14 +45,20 @@ MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious
 # Maximum realistic price increases
 MAX_REALISTIC_PRICE_MULTIPLE = 100.0  # Price can't be >100x entry price
 MAX_REALISTIC_ROI = 10000.0           # 10,000% (100x) maximum
+EXTREME_PUMP_THRESHOLD = 1000.0       # 1000% ROI triggers extreme validation
 
 # Minimum liquidity requirements
 MIN_ABSOLUTE_LIQUIDITY_USD = 5000.0   # $5K minimum liquidity
 MIN_LIQUIDITY_FOR_HIGH_ROI = 20000.0  # $20K minimum if ROI > 500%
+MIN_LIQUIDITY_FOR_EXTREME_ROI = 50000.0  # $50K for ROIs > 1000%
+
+# Liquidity manipulation detection
+LIQUIDITY_DROP_THRESHOLD = 0.5        # Flag if liquidity drops below 50% of entry
 
 # Consensus validation
 SUSPICIOUS_PRICE_MULTIPLE = 5.0       # Trigger consensus check if price >5x entry
 CONSENSUS_AGREEMENT_THRESHOLD = 20.0  # Sources must agree within 20%
+EXTREME_CONSENSUS_THRESHOLD = 10.0    # Stricter threshold for extreme pumps
 
 # Retry Logic
 RETRY_INTERVAL = 5              # Check every 5 seconds during retry
@@ -194,7 +197,6 @@ async def upload_file_to_supabase(local_path: str, remote_path: str, content_typ
         
     file_options = {"content-type": content_type, "cache-control": "3600"}
 
-    # 1. Try to UPDATE (replace) the file if it exists. This prevents 409 errors.
     try:
         await asyncio.to_thread(
             client.storage.from_(BUCKET_NAME).update,
@@ -202,13 +204,11 @@ async def upload_file_to_supabase(local_path: str, remote_path: str, content_typ
         )
         return True
     except Exception as update_e:
-        # 2. If update fails (e.g., file not found, meaning it's new), try to UPLOAD (create new).
         is_not_found = "404" in str(update_e) or "not found" in str(update_e).lower()
         
         if is_not_found:
             logger.warning(f"Update failed for {remote_path} (likely new file). Trying upload instead.")
         else:
-            # Log full error if it's not a common 404/not found error
             logger.warning(f"Update failed for {remote_path}: {update_e}. Trying upload as fallback.")
             
         try:
@@ -218,7 +218,6 @@ async def upload_file_to_supabase(local_path: str, remote_path: str, content_typ
             )
             return True
         except Exception as upload_e:
-            # The second attempt also failed (e.g., another 409 if a race occurred)
             logger.error(f"Upload failed for {remote_path} on second attempt: {upload_e}")
             return False
 
@@ -317,11 +316,6 @@ async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
             
     return {}
 
-async def fetch_price_dexscreener(mint: str) -> float | None:
-    """Simple Dexscreener fetch for fallback purposes (returns price only)."""
-    data = await verify_suspicious_price_dexscreener(mint)
-    return data.get("price") if data else None
-
 async def verify_suspicious_price_dexscreener(mint: str) -> Dict[str, Any] | None:
     """
     Fetch full market data from Dexscreener with exponential backoff for 429 errors.
@@ -354,21 +348,16 @@ async def verify_suspicious_price_dexscreener(mint: str) -> Dict[str, Any] | Non
                 if not pairs:
                     return None
                 
-                # Use the first pair (usually highest liquidity)
                 pair = pairs[0]
                 
                 price = float(pair.get("priceUsd") or 0)
                 
-                # Extract Market Cap (try marketCap, fallback to fdv)
                 mcap = pair.get("marketCap")
                 if mcap is None:
                     mcap = pair.get("fdv")
                 mcap = float(mcap or 0)
 
-                # Extract Liquidity (USD)
                 liquidity_usd = float(pair.get("liquidity", {}).get("usd") or 0)
-
-                # Extract 5m Volume (try m5, fallback to h1/12 if desperate, but m5 is standard)
                 volume_5m = float(pair.get("volume", {}).get("m5") or 0)
 
                 return {
@@ -395,14 +384,12 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
     result = signal_data.get("result", {})
 
     if signal_type == "discovery":
-        # Discovery Paths
         dex_data = result.get("dexscreener", {})
         entry_price = dex_data.get("current_price_usd")
         entry_mcap = dex_data.get("market_cap_usd")
         entry_liquidity = result.get("rugcheck", {}).get("total_liquidity_usd")
         
     else:
-        # Alpha Paths
         security = result.get("security", {})
         dex_raw = security.get("dexscreener", {}).get("raw", {})
         
@@ -419,7 +406,8 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
     if entry_price is None:
         try:
              entry_price = result.get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("price")
-        except Exception: pass
+        except Exception: 
+            pass
 
     def to_float(val):
         try:
@@ -434,16 +422,148 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
         "entry_liquidity": to_float(entry_liquidity)
     }
 
-async def fetch_current_price_validated(mint: str, token_data: dict) -> float | None:
+def detect_liquidity_manipulation(token_data: dict, current_liquidity: float) -> bool:
     """
-    Fetch price with validation logic (Jupiter -> Dexscreener if suspicious).
-    Used primarily during RETRY loops.
+    Detect if liquidity has been manipulated (rug pull indicator).
+    Returns True if manipulation is suspected.
     """
-    entry_price = token_data.get("entry_price")
-    entry_mcap = token_data.get("entry_mcap")
     entry_liquidity = token_data.get("entry_liquidity")
     
-    # 1. Try Jupiter
+    if entry_liquidity and entry_liquidity > 0:
+        liquidity_ratio = current_liquidity / entry_liquidity
+        
+        if liquidity_ratio < LIQUIDITY_DROP_THRESHOLD:
+            logger.warning(
+                f"LIQUIDITY DROP DETECTED for {token_data['mint']}: "
+                f"${current_liquidity:.0f} vs entry ${entry_liquidity:.0f} "
+                f"({liquidity_ratio*100:.1f}% remaining)"
+            )
+            return True
+    
+    return False
+
+async def validate_price_with_multi_source(mint: str, token_data: dict, jupiter_price: float) -> float | None:
+    """
+    Multi-source validation with cross-referencing and historical comparison.
+    Returns validated price or None if validation fails.
+    """
+    entry_price = token_data.get("entry_price")
+    entry_liquidity = token_data.get("entry_liquidity")
+    baseline_price = token_data.get("consensus_baseline_price") or entry_price
+    
+    if not entry_price or entry_price <= 0:
+        return None
+    
+    potential_roi = calculate_roi(entry_price, jupiter_price)
+    
+    # LEVEL 1: Extreme ROI Check (>1000%)
+    if potential_roi > EXTREME_PUMP_THRESHOLD:
+        logger.warning(
+            f"EXTREME ROI DETECTED {mint}: {potential_roi:.0f}%. "
+            f"Triggering strict validation..."
+        )
+        
+        dex_data = await verify_suspicious_price_dexscreener(mint)
+        
+        if not dex_data:
+            logger.error(f"REJECTED {mint}: No Dexscreener data for extreme pump")
+            return None
+        
+        dex_price = dex_data["price"]
+        dex_liquidity = dex_data["liquidity"]
+        dex_volume_5m = dex_data["volume_5m"]
+        
+        if detect_liquidity_manipulation(token_data, dex_liquidity):
+            logger.error(f"REJECTED {mint}: Liquidity manipulation detected")
+            return None
+        
+        if dex_liquidity < MIN_LIQUIDITY_FOR_EXTREME_ROI:
+            logger.error(
+                f"REJECTED {mint}: Extreme ROI needs ${MIN_LIQUIDITY_FOR_EXTREME_ROI} liq, "
+                f"got ${dex_liquidity:.0f}"
+            )
+            return None
+        
+        price_diff_pct = abs(jupiter_price - dex_price) / min(jupiter_price, dex_price) * 100
+        
+        if price_diff_pct > EXTREME_CONSENSUS_THRESHOLD:
+            logger.error(
+                f"REJECTED {mint}: Extreme pump consensus fail. "
+                f"Jup=${jupiter_price:.8f} vs Dex=${dex_price:.8f} ({price_diff_pct:.1f}%)"
+            )
+            return None
+        
+        if dex_volume_5m < MIN_VOLUME_5M_USD * 5:
+            logger.error(
+                f"REJECTED {mint}: Extreme ROI needs ${MIN_VOLUME_5M_USD * 5} volume, "
+                f"got ${dex_volume_5m:.0f}"
+            )
+            return None
+        
+        validated_price = min(jupiter_price, dex_price)
+        logger.info(
+            f"EXTREME PUMP VALIDATED {mint}: Using conservative price ${validated_price:.8f}"
+        )
+        token_data["consensus_baseline_price"] = validated_price
+        token_data["last_validated_liquidity"] = dex_liquidity
+        return validated_price
+    
+    # LEVEL 2: Regular suspicious price check (>500% or >5x baseline)
+    elif potential_roi > 500 or (baseline_price and (jupiter_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE):
+        dex_data = await verify_suspicious_price_dexscreener(mint)
+        
+        if not dex_data:
+            logger.warning(f"REJECTED {mint}: Dexscreener validation failed")
+            return None
+        
+        dex_price = dex_data["price"]
+        dex_liquidity = dex_data["liquidity"]
+        dex_volume_5m = dex_data["volume_5m"]
+        
+        if detect_liquidity_manipulation(token_data, dex_liquidity):
+            logger.warning(f"Liquidity drop detected for {mint}, applying strict validation")
+        
+        if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
+            logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
+            return None
+        
+        if potential_roi > 500 and dex_liquidity < MIN_LIQUIDITY_FOR_HIGH_ROI:
+            logger.warning(
+                f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_LIQUIDITY_FOR_HIGH_ROI} liq, "
+                f"got ${dex_liquidity:.0f}"
+            )
+            return None
+        
+        price_diff_pct = abs(jupiter_price - dex_price) / min(jupiter_price, dex_price) * 100
+        
+        if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
+            logger.warning(
+                f"Consensus disagreement for {mint}: {price_diff_pct:.1f}%. "
+                f"Using conservative price."
+            )
+            validated_price = min(jupiter_price, dex_price)
+        else:
+            validated_price = (jupiter_price + dex_price) / 2
+        
+        if potential_roi > 200 and dex_volume_5m < MIN_VOLUME_5M_USD:
+            logger.warning(
+                f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_VOLUME_5M_USD} volume, "
+                f"got ${dex_volume_5m:.0f}"
+            )
+            return None
+        
+        token_data["consensus_baseline_price"] = validated_price
+        token_data["last_validated_liquidity"] = dex_liquidity
+        
+        return validated_price
+    
+    # LEVEL 3: Price looks normal, return Jupiter price
+    return jupiter_price
+
+async def fetch_current_price_validated(mint: str, token_data: dict) -> float | None:
+    """
+    Fetch price with validation logic for retry scenarios.
+    """
     jupiter_price = None
     try:
         prices = await fetch_price_jupiter([mint])
@@ -453,98 +573,12 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
         logger.warning(f"Jupiter error for {mint}: {e}")
 
     if jupiter_price:
-        # Use baseline price for comparison (defaults to entry_price if not set)
-        baseline_price = token_data.get("consensus_baseline_price") or entry_price
-        
-        # Check if price increase is suspicious (>5x baseline) - trigger consensus validation
-        if baseline_price and baseline_price > 0 and (jupiter_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
-            price_multiple = jupiter_price / entry_price
-            logger.warning(f"SUSPICIOUS PRICE {mint}: {price_multiple:.1f}x entry. Triggering consensus...")
-            
-            # Fetch Dexscreener for consensus
-            dex_data = await verify_suspicious_price_dexscreener(mint)
-            
-            if dex_data:
-                dex_price = dex_data["price"]
-                dex_liquidity = dex_data["liquidity"]
-                dex_volume_5m = dex_data["volume_5m"]
-                
-                # Check minimum absolute liquidity
-                if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
-                    logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
-                    return None
-                
-                # Calculate consensus
-                price_diff_pct = abs(jupiter_price - dex_price) / min(jupiter_price, dex_price) * 100
-                
-                if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
-                    logger.warning(f"CONSENSUS FAIL {mint}: Jup=${jupiter_price:.8f} vs Dex=${dex_price:.8f} ({price_diff_pct:.1f}%)")
-                    validated_price = min(jupiter_price, dex_price)
-                    logger.info(f"Using conservative price: ${validated_price:.8f}")
-                else:
-                    validated_price = (jupiter_price + dex_price) / 2
-                    logger.info(f"CONSENSUS OK {mint}: {price_diff_pct:.1f}% diff. Avg: ${validated_price:.8f}")
-                
-                # Higher liquidity for extreme gains
-                potential_roi = calculate_roi(entry_price, validated_price)
-                if potential_roi > 500 and dex_liquidity < MIN_LIQUIDITY_FOR_HIGH_ROI:
-                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_LIQUIDITY_FOR_HIGH_ROI} liq, got ${dex_liquidity:.0f}")
-                    return None
-                
-                # Volume requirement
-                if potential_roi > 200 and dex_volume_5m < MIN_VOLUME_5M_USD:
-                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_VOLUME_5M_USD} vol, got ${dex_volume_5m:.0f}")
-                    return None
-                
-                # Update baseline after successful consensus validation
-                token_data["consensus_baseline_price"] = validated_price
-                logger.info(f"Updated consensus baseline for {mint} to ${validated_price:.8f}")
-                
-                return validated_price
-            else:
-                logger.warning(f"REJECTED {mint}: Consensus check failed - no Dex data")
-                return None
-        
-        # Existing mcap/liquidity ratio check
-        if entry_price and entry_mcap and entry_liquidity and entry_liquidity > 0:
-            current_mcap_est = entry_mcap * (jupiter_price / entry_price)
-            ratio = current_mcap_est / entry_liquidity
-            
-            if ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD:
-                logger.warning(f"SUSPICIOUS PUMP {mint}: Ratio {ratio:.1f}x. Verifying...")
-                
-                dex_data = await verify_suspicious_price_dexscreener(mint)
-                
-                if dex_data:
-                    dex_price = dex_data["price"]
-                    dex_mcap = dex_data["mcap"]
-                    dex_liquidity = dex_data["liquidity"]
-                    dex_vol_5m = dex_data["volume_5m"]
-                    
-                    # NEW: Check minimum absolute liquidity
-                    if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
-                        logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
-                        return None
-                    
-                    verified_ratio = dex_mcap / dex_liquidity if dex_liquidity > 0 else 9999
-                    
-                    if verified_ratio <= MCAP_LIQUIDITY_RATIO_THRESHOLD and dex_vol_5m >= MIN_VOLUME_5M_USD:
-                        logger.info(f"VERIFIED {mint}: Dexscreener confirms legitimate pump.")
-                        return dex_price 
-                    else:
-                        logger.warning(f"REJECTED {mint}: Failed verification.")
-                        return None 
-                else:
-                     logger.warning(f"REJECTED {mint}: Dexscreener fetch failed.")
-                     return None
-            
-        return jupiter_price
-
-    # 2. Fallback to Dexscreener
+        return await validate_price_with_multi_source(mint, token_data, jupiter_price)
+    
     try:
-        data = await verify_suspicious_price_dexscreener(mint)
-        if data:
-            return data["price"]
+        dex_data = await verify_suspicious_price_dexscreener(mint)
+        if dex_data and dex_data["price"]:
+            return await validate_price_with_multi_source(mint, token_data, dex_data["price"])
     except Exception as e:
         logger.warning(f"Dexscreener fallback error for {mint}: {e}")
 
@@ -555,39 +589,25 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
 async def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool) -> bool:
     """
     Handles creating or updating entries in daily files.
-    - Downloads existing file first (prevent overwrite history).
-    - If entry exists: UPDATES it.
-    - If entry new: APPENDS it.
-    - Sets 'is_final' flag.
-    - Calculates daily summary stats.
-    - Uploads to Supabase.
-    - Returns True if successful, False otherwise.
     """
     remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
     local_path = os.path.join(TEMP_DIR, remote_path)
     
-    # 1. Ensure we have the latest version from Supabase
-    # Check local first, then try download.
     daily_data = load_json(remote_path)
     
     if daily_data is None:
-        # Not found locally, try to download to ensure we don't overwrite remote history
         downloaded = await download_file_from_supabase(remote_path, local_path)
         if downloaded:
             daily_data = load_json(remote_path)
     
-    # If still None, assume it's a brand new day/file
     if daily_data is None:
         daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
     
-    # 2. Prepare the Token Entry
     token_key = get_composite_key(token_data["mint"], signal_type)
     
-    # Deepcopy to avoid modifying the active tracking object with file-specific flags
     entry_to_write = copy.deepcopy(token_data)
     entry_to_write["is_final"] = is_final
     
-    # 3. Insert or Update
     tokens = daily_data.get("tokens", [])
     found_index = -1
     
@@ -598,17 +618,14 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
             break
             
     if found_index != -1:
-        # UPDATE existing entry
         tokens[found_index] = entry_to_write
         logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
     else:
-        # APPEND new entry
         tokens.append(entry_to_write)
         logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
     
     daily_data["tokens"] = tokens
 
-    # 4. Update Summary Stats (For this file)
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(tokens)
@@ -628,7 +645,6 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
     }
 
-    # 5. Save and Upload with Confirmation
     saved_path = save_json(daily_data, remote_path)
     if saved_path:
         success = await upload_file_to_supabase(saved_path, remote_path)
@@ -658,12 +674,22 @@ def handle_price_failure(token_data: dict):
 
 async def update_token_price(token_data: dict, price: float):
     """
-    Async update of token price. 
-    Handles WINS immediately to ensure daily files and stats are fresh.
-    CRITICAL: Validates persistence before updating memory state to prevent Zombie Wins.
+    Enhanced update with final sanity checks.
     """
-    now = get_now()
     entry_price = token_data["entry_price"]
+    
+    # Final safety check: Reject anything beyond MAX_REALISTIC_PRICE_MULTIPLE
+    price_multiple = price / entry_price
+    if price_multiple > MAX_REALISTIC_PRICE_MULTIPLE:
+        logger.error(
+            f"REJECTED FINAL UPDATE {token_data['mint']}: "
+            f"Price multiple {price_multiple:.0f}x exceeds maximum {MAX_REALISTIC_PRICE_MULTIPLE}x. "
+            f"Likely data error."
+        )
+        handle_price_failure(token_data)
+        return
+    
+    now = get_now()
     current_roi = calculate_roi(entry_price, price)
     
     token_data["current_price"] = price
@@ -682,14 +708,11 @@ async def update_token_price(token_data: dict, price: float):
         token_data["time_to_ath_minutes"] = round(time_to_ath, 2)
         is_new_ath = True
     
-    # Check for WIN condition
     if current_roi >= WIN_ROI_THRESHOLD:
         
-        # CASE A: First time hitting 45% (The "Win" Moment)
         if not token_data["hit_50_percent"]:
             logger.info(f"WIN CANDIDATE: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Attempting to write.")
             
-            # Temporarily set values to prepare for write
             original_status = token_data["status"]
             token_data["hit_50_percent"] = True
             token_data["hit_50_percent_time"] = to_iso(now)
@@ -697,40 +720,32 @@ async def update_token_price(token_data: dict, price: float):
             token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
             token_data["status"] = "win"
             
-            # Write to file
             win_date_str = now.strftime('%Y-%m-%d')
             success = await update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
             
             if success:
                 logger.info(f"WIN CONFIRMED: {token_data.get('symbol')} stats saved to daily file.")
-                # Trigger Stats Update Immediately (Fire and forget task)
                 asyncio.create_task(update_all_summary_stats())
             else:
                 logger.error(f"WIN WRITE FAILED: {token_data.get('symbol')}. Reverting state to retry next loop.")
-                # Revert state so we try again next time (Prevent Zombie Win)
                 token_data["hit_50_percent"] = False
                 token_data["hit_50_percent_time"] = None
                 token_data["time_to_50_percent_minutes"] = None
                 token_data["status"] = original_status
 
-        # CASE B: Already a Win, but hit a new ATH
         elif is_new_ath:
             if token_data.get("hit_50_percent_time"):
                 win_date = parse_ts(token_data["hit_50_percent_time"])
                 date_str = win_date.strftime('%Y-%m-%d')
-                # We try to update, but if it fails, it's not critical enough to revert the ATH in memory
                 await update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
 
 async def finalize_token_tracking(composite_key: str, token_data: dict):
     """
     Finalizes a token.
-    CRITICAL: Only removes token from active_tracking if the file write is confirmed successful.
-    This prevents Archival Loss.
     """
     mint = token_data["mint"]
     logger.info(f"Tracking complete for {composite_key}. Finalizing...")
     
-    # Update Status
     if token_data["status"] == "active":
         token_data["status"] = "loss"
         if "hit_50_percent" not in token_data:
@@ -746,17 +761,14 @@ async def finalize_token_tracking(composite_key: str, token_data: dict):
     date_str = ""
     
     if token_data["status"] == "win":
-        # Rule: Wins are stored by DATE OF WIN
         if token_data.get("hit_50_percent_time"):
             win_date = parse_ts(token_data["hit_50_percent_time"])
             date_str = win_date.strftime('%Y-%m-%d')
         else:
             date_str = get_now().strftime('%Y-%m-%d')
     else:
-        # Rule: Losses are stored by TRACKING END DATE
         date_str = get_now().strftime('%Y-%m-%d')
             
-    # CRITICAL: Attempt write
     success = await update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
     
     if success:
@@ -765,11 +777,8 @@ async def finalize_token_tracking(composite_key: str, token_data: dict):
             logger.info(f"SUCCESS: Archived and removed {composite_key} from active tracking.")
     else:
         logger.error(f"FAILURE: Could not archive {composite_key}. Retaining in active tracking for retry.")
-        # We do NOT remove it. It will be picked up again in the next loop, 
-        # see that time > end_time, and call finalize_token_tracking again.
 
 async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: dict):
-    # 1. Get Entry Data (Price, Mcap, Liquidity)
     entry_data = await get_entry_data_from_json(mint, signal_type, signal_data)
     entry_price = entry_data["entry_price"]
     entry_mcap = entry_data["entry_mcap"]
@@ -782,13 +791,13 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
                 entry_price = dex_data["price"]
                 if not entry_mcap: entry_mcap = dex_data["mcap"]
                 if not entry_liquidity: entry_liquidity = dex_data["liquidity"]
-        except Exception: pass
+        except Exception: 
+            pass
 
     if entry_price is None:
         logger.warning(f"Excluding {mint} ({signal_type}): No entry price found.")
         return
 
-    # 2. Get Token Age
     detected_at_str = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("detectedAt")
     entry_ts_str = safe_get_timestamp(signal_data)
     creation_ts_str = detected_at_str or entry_ts_str
@@ -803,12 +812,10 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     age_hours = age_seconds / 3600
     if age_hours < 0: age_hours = 0
     
-    # 3. Intervals
     is_new = age_hours <= 12
     interval_sec = PRICE_CHECK_INTERVAL_NEW if is_new else PRICE_CHECK_INTERVAL_OLD
     duration_hours = TRACKING_DURATION_NEW if is_new else TRACKING_DURATION_OLD
 
-    # 4. Metadata
     entry_time = get_now()
     symbol = "N/A"
     name = "N/A"
@@ -828,7 +835,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
             if meta_disc:
                 symbol = meta_disc.get("symbol", "N/A")
                 name = meta_disc.get("name", "N/A")
-    except Exception: pass
+    except Exception: 
+        pass
 
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
@@ -854,7 +862,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "ath_time": to_iso(entry_time),
         "status": "active",
         
-        "consensus_baseline_price": None,  # Updated after consensus validation to avoid redundant checks
+        "consensus_baseline_price": None,
+        "last_validated_liquidity": None,
         "hit_50_percent": False,
         "hit_50_percent_time": None,
         "time_to_ath_minutes": 0.0,
@@ -897,17 +906,15 @@ async def process_signals(signal_data: dict, signal_type: str):
 
 async def update_active_token_prices():
     """
-    Updates prices for active tokens, handling batching and SUSPICIOUS price validation.
+    Enhanced batch update with multi-source validation.
     """
     now = get_now()
     tokens_to_check = {}
     tokens_to_retry = {}
     
-    # 1. Identify tokens to update
     for composite_key, token_data in list(active_tracking.items()):
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
         if now >= tracking_end_time:
-            # IMPORTANT: await the async finalization
             await finalize_token_tracking(composite_key, token_data)
             continue
 
@@ -921,12 +928,12 @@ async def update_active_token_prices():
         if (now - last_check).total_seconds() >= token_data["tracking_interval_seconds"]:
             tokens_to_check[composite_key] = token_data
 
-    # 2. Batch fetch & Validate Normal Checks
     if tokens_to_check:
         mint_to_keys_map = {}
         for key, data in tokens_to_check.items():
             mint = data["mint"]
-            if mint not in mint_to_keys_map: mint_to_keys_map[mint] = []
+            if mint not in mint_to_keys_map: 
+                mint_to_keys_map[mint] = []
             mint_to_keys_map[mint].append(key)
             
         mints_list = list(mint_to_keys_map.keys())
@@ -935,88 +942,31 @@ async def update_active_token_prices():
         for mint, keys in mint_to_keys_map.items():
             for composite_key in keys:
                 token_data = tokens_to_check[composite_key]
-                price = None
                 
-                if mint in jupiter_prices:
-                    raw_jup_price = jupiter_prices[mint]
+                raw_jupiter_price = jupiter_prices.get(mint)
+                
+                if raw_jupiter_price:
+                    validated_price = await validate_price_with_multi_source(
+                        mint, token_data, raw_jupiter_price
+                    )
                     
-                    entry_price = token_data.get("entry_price")
-                    entry_mcap = token_data.get("entry_mcap")
-                    entry_liq = token_data.get("entry_liquidity")
-                    baseline_price = token_data.get("consensus_baseline_price") or entry_price
-
-                    is_suspicious = False
-                    
-                    # CHECK 1: Mcap / Liquidity Ratio
-                    if entry_price and entry_mcap and entry_liq and entry_liq > 0:
-                         current_mcap_est = entry_mcap * (raw_jup_price / entry_price)
-                         ratio = current_mcap_est / entry_liq
-                         if ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD:
-                             logger.warning(f"SUSPICIOUS: {mint} Ratio {ratio:.1f} > {MCAP_LIQUIDITY_RATIO_THRESHOLD}. Verify.")
-                             is_suspicious = True
-                             
-                    # CHECK 2: Pure Price Multiple (> 5x Entry)
-                    # This captures "Fake Pumps" even if liquidity ratio looks okay
-                    if not is_suspicious and baseline_price and baseline_price > 0:
-                        if (raw_jup_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
-                             logger.warning(f"SUSPICIOUS: {mint} Price {raw_jup_price} is > 5x baseline {baseline_price}. Verify.")
-                             is_suspicious = True
-
-                    if is_suspicious:
-                        verified_data = await verify_suspicious_price_dexscreener(mint)
-                        if verified_data:
-                            dex_price = verified_data["price"]
-                            dex_mcap = verified_data["mcap"]
-                            dex_liq = verified_data["liquidity"]
-                            dex_vol = verified_data["volume_5m"]
-                            
-                            # Validation Logic
-                            is_valid = True
-                            
-                            # 1. Absolute Liquidity Check
-                            if dex_liq < MIN_ABSOLUTE_LIQUIDITY_USD:
-                                logger.warning(f"REJECTED {mint}: Low Liq ${dex_liq}")
-                                is_valid = False
-
-                            # 2. Ratio Check (if applicable)
-                            verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
-                            if verified_ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD and is_valid:
-                                # Only fail if ratio is bad AND we don't have enough volume
-                                if dex_vol < MIN_VOLUME_5M_USD:
-                                    logger.warning(f"REJECTED {mint}: High Ratio & Low Vol")
-                                    is_valid = False
-                            
-                            # 3. Consensus Check (Price Diff)
-                            price_diff_pct = abs(raw_jup_price - dex_price) / min(raw_jup_price, dex_price) * 100
-                            if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
-                                logger.info(f"Consensus Diff {price_diff_pct:.1f}%. Using safe lower price.")
-                                price = min(raw_jup_price, dex_price)
-                            else:
-                                price = (raw_jup_price + dex_price) / 2
-                                
-                            if is_valid:
-                                # Update consensus baseline
-                                token_data["consensus_baseline_price"] = price
-                            else:
-                                price = None # Failed validation
-                        else:
-                            price = None # Failed to verify
+                    if validated_price:
+                        await update_token_price(token_data, validated_price)
                     else:
-                        price = raw_jup_price
-                
-                # Fallback to Dexscreener if Jupiter missed it completely
-                if price is None and mint not in jupiter_prices:
-                     try:
-                        d_data = await verify_suspicious_price_dexscreener(mint)
-                        if d_data: price = d_data["price"]
-                     except Exception: pass
-
-                if price is not None:
-                    await update_token_price(token_data, price)
+                        handle_price_failure(token_data)
                 else:
-                    handle_price_failure(token_data)
+                    dex_data = await verify_suspicious_price_dexscreener(mint)
+                    if dex_data and dex_data["price"]:
+                        validated_price = await validate_price_with_multi_source(
+                            mint, token_data, dex_data["price"]
+                        )
+                        if validated_price:
+                            await update_token_price(token_data, validated_price)
+                        else:
+                            handle_price_failure(token_data)
+                    else:
+                        handle_price_failure(token_data)
 
-    # 3. Handle Retry Tokens
     for composite_key, token_data in tokens_to_retry.items():
         price = await fetch_current_price_validated(token_data["mint"], token_data)
         if price is not None:
@@ -1032,7 +982,8 @@ async def get_available_daily_files(signal_type: str) -> list[str]:
         if filename.endswith('.json'):
             try:
                 dates.append(filename.replace('.json', ''))
-            except: pass
+            except: 
+                pass
     return sorted(dates)
 
 async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -> list[dict]:
@@ -1052,18 +1003,15 @@ async def load_tokens_from_daily_files(signal_type: str, date_list: list[str]) -
 def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     """
     Calculate comprehensive statistics for a given set of tokens.
-    Now includes loss rate and average loss metrics.
     """
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(wins) + len(losses)
     
-    # Calculate traditional ROI metrics
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
     total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
-    # --- NEW: Loss Rate & Average Loss Calculation ---
     negative_tokens = [
         t for t in tokens 
         if t.get("status") == "loss" 
@@ -1074,7 +1022,6 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     loss_rate = (negative_count / total_valid * 100) if total_valid > 0 else 0.0
     negative_rois = [t["final_roi"] for t in negative_tokens]
     average_loss = sum(negative_rois) / len(negative_rois) if negative_rois else 0.0
-    # ---------------------------------------------------
 
     times_to_ath = [float(t["time_to_ath_minutes"]) for t in tokens if t.get("time_to_ath_minutes") is not None]
     times_to_50 = [float(t["time_to_50_percent_minutes"]) for t in wins if t.get("time_to_50_percent_minutes") is not None]
@@ -1106,11 +1053,6 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
 async def generate_summary_stats(signal_type: str):
     """
     Generates summary stats with strict Event-Based Attribution.
-    
-    Correction:
-    - WINS are attributed to 'hit_50_percent_time'.
-    - LOSSES are attributed to 'tracking_completed_at'.
-    - ACTIVE tokens are excluded from finalized stats.
     """
     logger.info(f"Generating summary stats for {signal_type}...")
     available_dates = await get_available_daily_files(signal_type)
@@ -1136,26 +1078,19 @@ async def generate_summary_stats(signal_type: str):
             status = t.get("status")
             attribution_date = None
 
-            # Filter 1: Exclude purely active tokens (only finalized or confirmed wins)
             if status == "active": 
                 continue
 
-            # Filter 2: Event-Based Attribution
             if status == "win":
-                # For WINS: Attribute to the moment the win occurred (hit_50_percent_time)
-                # This prevents "Zombie Wins" from lingering in 24h stats for days while they track.
                 ts = t.get("hit_50_percent_time")
                 if not ts:
-                    # Fallback for legacy data: Use tracking completion or ATH time
                     ts = t.get("tracking_completed_at") or t.get("ath_time")
                 attribution_date = parse_ts(ts) if ts else None
             
             elif status == "loss":
-                # For LOSSES: Attribute to the moment tracking ended (tracking_completed_at)
                 ts = t.get("tracking_completed_at")
                 attribution_date = parse_ts(ts) if ts else None
             
-            # Apply Timeframe Filter
             if attribution_date and attribution_date >= start_date:
                 filtered.append(t)
         
@@ -1168,7 +1103,6 @@ async def generate_summary_stats(signal_type: str):
 async def generate_overall_analytics():
     """
     Generate overall analytics combining discovery and alpha signals.
-    Relies on the pre-filtered summary stats from generate_summary_stats.
     """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")

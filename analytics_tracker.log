@@ -3101,3 +3101,8 @@ Traceback (most recent call last):
   File "C:\Python310\lib\asyncio\proactor_events.py", line 397, in _loop_writing
     self._write_fut = self._loop._proactor.send(self._sock, data)
 AttributeError: 'NoneType' object has no attribute 'send'
+2025-12-15 07:54:04,846 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/analytics/active_tracking.json "HTTP/2 200 OK"
+2025-12-15 07:54:06,697 - __main__ - INFO - Initialized with 308 active tokens.
+2025-12-15 07:54:06,741 - __main__ - INFO - Downloading signals...
+2025-12-15 07:54:26,462 - __main__ - ERROR - File 'overlap_results.json': Download error. Server disconnected
+2025-12-15 07:54:27,689 - httpx - INFO - HTTP Request: POST https://ldraroaloinsesjoayxc.supabase.co/storage/v1/object/sign/monitor-data/overlap_results_alpha.json "HTTP/2 200 OK"

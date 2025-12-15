@@ -36,13 +36,7 @@ import requests
 
 # LIST THE TOKENS TO DELETE HERE
 TOKENS_TO_DELETE = [
-    "EaF5q6ytD44srAYdxhshKLeYjVMdd5VnJQLUjwjPpump",
-    "Cfv795nP7eLdhzBVXMnVGUG6TfxCCc6ZvJSgqHvnpump",
-    "CSrwNk6B1DwWCHRMsaoDVUfD5bBMQCJPY72ZG3Nnpump",
-    "2FyaXsYRgUtdAwbxWfmp7DsLzQ1F1t4Y66XLaX2Jpump",
-    "5x1X3nHucdMk29ZZWpiRy4bcQkzgNwbbku5qMn5UzTvR",
-    "8QW23aW9W1qZC8WB1qFKuhmsgdVmmMWhpUwx4Cu4pump",
-    "3HMopyr5K6cdnxcHqaWLTijHDTkMrU1g4WXPkt8Ppump"
+    "nPdW6TsL7FdLVLyVSQXLwDru5379KhXgQyZF4rm1649"
 ]
 
 BUCKET_NAME = "monitor-data"

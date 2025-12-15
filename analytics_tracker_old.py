@@ -5,12 +5,15 @@ analytics_tracker.py
 Standalone Python script to track and analyze the performance of Solana
 memecoin trading signals from Supabase.
 
-REVISION: STABILITY FIXES APPLIED
-- FIXED: TypeError when summing 'final_roi' for active tokens (NoneType error).
-- FIXED: Upload 409 Duplicate errors by using the robust 'update' then 'upload' logic (no 'upsert' flag needed).
-- Wins -> Grouped by Date of Win (Written immediately, updated on finalization)
-- Losses -> Grouped by Date of Tracking Completion
-- Daily files update immediately upon Win or finalization.
+REVISION: ROBUST DATA INTEGRITY & TIMEFRAME ATTRIBUTION
+- CRITICAL FIX: "Fake Pump" Prevention. Added strict Consensus Verification to batch loop.
+  Previously, high ROI glitches were accepted if liquidity ratios were "okay".
+  Now, ANY price > 5x (SUSPICIOUS_PRICE_MULTIPLE) trigger strict Dexscreener verification.
+- CRITICAL FIX: "Timeframe Inflation" fixed. Wins are now attributed to the time they
+  hit the target (hit_50_percent_time), not when tracking completes.
+- CRITICAL FIX: "Zombie Wins" prevented. 'hit_50_percent' flag only sets after confirmed Supabase write.
+- CRITICAL FIX: "Archival Loss" prevented. Tokens are only removed from active tracking after confirmed Supabase write.
+- Fixed: Async handling for all Supabase file operations.
 """
 
 import os
@@ -41,6 +44,18 @@ TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days
 # Validation Thresholds
 MCAP_LIQUIDITY_RATIO_THRESHOLD = 10.0 # If Mcap / Liquidity > 10, verify
 MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious pump
+
+# Maximum realistic price increases
+MAX_REALISTIC_PRICE_MULTIPLE = 100.0  # Price can't be >100x entry price
+MAX_REALISTIC_ROI = 10000.0           # 10,000% (100x) maximum
+
+# Minimum liquidity requirements
+MIN_ABSOLUTE_LIQUIDITY_USD = 5000.0   # $5K minimum liquidity
+MIN_LIQUIDITY_FOR_HIGH_ROI = 20000.0  # $20K minimum if ROI > 500%
+
+# Consensus validation
+SUSPICIOUS_PRICE_MULTIPLE = 5.0       # Trigger consensus check if price >5x entry
+CONSENSUS_AGREEMENT_THRESHOLD = 20.0  # Sources must agree within 20%
 
 # Retry Logic
 RETRY_INTERVAL = 5              # Check every 5 seconds during retry
@@ -265,7 +280,7 @@ def parse_ts(ts_str: str) -> datetime:
 # --- Price Fetching & Validation Functions ---
 
 async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
-    """Fetch prices from Jupiter API in a batch."""
+    """Fetch prices from Jupiter API in a batch with rate limit handling."""
     global http_session
     if not http_session or http_session.closed:
         http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=JUPITER_TIMEOUT))
@@ -274,18 +289,33 @@ async def fetch_price_jupiter(mints: list[str]) -> dict[str, float]:
     params = {"ids": ",".join(mints)}
     prices = {}
     
-    try:
-        async with http_session.get(url, params=params) as response:
-            if response.status != 200:
-                return {}
-            data = await response.json()
-            for mint, info in data.items():
-                if info and info.get("usdPrice"):
-                    prices[mint] = float(info["usdPrice"])
-            return prices
-    except Exception as e:
-        logger.error(f"Error fetching Jupiter prices: {e}")
-        return {}
+    retries = 3
+    base_delay = 1
+    
+    for attempt in range(retries):
+        try:
+            async with http_session.get(url, params=params) as response:
+                if response.status == 429:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(f"Jupiter 429 (Rate Limit). Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                
+                if response.status != 200:
+                    logger.warning(f"Jupiter API error: {response.status}")
+                    return {}
+                    
+                data = await response.json()
+                for mint, info in data.items():
+                    if info and info.get("usdPrice"):
+                        prices[mint] = float(info["usdPrice"])
+                return prices
+        except Exception as e:
+            logger.error(f"Error fetching Jupiter prices (attempt {attempt + 1}): {e}")
+            if attempt < retries - 1:
+                await asyncio.sleep(base_delay)
+            
+    return {}
 
 async def fetch_price_dexscreener(mint: str) -> float | None:
     """Simple Dexscreener fetch for fallback purposes (returns price only)."""
@@ -407,6 +437,7 @@ async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dic
 async def fetch_current_price_validated(mint: str, token_data: dict) -> float | None:
     """
     Fetch price with validation logic (Jupiter -> Dexscreener if suspicious).
+    Used primarily during RETRY loops.
     """
     entry_price = token_data.get("entry_price")
     entry_mcap = token_data.get("entry_mcap")
@@ -422,6 +453,59 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
         logger.warning(f"Jupiter error for {mint}: {e}")
 
     if jupiter_price:
+        # Use baseline price for comparison (defaults to entry_price if not set)
+        baseline_price = token_data.get("consensus_baseline_price") or entry_price
+        
+        # Check if price increase is suspicious (>5x baseline) - trigger consensus validation
+        if baseline_price and baseline_price > 0 and (jupiter_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
+            price_multiple = jupiter_price / entry_price
+            logger.warning(f"SUSPICIOUS PRICE {mint}: {price_multiple:.1f}x entry. Triggering consensus...")
+            
+            # Fetch Dexscreener for consensus
+            dex_data = await verify_suspicious_price_dexscreener(mint)
+            
+            if dex_data:
+                dex_price = dex_data["price"]
+                dex_liquidity = dex_data["liquidity"]
+                dex_volume_5m = dex_data["volume_5m"]
+                
+                # Check minimum absolute liquidity
+                if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
+                    logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
+                    return None
+                
+                # Calculate consensus
+                price_diff_pct = abs(jupiter_price - dex_price) / min(jupiter_price, dex_price) * 100
+                
+                if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
+                    logger.warning(f"CONSENSUS FAIL {mint}: Jup=${jupiter_price:.8f} vs Dex=${dex_price:.8f} ({price_diff_pct:.1f}%)")
+                    validated_price = min(jupiter_price, dex_price)
+                    logger.info(f"Using conservative price: ${validated_price:.8f}")
+                else:
+                    validated_price = (jupiter_price + dex_price) / 2
+                    logger.info(f"CONSENSUS OK {mint}: {price_diff_pct:.1f}% diff. Avg: ${validated_price:.8f}")
+                
+                # Higher liquidity for extreme gains
+                potential_roi = calculate_roi(entry_price, validated_price)
+                if potential_roi > 500 and dex_liquidity < MIN_LIQUIDITY_FOR_HIGH_ROI:
+                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_LIQUIDITY_FOR_HIGH_ROI} liq, got ${dex_liquidity:.0f}")
+                    return None
+                
+                # Volume requirement
+                if potential_roi > 200 and dex_volume_5m < MIN_VOLUME_5M_USD:
+                    logger.warning(f"REJECTED {mint}: ROI {potential_roi:.0f}% needs ${MIN_VOLUME_5M_USD} vol, got ${dex_volume_5m:.0f}")
+                    return None
+                
+                # Update baseline after successful consensus validation
+                token_data["consensus_baseline_price"] = validated_price
+                logger.info(f"Updated consensus baseline for {mint} to ${validated_price:.8f}")
+                
+                return validated_price
+            else:
+                logger.warning(f"REJECTED {mint}: Consensus check failed - no Dex data")
+                return None
+        
+        # Existing mcap/liquidity ratio check
         if entry_price and entry_mcap and entry_liquidity and entry_liquidity > 0:
             current_mcap_est = entry_mcap * (jupiter_price / entry_price)
             ratio = current_mcap_est / entry_liquidity
@@ -436,6 +520,11 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
                     dex_mcap = dex_data["mcap"]
                     dex_liquidity = dex_data["liquidity"]
                     dex_vol_5m = dex_data["volume_5m"]
+                    
+                    # NEW: Check minimum absolute liquidity
+                    if dex_liquidity < MIN_ABSOLUTE_LIQUIDITY_USD:
+                        logger.warning(f"REJECTED {mint}: Liquidity ${dex_liquidity:.0f} < ${MIN_ABSOLUTE_LIQUIDITY_USD}")
+                        return None
                     
                     verified_ratio = dex_mcap / dex_liquidity if dex_liquidity > 0 else 9999
                     
@@ -461,6 +550,98 @@ async def fetch_current_price_validated(mint: str, token_data: dict) -> float | 
 
     return None
 
+# --- Analytics Generation (Daily File Handler) ---
+
+async def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool) -> bool:
+    """
+    Handles creating or updating entries in daily files.
+    - Downloads existing file first (prevent overwrite history).
+    - If entry exists: UPDATES it.
+    - If entry new: APPENDS it.
+    - Sets 'is_final' flag.
+    - Calculates daily summary stats.
+    - Uploads to Supabase.
+    - Returns True if successful, False otherwise.
+    """
+    remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
+    local_path = os.path.join(TEMP_DIR, remote_path)
+    
+    # 1. Ensure we have the latest version from Supabase
+    # Check local first, then try download.
+    daily_data = load_json(remote_path)
+    
+    if daily_data is None:
+        # Not found locally, try to download to ensure we don't overwrite remote history
+        downloaded = await download_file_from_supabase(remote_path, local_path)
+        if downloaded:
+            daily_data = load_json(remote_path)
+    
+    # If still None, assume it's a brand new day/file
+    if daily_data is None:
+        daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
+    
+    # 2. Prepare the Token Entry
+    token_key = get_composite_key(token_data["mint"], signal_type)
+    
+    # Deepcopy to avoid modifying the active tracking object with file-specific flags
+    entry_to_write = copy.deepcopy(token_data)
+    entry_to_write["is_final"] = is_final
+    
+    # 3. Insert or Update
+    tokens = daily_data.get("tokens", [])
+    found_index = -1
+    
+    for i, t in enumerate(tokens):
+        existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
+        if existing_key == token_key:
+            found_index = i
+            break
+            
+    if found_index != -1:
+        # UPDATE existing entry
+        tokens[found_index] = entry_to_write
+        logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
+    else:
+        # APPEND new entry
+        tokens.append(entry_to_write)
+        logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
+    
+    daily_data["tokens"] = tokens
+
+    # 4. Update Summary Stats (For this file)
+    wins = [t for t in tokens if t.get("status") == "win"]
+    losses = [t for t in tokens if t.get("status") == "loss"]
+    total_valid = len(tokens)
+    
+    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
+    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
+    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
+    
+    daily_data["daily_summary"] = {
+        "total_tokens": total_valid,
+        "wins": len(wins),
+        "losses": len(losses),
+        "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
+        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
+        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
+        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
+        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+    }
+
+    # 5. Save and Upload with Confirmation
+    saved_path = save_json(daily_data, remote_path)
+    if saved_path:
+        success = await upload_file_to_supabase(saved_path, remote_path)
+        if success:
+            logger.info(f"Successfully uploaded {remote_path}")
+            return True
+        else:
+            logger.error(f"Failed to upload {remote_path}")
+            return False
+    else:
+        logger.error(f"Failed to save local file {remote_path}")
+        return False
+
 # --- Core Tracking Logic ---
 
 def handle_price_failure(token_data: dict):
@@ -479,6 +660,7 @@ async def update_token_price(token_data: dict, price: float):
     """
     Async update of token price. 
     Handles WINS immediately to ensure daily files and stats are fresh.
+    CRITICAL: Validates persistence before updating memory state to prevent Zombie Wins.
     """
     now = get_now()
     entry_price = token_data["entry_price"]
@@ -505,39 +687,52 @@ async def update_token_price(token_data: dict, price: float):
         
         # CASE A: First time hitting 45% (The "Win" Moment)
         if not token_data["hit_50_percent"]:
+            logger.info(f"WIN CANDIDATE: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Attempting to write.")
+            
+            # Temporarily set values to prepare for write
+            original_status = token_data["status"]
             token_data["hit_50_percent"] = True
             token_data["hit_50_percent_time"] = to_iso(now)
             time_to_50 = (now - parse_ts(token_data["entry_time"])).total_seconds() / 60
             token_data["time_to_50_percent_minutes"] = round(time_to_50, 2)
             token_data["status"] = "win"
             
-            logger.info(f"WIN: {token_data.get('symbol', 'Unknown')} hit {current_roi:.2f}% ROI! Writing to daily file immediately.")
-            
             # Write to file
             win_date_str = now.strftime('%Y-%m-%d')
-            update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
+            success = await update_daily_file_entry(win_date_str, token_data["signal_type"], token_data, is_final=False)
             
-            # Trigger Stats Update Immediately (Fire and forget task)
-            asyncio.create_task(update_all_summary_stats())
+            if success:
+                logger.info(f"WIN CONFIRMED: {token_data.get('symbol')} stats saved to daily file.")
+                # Trigger Stats Update Immediately (Fire and forget task)
+                asyncio.create_task(update_all_summary_stats())
+            else:
+                logger.error(f"WIN WRITE FAILED: {token_data.get('symbol')}. Reverting state to retry next loop.")
+                # Revert state so we try again next time (Prevent Zombie Win)
+                token_data["hit_50_percent"] = False
+                token_data["hit_50_percent_time"] = None
+                token_data["time_to_50_percent_minutes"] = None
+                token_data["status"] = original_status
 
-        # CASE B: Already a Win, but hit a new ATH (Keep the daily file updated with the pump)
+        # CASE B: Already a Win, but hit a new ATH
         elif is_new_ath:
-            # We update the file again so the "ATH ROI" in the daily file isn't stuck at 45%
-            # We use the date of the win (hit_50_percent_time) to ensure we update the correct file
             if token_data.get("hit_50_percent_time"):
                 win_date = parse_ts(token_data["hit_50_percent_time"])
                 date_str = win_date.strftime('%Y-%m-%d')
-                # Update without marking final, just saving the new ATH
-                update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
+                # We try to update, but if it fails, it's not critical enough to revert the ATH in memory
+                await update_daily_file_entry(date_str, token_data["signal_type"], token_data, is_final=False)
 
-def finalize_token_tracking(composite_key: str, token_data: dict):
+async def finalize_token_tracking(composite_key: str, token_data: dict):
+    """
+    Finalizes a token.
+    CRITICAL: Only removes token from active_tracking if the file write is confirmed successful.
+    This prevents Archival Loss.
+    """
     mint = token_data["mint"]
-    logger.info(f"Tracking complete for {composite_key}. Final status: {token_data['status']}")
+    logger.info(f"Tracking complete for {composite_key}. Finalizing...")
     
-    # If it was active and never won, it's a loss.
+    # Update Status
     if token_data["status"] == "active":
         token_data["status"] = "loss"
-        # Ensure 'hit_50_percent' is explicitly false if not present
         if "hit_50_percent" not in token_data:
             token_data["hit_50_percent"] = False
     
@@ -547,29 +742,31 @@ def finalize_token_tracking(composite_key: str, token_data: dict):
     token_data["final_price"] = final_price
     token_data["final_roi"] = calculate_roi(token_data["entry_price"], final_price)
     
-    # --- PART 1 & 2: Option C1 Logic ---
     signal_type = token_data["signal_type"]
+    date_str = ""
     
     if token_data["status"] == "win":
         # Rule: Wins are stored by DATE OF WIN
-        # We update the existing entry in that file
         if token_data.get("hit_50_percent_time"):
             win_date = parse_ts(token_data["hit_50_percent_time"])
             date_str = win_date.strftime('%Y-%m-%d')
         else:
-            # Fallback if time missing (shouldn't happen)
             date_str = get_now().strftime('%Y-%m-%d')
-            
-        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
-        
     else:
         # Rule: Losses are stored by TRACKING END DATE
         date_str = get_now().strftime('%Y-%m-%d')
-        update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
+            
+    # CRITICAL: Attempt write
+    success = await update_daily_file_entry(date_str, signal_type, token_data, is_final=True)
     
-    if composite_key in active_tracking:
-        del active_tracking[composite_key]
-        logger.info(f"Removed {composite_key} from active tracking.")
+    if success:
+        if composite_key in active_tracking:
+            del active_tracking[composite_key]
+            logger.info(f"SUCCESS: Archived and removed {composite_key} from active tracking.")
+    else:
+        logger.error(f"FAILURE: Could not archive {composite_key}. Retaining in active tracking for retry.")
+        # We do NOT remove it. It will be picked up again in the next loop, 
+        # see that time > end_time, and call finalize_token_tracking again.
 
 async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: dict):
     # 1. Get Entry Data (Price, Mcap, Liquidity)
@@ -657,6 +854,7 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "ath_time": to_iso(entry_time),
         "status": "active",
         
+        "consensus_baseline_price": None,  # Updated after consensus validation to avoid redundant checks
         "hit_50_percent": False,
         "hit_50_percent_time": None,
         "time_to_ath_minutes": 0.0,
@@ -709,7 +907,8 @@ async def update_active_token_prices():
     for composite_key, token_data in list(active_tracking.items()):
         tracking_end_time = parse_ts(token_data["tracking_end_time"])
         if now >= tracking_end_time:
-            finalize_token_tracking(composite_key, token_data)
+            # IMPORTANT: await the async finalization
+            await finalize_token_tracking(composite_key, token_data)
             continue
 
         if token_data["retry_start_time"] is not None:
@@ -744,31 +943,68 @@ async def update_active_token_prices():
                     entry_price = token_data.get("entry_price")
                     entry_mcap = token_data.get("entry_mcap")
                     entry_liq = token_data.get("entry_liquidity")
+                    baseline_price = token_data.get("consensus_baseline_price") or entry_price
 
                     is_suspicious = False
+                    
+                    # CHECK 1: Mcap / Liquidity Ratio
                     if entry_price and entry_mcap and entry_liq and entry_liq > 0:
                          current_mcap_est = entry_mcap * (raw_jup_price / entry_price)
                          ratio = current_mcap_est / entry_liq
                          if ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD:
+                             logger.warning(f"SUSPICIOUS: {mint} Ratio {ratio:.1f} > {MCAP_LIQUIDITY_RATIO_THRESHOLD}. Verify.")
                              is_suspicious = True
-                    
+                             
+                    # CHECK 2: Pure Price Multiple (> 5x Entry)
+                    # This captures "Fake Pumps" even if liquidity ratio looks okay
+                    if not is_suspicious and baseline_price and baseline_price > 0:
+                        if (raw_jup_price / baseline_price) > SUSPICIOUS_PRICE_MULTIPLE:
+                             logger.warning(f"SUSPICIOUS: {mint} Price {raw_jup_price} is > 5x baseline {baseline_price}. Verify.")
+                             is_suspicious = True
+
                     if is_suspicious:
                         verified_data = await verify_suspicious_price_dexscreener(mint)
                         if verified_data:
+                            dex_price = verified_data["price"]
                             dex_mcap = verified_data["mcap"]
                             dex_liq = verified_data["liquidity"]
                             dex_vol = verified_data["volume_5m"]
-                            verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
                             
-                            if verified_ratio <= MCAP_LIQUIDITY_RATIO_THRESHOLD and dex_vol >= MIN_VOLUME_5M_USD:
-                                price = verified_data["price"]
+                            # Validation Logic
+                            is_valid = True
+                            
+                            # 1. Absolute Liquidity Check
+                            if dex_liq < MIN_ABSOLUTE_LIQUIDITY_USD:
+                                logger.warning(f"REJECTED {mint}: Low Liq ${dex_liq}")
+                                is_valid = False
+
+                            # 2. Ratio Check (if applicable)
+                            verified_ratio = dex_mcap / dex_liq if dex_liq > 0 else 9999
+                            if verified_ratio > MCAP_LIQUIDITY_RATIO_THRESHOLD and is_valid:
+                                # Only fail if ratio is bad AND we don't have enough volume
+                                if dex_vol < MIN_VOLUME_5M_USD:
+                                    logger.warning(f"REJECTED {mint}: High Ratio & Low Vol")
+                                    is_valid = False
+                            
+                            # 3. Consensus Check (Price Diff)
+                            price_diff_pct = abs(raw_jup_price - dex_price) / min(raw_jup_price, dex_price) * 100
+                            if price_diff_pct > CONSENSUS_AGREEMENT_THRESHOLD:
+                                logger.info(f"Consensus Diff {price_diff_pct:.1f}%. Using safe lower price.")
+                                price = min(raw_jup_price, dex_price)
                             else:
-                                price = None
+                                price = (raw_jup_price + dex_price) / 2
+                                
+                            if is_valid:
+                                # Update consensus baseline
+                                token_data["consensus_baseline_price"] = price
+                            else:
+                                price = None # Failed validation
                         else:
-                            price = None
+                            price = None # Failed to verify
                     else:
                         price = raw_jup_price
                 
+                # Fallback to Dexscreener if Jupiter missed it completely
                 if price is None and mint not in jupiter_prices:
                      try:
                         d_data = await verify_suspicious_price_dexscreener(mint)
@@ -787,82 +1023,6 @@ async def update_active_token_prices():
             await update_token_price(token_data, price)
         else:
             handle_price_failure(token_data)
-
-# --- Analytics Generation (Daily File Handler) ---
-
-def update_daily_file_entry(date_str: str, signal_type: str, token_data: dict, is_final: bool):
-    """
-    Handles creating or updating entries in daily files.
-    - If entry exists: UPDATES it (preventing duplicates).
-    - If entry new: APPENDS it.
-    - Sets 'is_final' flag.
-    - Calculates daily summary stats.
-    - Uploads to Supabase.
-    """
-    remote_path = f"analytics/{signal_type}/daily/{date_str}.json"
-    local_path = os.path.join(TEMP_DIR, remote_path)
-    
-    # 1. Load existing data or create new
-    daily_data = load_json(remote_path)
-    if daily_data is None:
-        # Assume new file if not found locally (or failed to load)
-        daily_data = {"date": date_str, "signal_type": signal_type, "tokens": [], "daily_summary": {}}
-    
-    # 2. Prepare the Token Entry
-    token_key = get_composite_key(token_data["mint"], signal_type)
-    
-    # Deepcopy to avoid modifying the active tracking object with file-specific flags
-    entry_to_write = copy.deepcopy(token_data)
-    entry_to_write["is_final"] = is_final
-    
-    # 3. Insert or Update
-    tokens = daily_data.get("tokens", [])
-    found_index = -1
-    
-    for i, t in enumerate(tokens):
-        existing_key = get_composite_key(t["mint"], t.get("signal_type", signal_type))
-        if existing_key == token_key:
-            found_index = i
-            break
-            
-    if found_index != -1:
-        # UPDATE existing entry
-        tokens[found_index] = entry_to_write
-        logger.info(f"Updated entry for {token_key} in {remote_path} (is_final={is_final})")
-    else:
-        # APPEND new entry
-        tokens.append(entry_to_write)
-        logger.info(f"Added new entry for {token_key} to {remote_path} (is_final={is_final})")
-    
-    daily_data["tokens"] = tokens
-
-    # 4. Update Summary Stats (For this file)
-    wins = [t for t in tokens if t.get("status") == "win"]
-    losses = [t for t in tokens if t.get("status") == "loss"]
-    total_valid = len(tokens)
-    
-    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    
-    # FIXED: handle final_roi=None for active tokens by treating as 0
-    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
-    
-    total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
-    
-    daily_data["daily_summary"] = {
-        "total_tokens": total_valid,
-        "wins": len(wins),
-        "losses": len(losses),
-        "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
-        "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
-        "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
-    }
-
-    # 5. Save and Upload
-    saved_path = save_json(daily_data, remote_path)
-    if saved_path:
-        asyncio.create_task(upload_file_to_supabase(saved_path, remote_path))
 
 async def get_available_daily_files(signal_type: str) -> list[str]:
     folder_path = f"analytics/{signal_type}/daily"
@@ -900,33 +1060,22 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     
     # Calculate traditional ROI metrics
     total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    
-    # FIXED: handle final_roi=None for active tokens by treating as 0
     total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
-    
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
 
     # --- NEW: Loss Rate & Average Loss Calculation ---
-    # Filter tokens with BOTH status="loss" AND negative final ROI
-    # This excludes any wins that may have crashed after hitting 45%
     negative_tokens = [
         t for t in tokens 
         if t.get("status") == "loss" 
         and t.get("final_roi") is not None 
         and t.get("final_roi") < 0
     ]
-    
     negative_count = len(negative_tokens)
-    
-    # Calculate loss rate (percentage of tokens with status=loss AND negative returns)
     loss_rate = (negative_count / total_valid * 100) if total_valid > 0 else 0.0
-    
-    # Calculate average loss for tokens with status=loss and negative ROI
     negative_rois = [t["final_roi"] for t in negative_tokens]
     average_loss = sum(negative_rois) / len(negative_rois) if negative_rois else 0.0
     # ---------------------------------------------------
 
-    # Time calculation logic
     times_to_ath = [float(t["time_to_ath_minutes"]) for t in tokens if t.get("time_to_ath_minutes") is not None]
     times_to_50 = [float(t["time_to_50_percent_minutes"]) for t in wins if t.get("time_to_50_percent_minutes") is not None]
 
@@ -939,28 +1088,30 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     return {
         "total_tokens": total_valid,
         "wins": len(wins),
-        "losses": len(losses),  # Kept: tokens that didn't hit 45%
+        "losses": len(losses),
         "success_rate": (len(wins) / total_valid * 100) if total_valid > 0 else 0,
-        
-        # --- NEW METRICS ---
-        "negative_returns": negative_count,  # Count of tokens with final_roi < 0
-        "loss_rate": round(loss_rate, 2),    # Percentage of tokens with negative ROI
-        "average_loss": round(average_loss, 2),  # Average ROI for negative tokens
-        # -------------------
-        
+        "negative_returns": negative_count,
+        "loss_rate": round(loss_rate, 2),
+        "average_loss": round(average_loss, 2),
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
-        
         "avg_time_to_ath_minutes": round(avg_time_to_ath, 2),
         "avg_time_to_50_percent_minutes": round(avg_time_to_50, 2),
         "total_aths_recorded": round(total_ath_roi, 2),
-        
         "top_tokens": top_tokens[:10]
     }
 
 async def generate_summary_stats(signal_type: str):
+    """
+    Generates summary stats with strict Event-Based Attribution.
+    
+    Correction:
+    - WINS are attributed to 'hit_50_percent_time'.
+    - LOSSES are attributed to 'tracking_completed_at'.
+    - ACTIVE tokens are excluded from finalized stats.
+    """
     logger.info(f"Generating summary stats for {signal_type}...")
     available_dates = await get_available_daily_files(signal_type)
     if not available_dates: return
@@ -972,7 +1123,7 @@ async def generate_summary_stats(signal_type: str):
         "1_day": now - timedelta(days=1),
         "7_days": now - timedelta(days=7),
         "1_month": now - timedelta(days=30),
-        "all_time": parse_ts(f"{available_dates[0]}T00:00:00Z")
+        "all_time": parse_ts(f"{available_dates[0]}T00:00:00Z") if available_dates else now - timedelta(days=365)
     }
     
     summary_data = {
@@ -980,10 +1131,34 @@ async def generate_summary_stats(signal_type: str):
     }
     
     for period, start_date in timeframes.items():
-        # Include all tokens that were *completed* after start_date, 
-        # OR if they are winners from that date file (standard logic: simply filter by token's timestamps if needed, 
-        # but here we follow the standard approach of checking tracking completion or creation)
-        filtered = [t for t in all_tokens if parse_ts(t.get("tracking_completed_at", to_iso(now))) >= start_date]
+        filtered = []
+        for t in all_tokens:
+            status = t.get("status")
+            attribution_date = None
+
+            # Filter 1: Exclude purely active tokens (only finalized or confirmed wins)
+            if status == "active": 
+                continue
+
+            # Filter 2: Event-Based Attribution
+            if status == "win":
+                # For WINS: Attribute to the moment the win occurred (hit_50_percent_time)
+                # This prevents "Zombie Wins" from lingering in 24h stats for days while they track.
+                ts = t.get("hit_50_percent_time")
+                if not ts:
+                    # Fallback for legacy data: Use tracking completion or ATH time
+                    ts = t.get("tracking_completed_at") or t.get("ath_time")
+                attribution_date = parse_ts(ts) if ts else None
+            
+            elif status == "loss":
+                # For LOSSES: Attribute to the moment tracking ended (tracking_completed_at)
+                ts = t.get("tracking_completed_at")
+                attribution_date = parse_ts(ts) if ts else None
+            
+            # Apply Timeframe Filter
+            if attribution_date and attribution_date >= start_date:
+                filtered.append(t)
+        
         summary_data["timeframes"][period] = calculate_timeframe_stats(filtered)
 
     remote_path = f"analytics/{signal_type}/summary_stats.json"
@@ -993,7 +1168,7 @@ async def generate_summary_stats(signal_type: str):
 async def generate_overall_analytics():
     """
     Generate overall analytics combining discovery and alpha signals.
-    Now includes combined loss rate and average loss metrics.
+    Relies on the pre-filtered summary stats from generate_summary_stats.
     """
     logger.info("Generating overall analytics...")
     disc = load_json("analytics/discovery/summary_stats.json")
@@ -1013,37 +1188,29 @@ async def generate_overall_analytics():
         wins = d["wins"] + a["wins"]
         losses = d["losses"] + a["losses"]
         
-        # --- Combine Loss Metrics ---
         negative_returns_d = d.get("negative_returns", 0)
         negative_returns_a = a.get("negative_returns", 0)
         total_negative = negative_returns_d + negative_returns_a
         
-        # Calculate combined loss rate
         combined_loss_rate = (total_negative / total * 100) if total > 0 else 0.0
         
-        # Calculate weighted average loss
         avg_loss_d = d.get("average_loss", 0)
         avg_loss_a = a.get("average_loss", 0)
         
         combined_avg_loss = 0.0
         if total_negative > 0:
-            # Weight by number of negative tokens from each signal type
             combined_avg_loss = (
                 (avg_loss_d * negative_returns_d) + (avg_loss_a * negative_returns_a)
             ) / total_negative
-        # ---------------------------------
         
-        # Weighted Averages for ROI
         avg_ath = 0
         if total > 0:
             avg_ath = ((d["average_ath_all"] * d["total_tokens"]) + (a["average_ath_all"] * a["total_tokens"])) / total
 
-        # Weighted Averages for TIME and TOTAL ATHs
         total_aths_d = d.get("total_aths_recorded", 0)
         total_aths_a = a.get("total_aths_recorded", 0)
         total_aths_combined = total_aths_d + total_aths_a
 
-        # Average Time to ATH (Weighted by number of ATHs recorded)
         avg_time_ath_d = d.get("avg_time_to_ath_minutes", 0)
         avg_time_ath_a = a.get("avg_time_to_ath_minutes", 0)
         
@@ -1053,7 +1220,6 @@ async def generate_overall_analytics():
                 (avg_time_ath_d * total_aths_d) + (avg_time_ath_a * total_aths_a)
             ) / total_aths_combined
 
-        # Average Time to 50% (Weighted by number of wins)
         avg_time_50_d = d.get("avg_time_to_50_percent_minutes", 0)
         avg_time_50_a = a.get("avg_time_to_50_percent_minutes", 0)
         
@@ -1068,22 +1234,16 @@ async def generate_overall_analytics():
         overall["timeframes"][period] = {
             "total_tokens": total,
             "wins": wins,
-            "losses": losses,  # Kept: total non-winners
+            "losses": losses,
             "success_rate": (wins / total * 100) if total > 0 else 0,
-            
-            # --- NEW METRICS ---
             "negative_returns": total_negative,
             "loss_rate": round(combined_loss_rate, 2),
             "average_loss": round(combined_avg_loss, 2),
-            # -------------------
-            
             "average_ath_all": avg_ath,
             "max_roi": max(d["max_roi"], a["max_roi"]),
-            
             "avg_time_to_ath_minutes": round(avg_time_ath_combined, 2),
             "avg_time_to_50_percent_minutes": round(avg_time_50_combined, 2),
             "total_aths_recorded": total_aths_combined,
-            
             "top_tokens": sorted(d["top_tokens"] + a["top_tokens"], key=lambda x: x["ath_roi"], reverse=True)[:10]
         }
 
