@@ -181,7 +181,8 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
                 "concentration": result.get("concentration", 0.0),
                 "checked_at": result.get("checked_at"),
                 "dexscreener": dexscreener_data,
-                "rugcheck": rugcheck_data
+                "rugcheck": rugcheck_data,
+                "ml_passed": last_entry.get("ML_PASSED", False)
             }
         
         logger.debug(f"📊 Loaded {len(latest_tokens)} tokens from overlap file")
@@ -528,6 +529,11 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 )
 
                 if is_alert_required:
+                    # ML Filtering: Only send alerts if ML check passed
+                    if not token_info.get("ml_passed"):
+                        logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False")
+                        continue
+
                     if is_grade_change:
                         logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
                         alerts_state[token_id]["last_grade"] = grade

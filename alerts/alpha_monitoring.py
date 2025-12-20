@@ -298,6 +298,12 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 # Get latest data and grade from the most recent entry
                 latest_data = entry[-1] if isinstance(entry, list) else entry
                 current_grade = latest_data.get("result", {}).get("grade", "N/A")
+                ml_passed = latest_data.get("ML_PASSED", False)
+
+                # ML Filtering: Only send alerts if ML check passed
+                if not ml_passed:
+                    logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False")
+                    continue
                 
                 # Check if token exists in state
                 existing_state = alerted_tokens.get(mint)

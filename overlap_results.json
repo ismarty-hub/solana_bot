@@ -1,0 +1,78 @@
+{
+  "6iJmdJaty4zdvuxv5v4PnDvwgL2kZG1vshgo6tArESPK": [
+    {
+      "ts": "2025-12-19T17:15:34.588611+00:00",
+      "result": {
+        "token": "6iJmdJaty4zdvuxv5v4PnDvwgL2kZG1vshgo6tArESPK",
+        "checked_at": "2025-12-19T17:14:58.921517+00:00",
+        "top_holders_checked": 110,
+        "overlap_count": 6,
+        "overlap_percentage": 5.45,
+        "concentration": 0.05,
+        "weighted_concentration": 3.88,
+        "total_winner_wallets": 13217,
+        "overlap_wallets_sample": [
+          "6K8WfpZuK2HfhTLn2oHtd1pkbTgo6iUFdLT1rNWWiWGd",
+          "EGeNRu58UEqU1u1J5g8LZq25zJN1h6n4Sf2W3BNubRkP",
+          "7VtfL8fvgNfhz17qKRMjzQEXgbdpnHHHQRh54R9jP2RJ",
+          "7QViFKQhbmHeSkncv6EzHRC62T3RAGeAoLBekfrnSeUY",
+          "kiwiC4pg5mC4N5AhpXc4Av3V6oV7Sn2p3CqB7NeHbJJ",
+          "7NNzakXLFv2VfhUuoZ9i4Uy4f63BDJcR96tMCucXa6KL"
+        ],
+        "grade": "LOW",
+        "detected_via": "rugcheck",
+        "block_time": 1766163886,
+        "token_metadata": {
+          "fdv_usd": 0.0,
+          "volume_usd": 0.0,
+          "source_dex": "unknown",
+          "price_change_percentage": 0.0
+        },
+        "dexscreener": {
+          "current_price_usd": 1.289e-05
+        }
+      },
+      "security": "passed_rpc_fallback",
+      "probation_meta": {
+        "explanation": "RPC Fallback - Concentration check skipped"
+      },
+      "rugcheck": {
+        "top1_holder_pct": 0.0,
+        "top_10_holders_pct": 0.0,
+        "holder_count": 0,
+        "has_authorities": false,
+        "creator_balance": 0.0005525788112000006,
+        "transfer_fee_pct": 0,
+        "lp_locked_pct": null,
+        "total_liquidity_usd": 24219.93,
+        "lp_lock_details": []
+      },
+      "dexscreener": {
+        "current_price_usd": 1.365e-05,
+        "market_cap_usd": 13656.0
+      },
+      "ml_prediction": {
+        "probability": 0.055853787286739266,
+        "confidence": "VERY LOW",
+        "risk_tier": "VERY HIGH RISK",
+        "action": "AVOID",
+        "error": null,
+        "key_metrics": {
+          "token_age_hours": 0.18106344123681387,
+          "liquidity_usd": 23536.15,
+          "volume_h24_usd": 16775.95,
+          "price_change_h24_pct": 20.09,
+          "insider_supply_pct": 0.0,
+          "top_10_holders_pct": 96.47695645354169,
+          "pump_dump_risk_score": 30.0,
+          "market_health_score": 2656.7741156099273
+        },
+        "warnings": [
+          "\u26a0\ufe0f Extreme holder concentration (whale risk)",
+          "\u26a0\ufe0f Liquidity not sufficiently locked"
+        ]
+      },
+      "ML_PASSED": false
+    }
+  ]
+}
