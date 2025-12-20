@@ -626,12 +626,16 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
     
     daily_data["tokens"] = tokens
 
-    wins = [t for t in tokens if t.get("status") == "win"]
-    losses = [t for t in tokens if t.get("status") == "loss"]
-    total_valid = len(tokens)
+    # Filter for stats calculation - ONLY tokens that passed ML check
+    # We use .get("ML_PASSED") safely. Defaults to False if not present (legacy data).
+    ml_passed_tokens = [t for t in tokens if t.get("ML_PASSED") is True]
+
+    wins = [t for t in ml_passed_tokens if t.get("status") == "win"]
+    losses = [t for t in ml_passed_tokens if t.get("status") == "loss"]
+    total_valid = len(ml_passed_tokens)
     
-    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in tokens)
-    total_final_roi_all = sum((t.get("final_roi") or 0) for t in tokens)
+    total_ath_roi_all = sum(t.get("ath_roi", 0) for t in ml_passed_tokens)
+    total_final_roi_all = sum((t.get("final_roi") or 0) for t in ml_passed_tokens)
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
     
     daily_data["daily_summary"] = {
@@ -642,7 +646,7 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
+        "max_roi": max((t.get("ath_roi", 0) for t in ml_passed_tokens), default=0),
     }
 
     saved_path = save_json(daily_data, remote_path)
@@ -1004,6 +1008,9 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
     """
     Calculate comprehensive statistics for a given set of tokens.
     """
+    # Filter for stats calculation - ONLY tokens that passed ML check
+    tokens = [t for t in tokens if t.get("ML_PASSED") is True]
+
     wins = [t for t in tokens if t.get("status") == "win"]
     losses = [t for t in tokens if t.get("status") == "loss"]
     total_valid = len(wins) + len(losses)
