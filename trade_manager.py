@@ -560,7 +560,8 @@ class PortfolioManager:
             "token_age_hours": token_data.get("token_age_hours"),
             "entry_mcap": token_data.get("entry_mcap"),
             "entry_liquidity": token_data.get("entry_liquidity"),
-            "avg_buy_price": entry_price
+            "avg_buy_price": entry_price,
+            "ml_passed": token_data.get("ml_passed", False)
         }
         
         portfolio["capital_usd"] -= size_usd

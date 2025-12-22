@@ -844,6 +844,9 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
 
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
+    # Get ML_PASSED from signal data
+    ml_passed = signal_data.get("ML_PASSED", False)
+    
     token_data = {
         "mint": mint,
         "signal_type": signal_type,
@@ -882,7 +885,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         ],
         "final_price": None,
         "final_roi": None,
-        "tracking_completed_at": None
+        "tracking_completed_at": None,
+        "ML_PASSED": ml_passed
     }
     
     composite_key = get_composite_key(mint, signal_type)

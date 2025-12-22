@@ -148,6 +148,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
     """
     Load overlap_results.pkl from local disk.
     Includes pre-fetched dexscreener and rugcheck data from token_monitor.py.
+    ML_PASSED is stored at the top level of each entry.
     """
     if not OVERLAP_FILE.exists() or OVERLAP_FILE.stat().st_size == 0:
         logger.debug("ℹ️ No local overlap file yet (will be downloaded from Supabase)")
@@ -509,8 +510,12 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 
                 if should_broadcast:
                     # ML Filtering: Only broadcast if ML check passed
-                    if not token_info.get("ml_passed"):
+                    ml_passed = token_info.get("ml_passed")
+                    logger.debug(f"🔍 Broadcast check for {token_id[:8]}... - ML_PASSED: {ml_passed}")
+                    
+                    if not ml_passed:
                         logger.debug(f"⏭️ Skipping broadcast for {token_id[:8]}... - ML_PASSED is False")
+                        alerts_state[token_id]["broadcasted"] = True
                     else:
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         try:
