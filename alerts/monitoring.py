@@ -149,6 +149,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
     Load overlap_results.pkl from local disk.
     Includes pre-fetched dexscreener and rugcheck data from token_monitor.py.
     ML_PASSED is stored at the top level of each entry.
+    Includes ML prediction data for enhanced alerts.
     """
     if not OVERLAP_FILE.exists() or OVERLAP_FILE.stat().st_size == 0:
         logger.debug("ℹ️ No local overlap file yet (will be downloaded from Supabase)")
@@ -170,6 +171,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
             result = last_entry.get("result", {})
             dexscreener_data = last_entry.get("dexscreener", {})
             rugcheck_data = last_entry.get("rugcheck", {})
+            ml_prediction_data = result.get("ml_prediction", {})
             
             latest_tokens[token_id] = {
                 "grade": result.get("grade", "NONE"),
@@ -183,6 +185,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
                 "checked_at": result.get("checked_at"),
                 "dexscreener": dexscreener_data,
                 "rugcheck": rugcheck_data,
+                "ml_prediction": ml_prediction_data,
                 "ml_passed": last_entry.get("ML_PASSED", False)
             }
         
