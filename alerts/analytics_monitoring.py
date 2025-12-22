@@ -352,6 +352,7 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                                 "entry_mcap": data.get("entry_mcap"),
                                 "entry_liquidity": data.get("entry_liquidity"),
                                 "ml_prediction": data.get("ml_prediction") if isinstance(data.get("ml_prediction"), dict) else {},
+                                "ml_passed": data.get("ML_PASSED", False),
                             }
 
                             await portfolio_manager.process_new_signal(

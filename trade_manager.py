@@ -392,6 +392,11 @@ class PortfolioManager:
         Process new signal from analytics_monitoring loop.
         Uses tracking_end_time from analytics directly.
         """
+        # ML Filtering: Only open positions if ML check passed
+        if not token_data.get("ml_passed", False):
+            logger.debug(f"⏭️ Skipping position for {token_data.get('mint', '')[:8]}... - ML_PASSED is False")
+            return
+        
         portfolio = self.get_portfolio(chat_id)
         mint = token_data.get("mint")
         signal_type = token_data.get("signal_type", "discovery")

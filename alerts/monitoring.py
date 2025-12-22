@@ -508,14 +508,18 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 )
                 
                 if should_broadcast:
-                    mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
-                    try:
-                        await broadcast_mint_to_groups(app, mint_address)
-                        alerts_state[token_id]["broadcasted"] = True
-                        logger.info(f"✅ Broadcasted to groups: {mint_address[:8]}... (Grade: {grade})")
-                        state_updated_this_cycle += 1
-                    except Exception as e:
-                        logger.error(f"❌ Broadcast failed for {mint_address[:8]}...: {e}")
+                    # ML Filtering: Only broadcast if ML check passed
+                    if not token_info.get("ml_passed"):
+                        logger.debug(f"⏭️ Skipping broadcast for {token_id[:8]}... - ML_PASSED is False")
+                    else:
+                        mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
+                        try:
+                            await broadcast_mint_to_groups(app, mint_address)
+                            alerts_state[token_id]["broadcasted"] = True
+                            logger.info(f"✅ Broadcasted to groups: {mint_address[:8]}... (Grade: {grade})")
+                            state_updated_this_cycle += 1
+                        except Exception as e:
+                            logger.error(f"❌ Broadcast failed for {mint_address[:8]}...: {e}")
                 
                 # --- Alert Logic ---
                 # Send alert on:
