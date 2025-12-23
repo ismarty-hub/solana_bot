@@ -51,7 +51,8 @@ logger = logging.getLogger(__name__)
 ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
 SNAPSHOT_FILE = DATA_DIR / "last_processed_tracking.json"
 OVERLAP_FILE = DATA_DIR / "overlap_results.pkl"
-POLL_INTERVAL = 300  # 5 minutes
+ALPHA_OVERLAP_FILE = DATA_DIR / "overlap_results_alpha.pkl"
+POLL_INTERVAL = 30  # 30 seconds
 
 
 def parse_iso_to_dt(s: str) -> Optional[datetime]:
@@ -128,41 +129,40 @@ def get_composite_key(mint: str, signal_type: str) -> str:
 def get_grade_from_overlap(mint: str) -> str:
     """
     Attempt to read the token grade from the overlap results file.
-    Returns a grade string (e.g. 'HIGH', 'MEDIUM', 'LOW') or 'MEDIUM' default.
-    Handles missing file or unexpected structure gracefully.
+    Checks discovery first, then alpha.
     """
-    try:
-        if not OVERLAP_FILE.exists():
-            logger.debug("Overlap file not present; returning default grade MEDIUM")
-            return "MEDIUM"
+    files_to_check = [OVERLAP_FILE, ALPHA_OVERLAP_FILE]
+    
+    for overlap_file in files_to_check:
+        try:
+            if not overlap_file.exists():
+                continue
 
-        overlap = joblib.load(OVERLAP_FILE)
-        if not isinstance(overlap, dict):
-            logger.debug("Overlap content unexpected; returning MEDIUM")
-            return "MEDIUM"
+            overlap = joblib.load(overlap_file)
+            if not isinstance(overlap, dict):
+                continue
 
-        history = overlap.get(mint)
-        if not history:
-            for k, v in overlap.items():
-                if isinstance(k, str) and k.endswith(mint):
-                    history = v
-                    break
+            history = overlap.get(mint)
+            if not history:
+                # Handle case-insensitive or partial matches if necessary
+                for k, v in overlap.items():
+                    if isinstance(k, str) and k.endswith(mint):
+                        history = v
+                        break
 
-        if not history or not isinstance(history, list) or not history[-1]:
-            logger.debug("Overlap history missing or malformed; returning MEDIUM")
-            return "MEDIUM"
+            if not history or not isinstance(history, list) or not history[-1]:
+                continue
 
-        last_entry = history[-1]
-        result = last_entry.get("result", {}) if isinstance(last_entry, dict) else {}
-        grade = result.get("grade")
-        if not grade:
-            logger.debug("Grade missing in overlap result; returning MEDIUM")
-            return "MEDIUM"
+            last_entry = history[-1]
+            result = last_entry.get("result", {}) if isinstance(last_entry, dict) else {}
+            grade = result.get("grade")
+            if grade:
+                return grade
+        except Exception as e:
+            logger.debug(f"Error checking {overlap_file.name} for {mint}: {e}")
+            continue
 
-        return grade
-    except Exception as e:
-        logger.warning(f"Error loading grade from overlap: {e}. Returning default MEDIUM.")
-        return "MEDIUM"
+    return "MEDIUM"
 
 
 def get_user_activation_time(user_prefs: Dict[str, Any]) -> Optional[datetime]:
