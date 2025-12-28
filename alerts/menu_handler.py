@@ -45,8 +45,7 @@ async def handle_menu_callback(
     # query.answer() removed from here to avoid double-answering
     # It will be called within each handler block as needed.
     
-        logger.debug(f"Failed to answer callback query: {e}")
-        # Continue processing even if answer fails
+
 
     
     # ========================================================================
