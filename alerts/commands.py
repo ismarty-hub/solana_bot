@@ -52,17 +52,11 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     chat_id = str(update.effective_chat.id)
     logging.info(f"🚀 User {chat_id} started bot")
 
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_html(
-            f"👋 Welcome!\n\n"
-            f"❌ You are not subscribed to alerts.\n"
-            f"Please contact the admin to activate your subscription."
-        )
-        return
-
+    # Ensure user exists and is active
     user_manager.activate_user(chat_id)
     
-    # Show the main menu
+    # Show the main menu (subscription status will be displayed there)
+    from alerts.menu_navigation import show_main_menu
     await show_main_menu(update.message, user_manager, chat_id)
 
 # --- ALPHA ALERTS COMMANDS ---
@@ -193,10 +187,8 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
 async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /myalerts command, now shows modes as well."""
     chat_id = str(update.effective_chat.id)
+    # Allowed for all users
     
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
-        return
     
     prefs = user_manager.get_user_prefs(chat_id)
     stats = user_manager.get_user_stats(chat_id)
@@ -264,10 +256,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager):
     """Enable paper trading mode and configure capital with improved UX."""
+    # Allowed for all users
     chat_id = str(update.effective_chat.id)
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You must be a subscribed user to enable paper trading.")
-        return
+    
     
     # Check if already enabled
     prefs = user_manager.get_user_prefs(chat_id)
@@ -853,9 +844,8 @@ def _format_prediction_result(mint: str, data: dict) -> str:
 async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /predict [mint] command."""
     chat_id = str(update.effective_chat.id)
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
-        return
+    # Allowed for all users
+    
 
     if not context.args or len(context.args) != 1:
         await update.message.reply_html(
@@ -899,9 +889,8 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
 async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /predict_batch [mint1] [mint2] ... command."""
     chat_id = str(update.effective_chat.id)
-    if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
-        return
+    # Allowed for all users
+    
 
     mints = [arg.strip() for arg in context.args]
     
@@ -1222,10 +1211,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 logging.warning(f"Failed to send CA in private chat: {e}")
             return
 
-    # --- Subscription Check (for all other user-specific commands) ---
-    if not user_manager.is_subscribed(chat_id):
-        await query.answer("⛔ You are not subscribed.", show_alert=True)
-        return
+    # Allowed for all users
+    
     
     # --- Mode Selection ---
     if data == "mode_alerts":
@@ -1464,10 +1451,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 logging.warning(f"Failed to send CA in private chat: {e}")
             return
 
-    # --- Subscription Check (for all other user-specific commands) ---
-    if not user_manager.is_subscribed(chat_id):
-        await query.answer("⛔ You are not subscribed.", show_alert=True)
-        return
+    # Allowed for all users
+    
     
     # --- Mode Selection ---
     if data == "mode_alerts":
@@ -1709,10 +1694,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 logging.warning(f"Failed to send CA in private chat: {e}")
             return
 
-    # --- Subscription Check (for all other user-specific commands) ---
-    if not user_manager.is_subscribed(chat_id):
-        await query.answer("⛔ You are not subscribed.", show_alert=True)
-        return
+    # Allowed for all users
+    
     
     # --- Mode Selection ---
     if data == "mode_alerts":
@@ -1952,10 +1935,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 logging.warning(f"Failed to send CA in private chat: {e}")
             return
 
-    # --- Subscription Check (for all other user-specific commands) ---
-    if not user_manager.is_subscribed(chat_id):
-        await query.answer("⛔ You are not subscribed.", show_alert=True)
-        return
+    # Allowed for all users
+    
     
     # --- Mode Selection ---
     if data == "mode_alerts":
@@ -2166,10 +2147,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 logging.warning(f"Failed to send CA in private chat: {e}")
             return
 
-    # --- Subscription Check (for all other user-specific commands) ---
-    if not user_manager.is_subscribed(chat_id):
-        await query.answer("⛔ You are not subscribed.", show_alert=True)
-        return
+    # Allowed for all users
+    
     
     # --- Mode Selection ---
     if data == "mode_alerts":

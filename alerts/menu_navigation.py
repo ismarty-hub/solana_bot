@@ -53,10 +53,26 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
     user_prefs = user_manager.get_user_prefs(chat_id)
     modes = user_prefs.get("modes", [])
     
+    # Determine subscription status
+    is_subbed = user_manager.is_subscribed(chat_id)
+    is_expired = user_manager.is_subscription_expired(chat_id)
+    
+    if is_subbed:
+        sub_status = "✅ Active"
+    elif is_expired:
+        sub_status = "❌ Expired"
+    else:
+        sub_status = "❌ Inactive"
+        
+    # Get expiry date if available
+    expires_at = user_prefs.get("expires_at", "N/A")
+    if expires_at != "N/A" and "Z" in expires_at:
+        expires_at = expires_at.replace("Z", "").replace("T", " ")[:16]
+
     # Determine active mode indicators
     alerts_active = "✅" if "alerts" in modes else "⭕"
     trading_active = "✅" if "papertrade" in modes else "⭕"
-    
+
     keyboard = [
         [InlineKeyboardButton("📊 Dashboard & Trading", callback_data="menu_dashboard")],
         [InlineKeyboardButton(f"🔔 Alerts {alerts_active}", callback_data="menu_alerts")],
@@ -69,6 +85,8 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
     
     menu_text = (
         f"📱 <b>Main Menu</b>\n\n"
+        f"<b>Subscription:</b> {sub_status}\n"
+        f"<b>Expires:</b> <code>{expires_at}</code>\n\n"
         f"Welcome! Use the buttons to navigate all features.\n"
         f"Commands also work if you prefer typing.\n\n"
         f"<b>Active Modes:</b>\n"
@@ -76,6 +94,9 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
         f"• 📈 Trading: {trading_active}\n\n"
         f"<b>Pro Tip:</b> Type /help anytime for all commands."
     )
+    
+    if not is_subbed:
+        menu_text += "\n\n⚠️ <i>Alerts are disabled without active subscription.</i>"
     
     if edit:
         await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")

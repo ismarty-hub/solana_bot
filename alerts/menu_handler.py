@@ -65,6 +65,9 @@ async def handle_menu_callback(
         return
     
     elif data == "setalerts_menu":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
+            return
         await show_alert_grades_menu(query.message, edit=True)
         return
     
@@ -80,10 +83,16 @@ async def handle_menu_callback(
         return
     
     elif data == "alpha_menu":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required for Alpha Alerts.", show_alert=True)
+            return
         await show_alpha_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "alpha_subscribe_menu":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
         # Create a new Update object with the message from callback_query
         from telegram import Update as TgUpdate
         from types import SimpleNamespace
@@ -97,6 +106,9 @@ async def handle_menu_callback(
         return
     
     elif data == "alpha_unsubscribe_menu":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
         # Create a new Update object with the message from callback_query
         from telegram import Update as TgUpdate
         from types import SimpleNamespace
@@ -475,6 +487,9 @@ async def handle_menu_callback(
     # GRADE SELECTION
     # ========================================================================
     elif data.startswith("grade_"):
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
         grade = data.replace("grade_", "").upper()
         user_prefs = user_manager.get_user_prefs(chat_id)
         grades = user_prefs.get("grades", [])
@@ -491,6 +506,9 @@ async def handle_menu_callback(
         return
     
     elif data == "grades_done":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
         user_prefs = user_manager.get_user_prefs(chat_id)
         grades = user_prefs.get("grades", [])
         grades_text = ", ".join(grades) if grades else "None selected"
