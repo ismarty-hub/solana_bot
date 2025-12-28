@@ -53,7 +53,9 @@ SIGNAL_FRESHNESS_WINDOW = 420  # 7 minutes - only execute signals this fresh
 # Bot Configuration
 # ----------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
+raw_admins = os.getenv("ADMIN_USER_ID", "")
+# Parse comma-separated string into list of integers
+ADMIN_USER_ID = [int(x.strip()) for x in raw_admins.split(",") if x.strip().replace("-", "").isdigit()]
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is required")

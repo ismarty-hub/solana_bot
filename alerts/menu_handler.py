@@ -42,10 +42,9 @@ async def handle_menu_callback(
     data = query.data
     chat_id = str(query.from_user.id)
     
-    # Answer callback query with timeout handling
-    try:
-        await query.answer()
-    except Exception as e:
+    # query.answer() removed from here to avoid double-answering
+    # It will be called within each handler block as needed.
+    
         logger.debug(f"Failed to answer callback query: {e}")
         # Continue processing even if answer fails
 
@@ -54,6 +53,7 @@ async def handle_menu_callback(
     # MAIN MENU
     # ========================================================================
     if data == "menu_main":
+        await query.answer()
         await show_main_menu(query.message, user_manager, chat_id, edit=True)
         return
     
@@ -61,17 +61,22 @@ async def handle_menu_callback(
     # ALERTS MENU
     # ========================================================================
     elif data == "menu_alerts":
+        await query.answer()
         await show_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "setalerts_menu":
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
             return
         await show_alert_grades_menu(query.message, edit=True)
         return
     
     elif data == "myalerts_direct":
+        await query.answer()
         # Call the actual myalerts command
         # Create a new Update object with the message from callback_query
         from telegram import Update as TgUpdate
@@ -84,14 +89,20 @@ async def handle_menu_callback(
     
     elif data == "alpha_menu":
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required for Alpha Alerts.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required for Alpha Alerts.", show_alert=True)
             return
         await show_alpha_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "alpha_subscribe_menu":
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
             return
         # Create a new Update object with the message from callback_query
         from telegram import Update as TgUpdate
@@ -107,7 +118,10 @@ async def handle_menu_callback(
     
     elif data == "alpha_unsubscribe_menu":
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
             return
         # Create a new Update object with the message from callback_query
         from telegram import Update as TgUpdate
@@ -125,10 +139,12 @@ async def handle_menu_callback(
     # TRADING MENU
     # ========================================================================
     elif data == "menu_trading":
+        await query.answer()
         await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
     elif data == "enable_trading":
+        await query.answer()
         await show_enable_trading_menu(query.message, edit=True)
         return
     
@@ -154,6 +170,7 @@ async def handle_menu_callback(
         return
     
     elif data == "portfolio_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         new_update = TgUpdate(
             update_id=update.update_id,
@@ -163,6 +180,7 @@ async def handle_menu_callback(
         return
     
     elif data == "pnl_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         new_update = TgUpdate(
             update_id=update.update_id,
@@ -172,6 +190,7 @@ async def handle_menu_callback(
         return
     
     elif data == "history_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         new_update = TgUpdate(
             update_id=update.update_id,
@@ -181,6 +200,7 @@ async def handle_menu_callback(
         return
     
     elif data == "performance_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         new_update = TgUpdate(
             update_id=update.update_id,
@@ -190,6 +210,7 @@ async def handle_menu_callback(
         return
     
     elif data == "watchlist_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         from types import SimpleNamespace
         new_update = TgUpdate(
@@ -202,6 +223,7 @@ async def handle_menu_callback(
         return
     
     elif data == "resetcapital_menu":
+        await query.answer()
         await show_reset_capital_menu(query.message, edit=True)
         return
     
@@ -229,10 +251,12 @@ async def handle_menu_callback(
     # ML MENU
     # ========================================================================
     elif data == "menu_ml":
+        await query.answer()
         await show_ml_menu(query.message, edit=True)
         return
     
     elif data == "predict_single":
+        await query.answer()
         await query.message.reply_html(
             "🎯 <b>ML Prediction - Single Token</b>\n\n"
             "Send a token mint address:\n"
@@ -242,6 +266,7 @@ async def handle_menu_callback(
         return
     
     elif data == "predict_batch_menu":
+        await query.answer()
         await query.message.reply_html(
             "📊 <b>ML Prediction - Batch</b>\n\n"
             "Send comma-separated token mint addresses:\n"
@@ -254,6 +279,7 @@ async def handle_menu_callback(
     # DASHBOARD MENU (New)
     # ========================================================================
     elif data == "menu_dashboard":
+        await query.answer()
         await show_dashboard_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
@@ -261,10 +287,12 @@ async def handle_menu_callback(
     # MAIN SETTINGS MENU
     # ========================================================================
     elif data == "menu_settings":
+        await query.answer()
         await show_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
     elif data == "settings_mode":
+        await query.answer()
         await show_mode_selection_menu(query.message, edit=True)
         return
     
@@ -272,6 +300,7 @@ async def handle_menu_callback(
     # PAPER TRADING SETTINGS SUBMENU (New)
     # ========================================================================
     elif data == "settings_trading":
+        await query.answer()
         await show_trading_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
@@ -279,6 +308,7 @@ async def handle_menu_callback(
     # STOP LOSS SETTINGS MENU (New)
     # ========================================================================
     elif data == "settings_sl_menu":
+        await query.answer()
         await show_sl_settings_menu(query.message, user_manager, chat_id, edit=True)
         return
     
@@ -307,6 +337,7 @@ async def handle_menu_callback(
     # TRADE SIZE MODE SETTINGS MENU (New)
     # ========================================================================
     elif data == "settings_trade_size_menu":
+        await query.answer()
         await show_trade_size_mode_menu(query.message, user_manager, chat_id, edit=True)
         return
     
@@ -342,16 +373,22 @@ async def handle_menu_callback(
     # ========================================================================
     # ALERT SETTINGS SUBMENU (New)
     # ========================================================================
-    elif data == "settings_alerts_submenu":
+    elif data == "settings_alerts_submenu" or data == "settings_tp":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
+            return
+        await query.answer()
         await show_alert_settings_menu(query.message, edit=True)
         return
     
     # ========================================================================
     # LEGACY SETTINGS MENU (For backward compat)
     # ========================================================================
-    elif data == "settings_tp":
-        await show_alert_settings_menu(query.message, edit=True)
-        return
+    # settings_tp handled above
+    
     
     elif data == "menu_trading":
         await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
@@ -373,6 +410,13 @@ async def handle_menu_callback(
         return
     
     elif data == "tp_discovery_menu":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
         await query.message.reply_html(
             "🔍 <b>Discovery Take Profit</b>\n\n"
             "Send a number for take profit percentage:\n"
@@ -386,6 +430,13 @@ async def handle_menu_callback(
         return
     
     elif data == "tp_alpha_menu":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
         await query.message.reply_html(
             "⭐ <b>Alpha Take Profit</b>\n\n"
             "Send a number for take profit percentage:\n"
@@ -399,6 +450,13 @@ async def handle_menu_callback(
         return
     
     elif data == "tp_view":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
         from telegram import Update as TgUpdate
         # Import the new command
         from alerts.commands import view_tp_settings_cmd
@@ -411,6 +469,7 @@ async def handle_menu_callback(
         return
     
     elif data == "mysettings_direct":
+        await query.answer()
         from telegram import Update as TgUpdate
         new_update = TgUpdate(
             update_id=update.update_id,
@@ -464,22 +523,27 @@ async def handle_menu_callback(
         return
     
     elif data == "menu_help":
+        await query.answer()
         await show_help_menu(query.message, edit=True)
         return
     
     elif data == "help_getting_started":
+        await query.answer()
         await show_help_topic(query.message, "getting_started")
         return
     
     elif data == "help_alerts":
+        await query.answer()
         await show_help_topic(query.message, "alerts")
         return
     
     elif data == "help_trading":
+        await query.answer()
         await show_help_topic(query.message, "trading")
         return
     
     elif data == "help_ml":
+        await query.answer()
         await show_help_topic(query.message, "ml")
         return
     
@@ -488,7 +552,10 @@ async def handle_menu_callback(
     # ========================================================================
     elif data.startswith("grade_"):
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
             return
         grade = data.replace("grade_", "").upper()
         user_prefs = user_manager.get_user_prefs(chat_id)
@@ -507,7 +574,10 @@ async def handle_menu_callback(
     
     elif data == "grades_done":
         if not user_manager.is_subscribed(chat_id):
-            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("⚠️ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("⚠️ Active subscription required.", show_alert=True)
             return
         user_prefs = user_manager.get_user_prefs(chat_id)
         grades = user_prefs.get("grades", [])

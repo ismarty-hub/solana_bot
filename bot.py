@@ -373,9 +373,10 @@ async def main():
         # --- New: Graceful Shutdown ---
         logger.info("🛑 Shutting down bot...")
         await _close_http_session() # Close the aiohttp session
-        if app.updater:
+        if app.updater and app.updater.running:
             await app.updater.stop()
-        await app.stop()
+        if app.running:
+            await app.stop()
         logger.info("👋 Bot shut down successfully.")
         # --- End New Shutdown Logic ---
 

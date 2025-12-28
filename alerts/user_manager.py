@@ -332,7 +332,7 @@ class UserManager:
 
     def is_subscription_expired(self, chat_id: str) -> bool:
         """Check if a user's subscription has expired."""
-        if ADMIN_USER_ID and str(chat_id) == str(ADMIN_USER_ID):
+        if ADMIN_USER_ID and int(chat_id) in ADMIN_USER_ID:
             return False
 
         prefs = safe_load(self.prefs_file, {})
@@ -353,7 +353,7 @@ class UserManager:
 
     def is_subscribed(self, chat_id: str) -> bool:
         """Check if a user has a valid subscription."""
-        if ADMIN_USER_ID and str(chat_id) == str(ADMIN_USER_ID):
+        if ADMIN_USER_ID and int(chat_id) in ADMIN_USER_ID:
             return True
 
         prefs = safe_load(self.prefs_file, {})

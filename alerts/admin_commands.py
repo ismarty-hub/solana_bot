@@ -20,7 +20,7 @@ def is_admin_update(update: Update) -> bool:
     """Check if the update is from an admin user."""
     if not ADMIN_USER_ID:
         return False
-    return str(update.effective_user.id) == ADMIN_USER_ID
+    return update.effective_user.id in ADMIN_USER_ID
 
 
 async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager):
@@ -335,15 +335,19 @@ async def notify_new_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        await context.bot.send_message(
-            chat_id=ADMIN_USER_ID, 
-            text=message_text, 
-            parse_mode='HTML',
-            disable_web_page_preview=True
-        )
-        logging.info(f"✅ Notified admin about new group: {group_name} ({group_id_str})")
+        for admin_id in ADMIN_USER_ID:
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id, 
+                    text=message_text, 
+                    parse_mode='HTML',
+                    disable_web_page_preview=True
+                )
+            except Exception as e:
+                logging.error(f"❌ Failed to notify admin {admin_id} about new group: {e}")
+        logging.info(f"✅ Notified admins about new group: {group_name} ({group_id_str})")
     except Exception as e:
-        logging.error(f"❌ Failed to notify admin about new group {group_id_str}: {e}")
+        logging.error(f"❌ Error in notify_new_group broadcast: {e}")
 
 async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin command: Add a group to receive mint broadcasts."""

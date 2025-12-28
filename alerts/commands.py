@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 alerts/commands.py - User-facing bot commands with enhanced portfolio management
 """
@@ -37,9 +37,9 @@ def get_mode_status_text(user_prefs: dict) -> str:
     modes = user_prefs.get("modes", [])
     status = []
     if "alerts" in modes:
-        status.append("🔔 Alerts")
+        status.append("ðŸ”” Alerts")
     if "papertrade" in modes:
-        status.append("📈 Paper Trading")
+        status.append("ðŸ“ˆ Paper Trading")
     
     if not status:
         return "No active modes."
@@ -50,7 +50,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     from alerts.menu_navigation import show_main_menu
     
     chat_id = str(update.effective_chat.id)
-    logging.info(f"🚀 User {chat_id} started bot")
+    logging.info(f"ðŸš€ User {chat_id} started bot")
 
     # Ensure user exists and is active
     user_manager.activate_user(chat_id)
@@ -67,7 +67,10 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Check subscription status
     if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        if user_manager.is_subscription_expired(chat_id):
+            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+        else:
+            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
         return
     
     # Get current preferences to check current state
@@ -76,7 +79,7 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if already_subscribed:
         await update.message.reply_html(
-            "ℹ️ <b>Already Subscribed!</b>\n\n"
+            "â„¹ï¸ <b>Already Subscribed!</b>\n\n"
             "You are already receiving Alpha Alerts.\n"
             "Use /myalerts to view your settings."
         )
@@ -87,13 +90,13 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if success:
         await update.message.reply_html(
-            "🚀 <b>Alpha Alerts Activated!</b>\n\n"
-            "✅ You will now receive high-priority Alpha Alerts.\n"
+            "ðŸš€ <b>Alpha Alerts Activated!</b>\n\n"
+            "âœ… You will now receive high-priority Alpha Alerts.\n"
             "<i>Use /myalerts to confirm your settings</i>"
         )
     else:
         await update.message.reply_html(
-            "❌ <b>Failed to Subscribe</b>\n\n"
+            "âŒ <b>Failed to Subscribe</b>\n\n"
             "There was an error updating your preferences. Please try again in a moment."
         )
 
@@ -103,7 +106,10 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     chat_id = str(update.effective_chat.id)
     
     if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        if user_manager.is_subscription_expired(chat_id):
+            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+        else:
+            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
         return
     
     # Get current preferences to check current state
@@ -112,7 +118,7 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     
     if not currently_subscribed:
         await update.message.reply_html(
-            "ℹ️ <b>Not Subscribed</b>\n\n"
+            "â„¹ï¸ <b>Not Subscribed</b>\n\n"
             "You are not currently receiving Alpha Alerts.\n"
             "Use /alpha_subscribe to enable them."
         )
@@ -123,13 +129,13 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     
     if success:
         await update.message.reply_html(
-            "😴 <b>Alpha Alerts Disabled</b>\n\n"
-            "✅ You will no longer receive high-priority Alpha Alerts.\n"
+            "ðŸ˜´ <b>Alpha Alerts Disabled</b>\n\n"
+            "âœ… You will no longer receive high-priority Alpha Alerts.\n"
             "<i>Use /myalerts to confirm your settings</i>"
         )
     else:
         await update.message.reply_html(
-            "❌ <b>Failed to Unsubscribe</b>\n\n"
+            "âŒ <b>Failed to Unsubscribe</b>\n\n"
             "There was an error updating your preferences. Please try again in a moment."
         )
 
@@ -140,7 +146,10 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     chat_id = str(update.effective_chat.id)
     
     if not user_manager.is_subscribed(chat_id):
-        await update.message.reply_text("⛔ You are not subscribed. Please contact the admin.")
+        if user_manager.is_subscription_expired(chat_id):
+            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+        else:
+            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
         return
     
     args = context.args or []
@@ -150,24 +159,24 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     if not chosen:
         # Show interactive buttons AND usage instructions
         keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
+            [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
+             InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
+            [InlineKeyboardButton("ðŸ“Š All Grades", callback_data="preset_all")]
         ]
         
         current_grades = user_manager.get_user_prefs(chat_id).get('grades', [])
         current_str = ', '.join(current_grades) if current_grades else "None set"
         
         await update.message.reply_html(
-            f"⚙️ <b>Configure Alert Grades</b>\n\n"
+            f"âš™ï¸ <b>Configure Alert Grades</b>\n\n"
             f"<b>Current Setting:</b> {current_str}\n\n"
-            f"<b>📝 Manual Setup:</b>\n"
+            f"<b>ðŸ“ Manual Setup:</b>\n"
             f"Usage: <code>/setalerts GRADE1 GRADE2 ...</code>\n\n"
             f"<b>Available Grades:</b>\n"
-            f"• CRITICAL - Highest priority signals\n"
-            f"• HIGH - Strong signals\n"
-            f"• MEDIUM - Moderate signals\n"
-            f"• LOW - All signals\n\n"
+            f"â€¢ CRITICAL - Highest priority signals\n"
+            f"â€¢ HIGH - Strong signals\n"
+            f"â€¢ MEDIUM - Moderate signals\n"
+            f"â€¢ LOW - All signals\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/setalerts CRITICAL</code>\n"
             f"<code>/setalerts CRITICAL HIGH</code>\n"
@@ -180,9 +189,9 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     success = user_manager.update_user_prefs(chat_id, {"grades": chosen})
     
     if success:
-        await update.message.reply_html(f"✅ Alert grades updated! You will now receive: <b>{', '.join(chosen)}</b>")
+        await update.message.reply_html(f"âœ… Alert grades updated! You will now receive: <b>{', '.join(chosen)}</b>")
     else:
-        await update.message.reply_text("❌ Failed to save preferences. Please try again.")
+        await update.message.reply_text("âŒ Failed to save preferences. Please try again.")
 
 async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /myalerts command, now shows modes as well."""
@@ -198,14 +207,14 @@ async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     last_alert_str = "Never" if not last_alert else f"<i>{last_alert[:10]}</i>"
 
     # --- New: Check Alpha Alert Status ---
-    alpha_status = "✅ Subscribed" if prefs.get("alpha_alerts", False) else "❌ Not Subscribed"
+    alpha_status = "âœ… Subscribed" if prefs.get("alpha_alerts", False) else "âŒ Not Subscribed"
     # --- End New ---
     
     msg = (
-        f"📊 <b>Your Settings</b>\n\n"
+        f"ðŸ“Š <b>Your Settings</b>\n\n"
         f"<b>Active Modes:</b> {get_mode_status_text(prefs)}\n"
         f"<b>Subscribed Grades:</b> {', '.join(prefs.get('grades', ALL_GRADES))}\n"
-        f"<b>🚀 Alpha Alerts:</b> {alpha_status}\n\n"
+        f"<b>ðŸš€ Alpha Alerts:</b> {alpha_status}\n\n"
         f"<b>Total alerts received:</b> {total_alerts}\n"
         f"<b>Last alert:</b> {last_alert_str}\n\n"
         f"Use /start to change your mode.\n"
@@ -218,37 +227,37 @@ async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_mana
     """Handle /stop command."""
     chat_id = str(update.effective_chat.id)
     user_manager.deactivate_user(chat_id)
-    await update.message.reply_html("😔 You have been unsubscribed from all alerts and services. Use /start to reactivate.")
+    await update.message.reply_html("ðŸ˜” You have been unsubscribed from all alerts and services. Use /start to reactivate.")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     help_text = (
-        "🤖 <b>Bot Help & Commands</b>\n\n"
+        "ðŸ¤– <b>Bot Help & Commands</b>\n\n"
         "<b>--- Core Commands ---</b>\n"
-        "• /start - Change bot mode (Alerts/Trading)\n"
-        "• /myalerts - View your current settings & stats\n"
-        "• /setalerts - Set which grade alerts you receive\n"
-        "• /stop - Unsubscribe from everything\n\n"
-        "<b>--- 🔥 Alpha Alerts ---</b>\n"
-        "• /alpha_subscribe - Opt-in to high-priority alpha alerts\n"
-        "• /alpha_unsubscribe - Opt-out of alpha alerts\n\n"
+        "â€¢ /start - Change bot mode (Alerts/Trading)\n"
+        "â€¢ /myalerts - View your current settings & stats\n"
+        "â€¢ /setalerts - Set which grade alerts you receive\n"
+        "â€¢ /stop - Unsubscribe from everything\n\n"
+        "<b>--- ðŸ”¥ Alpha Alerts ---</b>\n"
+        "â€¢ /alpha_subscribe - Opt-in to high-priority alpha alerts\n"
+        "â€¢ /alpha_unsubscribe - Opt-out of alpha alerts\n\n"
         
-        "<b>--- 🤖 ML Predictions (NEW) ---</b>\n"
-        "• /predict [mint] - Get ML prediction for one token\n"
-        "• /predict_batch [mints...] - Get ML predictions for multiple tokens\n\n"
+        "<b>--- ðŸ¤– ML Predictions (NEW) ---</b>\n"
+        "â€¢ /predict [mint] - Get ML prediction for one token\n"
+        "â€¢ /predict_batch [mints...] - Get ML predictions for multiple tokens\n\n"
 
         "<b>--- Paper Trading ---</b>\n"
-        "• /papertrade [capital] - Set trading capital and enable paper trading\n"
+        "â€¢ /papertrade [capital] - Set trading capital and enable paper trading\n"
         "  Example: <code>/papertrade 1000</code>\n"
-        "• /portfolio - View detailed portfolio with all positions\n"
-        "• /pnl - Get current unrealized P/L update\n"
-        "• /history [limit] - View trade history (default: last 10)\n"
-        "• /performance - View detailed trading performance stats\n"
-        "• /watchlist - View tokens being watched for entry\n"
-        "• /resetcapital [amount] - Reset trading capital\n\n"
+        "â€¢ /portfolio - View detailed portfolio with all positions\n"
+        "â€¢ /pnl - Get current unrealized P/L update\n"
+        "â€¢ /history [limit] - View trade history (default: last 10)\n"
+        "â€¢ /performance - View detailed trading performance stats\n"
+        "â€¢ /watchlist - View tokens being watched for entry\n"
+        "â€¢ /resetcapital [amount] - Reset trading capital\n\n"
         "<b>--- General ---</b>\n"
-        "• /help - Show this help message\n"
-        "• /stats - View your usage statistics"
+        "â€¢ /help - Show this help message\n"
+        "â€¢ /stats - View your usage statistics"
     )
     await update.message.reply_html(help_text)
 
@@ -271,23 +280,23 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         
         status_msg = ""
         if is_already_enabled:
-            status_msg = f"<b>Current Status:</b> ✅ Enabled\n<b>Current Capital:</b> ${current_capital:,.2f}\n\n"
+            status_msg = f"<b>Current Status:</b> âœ… Enabled\n<b>Current Capital:</b> ${current_capital:,.2f}\n\n"
         else:
-            status_msg = "<b>Current Status:</b> ❌ Not enabled\n\n"
+            status_msg = "<b>Current Status:</b> âŒ Not enabled\n\n"
         
         await update.message.reply_html(
-            f"📈 <b>Paper Trading Setup</b>\n\n"
+            f"ðŸ“ˆ <b>Paper Trading Setup</b>\n\n"
             f"{status_msg}"
-            f"<b>📝 How to use:</b>\n"
+            f"<b>ðŸ“ How to use:</b>\n"
             f"<code>/papertrade [amount]</code>\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/papertrade 1000</code> - Start with $1,000\n"
             f"<code>/papertrade 5000</code> - Start with $5,000\n"
             f"<code>/papertrade 10000</code> - Start with $10,000\n\n"
             f"<b>Requirements:</b>\n"
-            f"• Minimum: $100\n"
-            f"• Maximum: $1,000,000\n\n"
-            f"💡 <i>Tip: Start with $1,000-$5,000 for realistic results</i>"
+            f"â€¢ Minimum: $100\n"
+            f"â€¢ Maximum: $1,000,000\n\n"
+            f"ðŸ’¡ <i>Tip: Start with $1,000-$5,000 for realistic results</i>"
         )
         return
     
@@ -296,28 +305,28 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         capital = float(context.args[0])
         if capital <= 0:
             await update.message.reply_html(
-                "❌ <b>Invalid Amount</b>\n\n"
+                "âŒ <b>Invalid Amount</b>\n\n"
                 "Please provide a positive number.\n"
                 "Example: <code>/papertrade 1000</code>"
             )
             return
         if capital < 100:
             await update.message.reply_html(
-                "❌ <b>Amount Too Low</b>\n\n"
+                "âŒ <b>Amount Too Low</b>\n\n"
                 "Minimum capital is <b>$100 USD</b>.\n"
                 "Example: <code>/papertrade 100</code>"
             )
             return
         if capital > 1000000:
             await update.message.reply_html(
-                "❌ <b>Amount Too High</b>\n\n"
+                "âŒ <b>Amount Too High</b>\n\n"
                 "Maximum capital is <b>$1,000,000 USD</b>.\n"
                 "Example: <code>/papertrade 10000</code>"
             )
             return
     except ValueError:
         await update.message.reply_html(
-            "❌ <b>Invalid Format</b>\n\n"
+            "âŒ <b>Invalid Format</b>\n\n"
             "Please provide a valid number.\n\n"
             "<b>Examples:</b>\n"
             "<code>/papertrade 1000</code>\n"
@@ -331,20 +340,20 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     action_word = "updated to" if is_already_enabled else "set up with"
     
     await update.message.reply_html(
-        f"📈 <b>Paper Trading {'Updated' if is_already_enabled else 'Enabled'}!</b>\n\n"
+        f"ðŸ“ˆ <b>Paper Trading {'Updated' if is_already_enabled else 'Enabled'}!</b>\n\n"
         f"Your virtual portfolio has been {action_word} <b>${capital:,.2f} USD</b>.\n\n"
-        f"<b>🎯 Strategy Overview:</b>\n"
-        f"• Position Size: 8-12% per trade (max $150)\n"
-        f"• Partial Profits: 40% @ +40%, 30% @ +80%, 20% @ +150%\n"
-        f"• Trailing Stop: Dynamic 15-25% from peak\n"
-        f"• Liquidity Protection: Exit on 40% drain\n"
-        f"• Max Hold: 4 hours\n\n"
-        f"<b>📊 Track Your Performance:</b>\n"
-        f"• /portfolio - View positions\n"
-        f"• /pnl - Check unrealized P/L\n"
-        f"• /performance - Detailed stats\n"
-        f"• /history - Trade log\n\n"
-        f"The bot will now automatically trade signals. Good luck! 🚀"
+        f"<b>ðŸŽ¯ Strategy Overview:</b>\n"
+        f"â€¢ Position Size: 8-12% per trade (max $150)\n"
+        f"â€¢ Partial Profits: 40% @ +40%, 30% @ +80%, 20% @ +150%\n"
+        f"â€¢ Trailing Stop: Dynamic 15-25% from peak\n"
+        f"â€¢ Liquidity Protection: Exit on 40% drain\n"
+        f"â€¢ Max Hold: 4 hours\n\n"
+        f"<b>ðŸ“Š Track Your Performance:</b>\n"
+        f"â€¢ /portfolio - View positions\n"
+        f"â€¢ /pnl - Check unrealized P/L\n"
+        f"â€¢ /performance - Detailed stats\n"
+        f"â€¢ /history - Trade log\n\n"
+        f"The bot will now automatically trade signals. Good luck! ðŸš€"
     )
 
 async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager, page: int = 0):
@@ -354,7 +363,7 @@ async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
+        await update.message.reply_html("âŒ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -367,7 +376,7 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+        await update.message.reply_html("âŒ Paper trading is not enabled.")
         return
     
     # Fetch live prices and calculate PnL
@@ -376,7 +385,7 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
         pnl_data = portfolio_manager.calculate_unrealized_pnl(chat_id, live_prices)
     except Exception as e:
         logger.exception(f"Error calculating PnL for {chat_id}: {e}")
-        await update.message.reply_html("❌ Error fetching live prices. Please try again.")
+        await update.message.reply_html("âŒ Error fetching live prices. Please try again.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -389,7 +398,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+        await update.message.reply_html("âŒ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -402,21 +411,21 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
             limit = int(context.args[0])
             if limit < 1:
                 await update.message.reply_html(
-                    "❌ <b>Invalid Limit</b>\n\n"
+                    "âŒ <b>Invalid Limit</b>\n\n"
                     "Please provide a number greater than 0.\n"
                     "Example: <code>/history 20</code>"
                 )
                 return
             if limit > 50:
                 await update.message.reply_html(
-                    "⚠️ <b>Limit Too High</b>\n\n"
+                    "âš ï¸ <b>Limit Too High</b>\n\n"
                     "Maximum is 50 trades at a time.\n"
                     "Showing last 50 trades instead..."
                 )
                 limit = 50
         except ValueError:
             await update.message.reply_html(
-                "❌ <b>Invalid Format</b>\n\n"
+                "âŒ <b>Invalid Format</b>\n\n"
                 "Please provide a valid number.\n\n"
                 "<b>Usage:</b> <code>/history [number]</code>\n\n"
                 "<b>Examples:</b>\n"
@@ -428,7 +437,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     
     if not history:
         await update.message.reply_html(
-            "📜 <b>No Trade History</b>\n\n"
+            "ðŸ“œ <b>No Trade History</b>\n\n"
             "You haven't closed any trades yet.\n\n"
             "Start trading to see your results here!\n"
             "Use <code>/portfolio</code> to see open positions."
@@ -439,10 +448,10 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     recent_trades = history[-limit:]
     recent_trades.reverse()  # Most recent first
     
-    msg = f"📜 <b>Trade History (Last {len(recent_trades)}/{len(history)})</b>\n\n"
+    msg = f"ðŸ“œ <b>Trade History (Last {len(recent_trades)}/{len(history)})</b>\n\n"
     
     for i, trade in enumerate(recent_trades, 1):
-        pnl_symbol = "🟢" if trade.get('total_pnl_usd', trade.get('pnl_usd', 0)) > 0 else "🔴"
+        pnl_symbol = "ðŸŸ¢" if trade.get('total_pnl_usd', trade.get('pnl_usd', 0)) > 0 else "ðŸ”´"
         pnl_usd = trade.get('total_pnl_usd', trade.get('pnl_usd', 0))
         pnl_pct = trade.get('total_pnl_percent', trade.get('pnl_percent', 0))
         
@@ -467,7 +476,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     )
     
     if len(history) > limit:
-        msg += f"<i>💡 Use /history {min(limit + 10, 50)} to see more</i>"
+        msg += f"<i>ðŸ’¡ Use /history {min(limit + 10, 50)} to see more</i>"
     
     await update.message.reply_html(msg)
 
@@ -477,7 +486,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+        await update.message.reply_html("âŒ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -485,7 +494,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     history = portfolio.get('trade_history', [])
     
     if not history:
-        await update.message.reply_html("📊 No trades yet. Performance stats will appear after your first closed trade.")
+        await update.message.reply_html("ðŸ“Š No trades yet. Performance stats will appear after your first closed trade.")
         return
     
     total_trades = stats.get('total_trades', 0)
@@ -524,30 +533,30 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     roi = ((total_value - starting_capital) / starting_capital * 100) if starting_capital > 0 else 0
     
     msg = (
-        f"📊 <b>Trading Performance Report</b>\n\n"
-        f"<b>💰 Capital:</b>\n"
-        f"• Starting: ${starting_capital:,.2f}\n"
-        f"• Current Total: ${total_value:,.2f}\n"
-        f"• ROI: <b>{roi:+.2f}%</b>\n\n"
-        f"<b>📈 Trade Statistics:</b>\n"
-        f"• Total Trades: <b>{total_trades}</b>\n"
-        f"• Wins: <b>{wins}</b> | Losses: <b>{losses}</b>\n"
-        f"• Win Rate: <b>{win_rate:.1f}%</b>\n"
-        f"• Total P/L: <b>${total_pnl:,.2f}</b>\n\n"
-        f"<b>💵 Trade Metrics:</b>\n"
-        f"• Best Trade: <b>+{best_trade:.1f}%</b>\n"
-        f"• Worst Trade: <b>{worst_trade:.1f}%</b>\n"
-        f"• Avg Win: <b>${avg_win:,.2f}</b>\n"
-        f"• Avg Loss: <b>${avg_loss:,.2f}</b>\n"
-        f"• Avg Hold Time: <b>{avg_hold_time:.0f} minutes</b>\n\n"
+        f"ðŸ“Š <b>Trading Performance Report</b>\n\n"
+        f"<b>ðŸ’° Capital:</b>\n"
+        f"â€¢ Starting: ${starting_capital:,.2f}\n"
+        f"â€¢ Current Total: ${total_value:,.2f}\n"
+        f"â€¢ ROI: <b>{roi:+.2f}%</b>\n\n"
+        f"<b>ðŸ“ˆ Trade Statistics:</b>\n"
+        f"â€¢ Total Trades: <b>{total_trades}</b>\n"
+        f"â€¢ Wins: <b>{wins}</b> | Losses: <b>{losses}</b>\n"
+        f"â€¢ Win Rate: <b>{win_rate:.1f}%</b>\n"
+        f"â€¢ Total P/L: <b>${total_pnl:,.2f}</b>\n\n"
+        f"<b>ðŸ’µ Trade Metrics:</b>\n"
+        f"â€¢ Best Trade: <b>+{best_trade:.1f}%</b>\n"
+        f"â€¢ Worst Trade: <b>{worst_trade:.1f}%</b>\n"
+        f"â€¢ Avg Win: <b>${avg_win:,.2f}</b>\n"
+        f"â€¢ Avg Loss: <b>${avg_loss:,.2f}</b>\n"
+        f"â€¢ Avg Hold Time: <b>{avg_hold_time:.0f} minutes</b>\n\n"
     )
     
     if reentry_trades > 0:
         msg += (
-            f"<b>🔄 Re-entry Stats:</b>\n"
-            f"• Re-entry Trades: <b>{reentry_trades}</b>\n"
-            f"• Re-entry Wins: <b>{reentry_wins}</b>\n"
-            f"• Re-entry Win Rate: <b>{reentry_rate:.1f}%</b>\n\n"
+            f"<b>ðŸ”„ Re-entry Stats:</b>\n"
+            f"â€¢ Re-entry Trades: <b>{reentry_trades}</b>\n"
+            f"â€¢ Re-entry Wins: <b>{reentry_wins}</b>\n"
+            f"â€¢ Re-entry Win Rate: <b>{reentry_rate:.1f}%</b>\n\n"
         )
     
     # Exit reason breakdown
@@ -557,9 +566,9 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
     
     if exit_reasons:
-        msg += f"<b>📤 Exit Breakdown:</b>\n"
+        msg += f"<b>ðŸ“¤ Exit Breakdown:</b>\n"
         for reason, count in sorted(exit_reasons.items(), key=lambda x: x[1], reverse=True)[:5]:
-            msg += f"• {reason}: {count}\n"
+            msg += f"â€¢ {reason}: {count}\n"
     
     await update.message.reply_html(msg)
 
@@ -569,7 +578,7 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+        await update.message.reply_html("âŒ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -577,13 +586,13 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     reentry = portfolio.get('reentry_candidates', {})
     
     if not watchlist and not reentry:
-        await update.message.reply_html("👀 No tokens currently being watched. Waiting for new signals...")
+        await update.message.reply_html("ðŸ‘€ No tokens currently being watched. Waiting for new signals...")
         return
     
-    msg = f"👀 <b>Watchlist & Re-entry Candidates</b>\n\n"
+    msg = f"ðŸ‘€ <b>Watchlist & Re-entry Candidates</b>\n\n"
     
     if watchlist:
-        msg += f"<b>🎯 Waiting for Entry ({len(watchlist)}):</b>\n"
+        msg += f"<b>ðŸŽ¯ Waiting for Entry ({len(watchlist)}):</b>\n"
         for mint, item in watchlist.items():
             signal_time = item.get('signal_time', '')
             time_ago = "recently"
@@ -596,19 +605,19 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
                     pass
             
             msg += (
-                f"• <b>{item['symbol']}</b>\n"
+                f"â€¢ <b>{item['symbol']}</b>\n"
                 f"  Signal: ${item['signal_price']:.6f} ({time_ago})\n"
             )
         msg += "\n"
     
     if reentry:
-        msg += f"<b>🔄 Re-entry Watch ({len(reentry)}):</b>\n"
+        msg += f"<b>ðŸ”„ Re-entry Watch ({len(reentry)}):</b>\n"
         for mint, cand in reentry.items():
             attempts = cand.get('reentry_attempts', 0)
             best_pnl = cand.get('best_pnl_pct', 0)
             
             msg += (
-                f"• <b>{cand['symbol']}</b>\n"
+                f"â€¢ <b>{cand['symbol']}</b>\n"
                 f"  Previous: {best_pnl:+.1f}% | Attempts: {attempts}/2\n"
             )
     
@@ -620,7 +629,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+        await update.message.reply_html("âŒ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -630,23 +639,23 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     if not context.args:
         # Show detailed prompt with current status
         await update.message.reply_html(
-            f"⚠️ <b>Reset Trading Capital</b>\n\n"
+            f"âš ï¸ <b>Reset Trading Capital</b>\n\n"
             f"<b>Current Status:</b>\n"
-            f"• Capital: ${current_capital:,.2f}\n"
-            f"• Open Positions: {open_positions}\n\n"
-            f"⚠️ <b>Warning:</b> This will:\n"
-            f"• Close ALL open positions\n"
-            f"• Clear watchlist and re-entry candidates\n"
-            f"• Reset your capital to a new amount\n"
-            f"• Preserve your trade history\n\n"
-            f"<b>📝 Usage:</b>\n"
+            f"â€¢ Capital: ${current_capital:,.2f}\n"
+            f"â€¢ Open Positions: {open_positions}\n\n"
+            f"âš ï¸ <b>Warning:</b> This will:\n"
+            f"â€¢ Close ALL open positions\n"
+            f"â€¢ Clear watchlist and re-entry candidates\n"
+            f"â€¢ Reset your capital to a new amount\n"
+            f"â€¢ Preserve your trade history\n\n"
+            f"<b>ðŸ“ Usage:</b>\n"
             f"<code>/resetcapital [amount]</code>\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/resetcapital 1000</code> - Reset to $1,000\n"
             f"<code>/resetcapital 5000</code> - Reset to $5,000\n"
             f"<code>/resetcapital 10000</code> - Reset to $10,000\n\n"
             f"<b>Requirements:</b>\n"
-            f"• Min: $100 | Max: $1,000,000"
+            f"â€¢ Min: $100 | Max: $1,000,000"
         )
         return
     
@@ -654,7 +663,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         capital = float(context.args[0])
         if capital < 100 or capital > 1000000:
             await update.message.reply_html(
-                "❌ <b>Invalid Amount</b>\n\n"
+                "âŒ <b>Invalid Amount</b>\n\n"
                 "Capital must be between <b>$100</b> and <b>$1,000,000</b>.\n\n"
                 "<b>Examples:</b>\n"
                 "<code>/resetcapital 1000</code>\n"
@@ -663,7 +672,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
             return
     except ValueError:
         await update.message.reply_html(
-            "❌ <b>Invalid Format</b>\n\n"
+            "âŒ <b>Invalid Format</b>\n\n"
             "Please provide a valid number.\n\n"
             "<b>Usage:</b> <code>/resetcapital [amount]</code>\n\n"
             "<b>Examples:</b>\n"
@@ -685,12 +694,12 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     portfolio_manager.save()
     
     await update.message.reply_html(
-        f"✅ <b>Portfolio Reset Complete</b>\n\n"
+        f"âœ… <b>Portfolio Reset Complete</b>\n\n"
         f"<b>Changes:</b>\n"
-        f"• Closed: {old_positions} position(s)\n"
-        f"• New Capital: <b>${capital:,.2f}</b>\n"
-        f"• Trade History: ✅ Preserved\n\n"
-        f"<i>Ready to start fresh! 🚀</i>\n\n"
+        f"â€¢ Closed: {old_positions} position(s)\n"
+        f"â€¢ New Capital: <b>${capital:,.2f}</b>\n"
+        f"â€¢ Trade History: âœ… Preserved\n\n"
+        f"<i>Ready to start fresh! ðŸš€</i>\n\n"
         f"The bot will now watch for new signals with your updated capital."
     )
 
@@ -700,18 +709,18 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     user_stats = user_manager.get_user_stats(chat_id)
     
     msg = (
-        f"📊 <b>Your Statistics</b>\n\n"
-        f"📬 Total alerts received: <b>{user_stats.get('alerts_received', 0)}</b>\n"
-        f"📅 Member since: <i>{user_stats.get('joined_at', 'Unknown')[:10] if user_stats.get('joined_at') else 'Unknown'}</i>\n"
+        f"ðŸ“Š <b>Your Statistics</b>\n\n"
+        f"ðŸ“¬ Total alerts received: <b>{user_stats.get('alerts_received', 0)}</b>\n"
+        f"ðŸ“… Member since: <i>{user_stats.get('joined_at', 'Unknown')[:10] if user_stats.get('joined_at') else 'Unknown'}</i>\n"
     )
     
     if is_admin:
         platform_stats = user_manager.get_all_stats()
         msg += (
-            f"\n🏢 <b>Platform Statistics (Admin)</b>\n"
-            f"• Total users: <b>{platform_stats['total_users']}</b>\n"
-            f"• Active users: <b>{platform_stats['active_users']}</b>\n"
-            f"• Total alerts sent: <b>{platform_stats['total_alerts_sent']}</b>\n"
+            f"\nðŸ¢ <b>Platform Statistics (Admin)</b>\n"
+            f"â€¢ Total users: <b>{platform_stats['total_users']}</b>\n"
+            f"â€¢ Active users: <b>{platform_stats['active_users']}</b>\n"
+            f"â€¢ Total alerts sent: <b>{platform_stats['total_alerts_sent']}</b>\n"
         )
     
     await update.message.reply_html(msg)
@@ -725,7 +734,7 @@ async def testalert_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "overlap_percentage": 75.0, "concentration": 50.0
     }
     message = format_alert_html(token_data, "NEW")
-    await update.message.reply_html(f"🔔 Test Alert\n\n{message}")
+    await update.message.reply_html(f"ðŸ”” Test Alert\n\n{message}")
 
 
 # --- NEW: ML PREDICTION COMMANDS ---
@@ -745,7 +754,7 @@ def _format_prediction_result(mint: str, data: dict) -> str:
         risk_tier = pred.get('risk_tier', 'N/A')
         
         lines = [
-            f"🤖 <b>ML Prediction for Token</b>",
+            f"ðŸ¤– <b>ML Prediction for Token</b>",
             f"<code>{mint}</code>\n",
             f"<b>Win Probability:</b> {win_prob:.2f}%",
             f"<b>Confidence:</b> {html.escape(confidence)}",
@@ -769,10 +778,10 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             vol = key_metrics.get('volume_h24_usd', 0)
             fdv = key_metrics.get('market_cap_usd', 0)
             
-            lines.append(f"💧 <b>Liquidity:</b> {fmt_num(liq)}")
-            lines.append(f"📊 <b>24h Volume:</b> {fmt_num(vol)}")
+            lines.append(f"ðŸ’§ <b>Liquidity:</b> {fmt_num(liq)}")
+            lines.append(f"ðŸ“Š <b>24h Volume:</b> {fmt_num(vol)}")
             if fdv > 0:
-                lines.append(f"💰 <b>Market Cap:</b> {fmt_num(fdv)}")
+                lines.append(f"ðŸ’° <b>Market Cap:</b> {fmt_num(fdv)}")
 
             # 2. Age & Price Action
             age_hours = key_metrics.get('token_age_hours', 0)
@@ -784,18 +793,18 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             else:
                 age_str = f"{age_hours:.1f}h"
                 
-            lines.append(f"⏰ <b>Token Age:</b> {age_str}")
+            lines.append(f"â° <b>Token Age:</b> {age_str}")
             
             # Price Change with Direction
-            pch_emoji = "🟢" if price_change > 0 else "🔴"
+            pch_emoji = "ðŸŸ¢" if price_change > 0 else "ðŸ”´"
             lines.append(f"{pch_emoji} <b>24h Change:</b> {price_change:+.2f}%")
 
             # 3. Holders & Supply
             insider = key_metrics.get('insider_supply_pct', 0)
             top10 = key_metrics.get('top_10_holders_pct', 0)
             
-            lines.append(f"👥 <b>Insider Holdings:</b> {insider:.1f}%")
-            lines.append(f"🐳 <b>Top 10 Holders:</b> {top10:.1f}%")
+            lines.append(f"ðŸ‘¥ <b>Insider Holdings:</b> {insider:.1f}%")
+            lines.append(f"ðŸ³ <b>Top 10 Holders:</b> {top10:.1f}%")
             
             # 4. Risk & Health (Interpretations)
             risk_score = key_metrics.get('pump_dump_risk_score', 0)
@@ -804,24 +813,24 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             # Interpret Risk (Lower is better)
             if risk_score <= 20:
                 risk_text = "Low (Safe)"
-                risk_emoji = "🟢"
+                risk_emoji = "ðŸŸ¢"
             elif risk_score <= 50:
                 risk_text = "Moderate"
-                risk_emoji = "🟡"
+                risk_emoji = "ðŸŸ¡"
             else:
                 risk_text = "High Risk"
-                risk_emoji = "🔴"
+                risk_emoji = "ðŸ”´"
             
             # Interpret Health (Higher is better)
             if health_score >= 80:
                 health_text = "Strong"
-                health_emoji = "💪"
+                health_emoji = "ðŸ’ª"
             elif health_score >= 40:
                 health_text = "Average"
-                health_emoji = "⚠️"
+                health_emoji = "âš ï¸"
             else:
                 health_text = "Weak"
-                health_emoji = "🤒"
+                health_emoji = "ðŸ¤’"
             
             lines.append(f"{risk_emoji} <b>Risk Level:</b> {risk_text} ({risk_score:.0f})")
             lines.append(f"{health_emoji} <b>Market Health:</b> {health_text} ({health_score:.0f})")
@@ -833,13 +842,13 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             for warning in warnings:
                 # Clean up specific common warning text if needed, otherwise just display
                 clean_warning = html.escape(warning)
-                lines.append(f"• {clean_warning}")
+                lines.append(f"â€¢ {clean_warning}")
         
         return "\n".join(lines)
         
     except Exception as e:
         logger.error(f"Error formatting prediction: {e}")
-        return f"❌ Error formatting prediction for <code>{mint}</code>."
+        return f"âŒ Error formatting prediction for <code>{mint}</code>."
 
 async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /predict [mint] command."""
@@ -855,7 +864,7 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         return
 
     mint = context.args[0].strip()
-    loading_msg = await update.message.reply_html(f"🤖 Analyzing token <code>{mint}</code>... Please wait.")
+    loading_msg = await update.message.reply_html(f"ðŸ¤– Analyzing token <code>{mint}</code>... Please wait.")
     
     url = f"{FASTAPI_ML_URL}/token/{mint}/predict"
     
@@ -871,20 +880,20 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
                 error_msg = error_data.get('detail', 'Unknown error')
                 logger.warning(f"Prediction failed for {mint}, status {resp.status}: {error_msg}")
                 await loading_msg.edit_text(
-                    f"❌ <b>Analysis Failed for <code>{mint}</code></b>\n\n"
+                    f"âŒ <b>Analysis Failed for <code>{mint}</code></b>\n\n"
                     f"<b>Error:</b> {html.escape(error_msg)}",
                     parse_mode="HTML"
                 )
                 
     except asyncio.TimeoutError:
         logger.error(f"Timeout during /predict for {mint}")
-        await loading_msg.edit_text(f"❌ <b>Request Timed Out</b>\n\nThe prediction service is taking too long to respond.")
+        await loading_msg.edit_text(f"âŒ <b>Request Timed Out</b>\n\nThe prediction service is taking too long to respond.")
     except aiohttp.ClientError as e:
         logger.error(f"HTTP error during /predict: {e}")
-        await loading_msg.edit_text(f"❌ <b>Connection Error</b>\n\nFailed to connect to the prediction service.")
+        await loading_msg.edit_text(f"âŒ <b>Connection Error</b>\n\nFailed to connect to the prediction service.")
     except Exception as e:
         logger.exception(f"Error in /predict command: {e}")
-        await loading_msg.edit_text(f"❌ <b>An Unexpected Error Occurred</b>\n\nPlease try again later.")
+        await loading_msg.edit_text(f"âŒ <b>An Unexpected Error Occurred</b>\n\nPlease try again later.")
 
 async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Handle /predict_batch [mint1] [mint2] ... command."""
@@ -903,11 +912,11 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         return
         
     if len(mints) > 10:
-        await update.message.reply_html("❌ <b>Error:</b> Maximum of 10 tokens per batch request.")
+        await update.message.reply_html("âŒ <b>Error:</b> Maximum of 10 tokens per batch request.")
         return
 
     loading_msg = await update.message.reply_html(
-        f"🤖 Analyzing <b>{len(mints)} tokens</b> in a batch... This may take a moment."
+        f"ðŸ¤– Analyzing <b>{len(mints)} tokens</b> in a batch... This may take a moment."
     )
     
     # FIXED: Send as JSON array in request body, NOT inside a dict
@@ -919,7 +928,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         # CRITICAL FIX: Send mints as a JSON array directly
         async with session.post(
             url, 
-            json=mints,  # ← This is now a list, not {"mints": mints}
+            json=mints,  # â† This is now a list, not {"mints": mints}
             params={"threshold": 0.70},
             timeout=300
         ) as resp:
@@ -943,11 +952,11 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         
                         # Action emoji
                         action_emoji = {
-                            "BUY": "🟢",
-                            "CONSIDER": "🟡",
-                            "SKIP": "🟠",
-                            "AVOID": "🔴"
-                        }.get(action, "⚪")
+                            "BUY": "ðŸŸ¢",
+                            "CONSIDER": "ðŸŸ¡",
+                            "SKIP": "ðŸŸ ",
+                            "AVOID": "ðŸ”´"
+                        }.get(action, "âšª")
                         
                         result_lines.append(
                             f"{action_emoji} <b>{mint_short}</b>\n"
@@ -959,7 +968,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         # Format error
                         error = item.get('error', 'Unknown error')
                         result_lines.append(
-                            f"❌ <b>{mint_short}</b>\n"
+                            f"âŒ <b>{mint_short}</b>\n"
                             f"   Error: {html.escape(error)}\n"
                         )
                 
@@ -970,8 +979,8 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 
                 result_lines.append(
                     f"\n<b>Summary:</b>\n"
-                    f"✅ Success: {successful} | ❌ Failed: {failed}\n"
-                    f"🟢 Buy Signals: {buy_signals}"
+                    f"âœ… Success: {successful} | âŒ Failed: {failed}\n"
+                    f"ðŸŸ¢ Buy Signals: {buy_signals}"
                 )
                 
                 final_msg = "\n".join(result_lines)
@@ -987,7 +996,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 error_msg = error_data.get('detail', 'Unknown error')
                 logger.warning(f"Batch prediction failed, status {resp.status}: {error_msg}")
                 await loading_msg.edit_text(
-                    f"❌ <b>Batch Analysis Failed</b>\n\n"
+                    f"âŒ <b>Batch Analysis Failed</b>\n\n"
                     f"<b>Error:</b> {html.escape(error_msg)}",
                     parse_mode="HTML"
                 )
@@ -995,21 +1004,21 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     except asyncio.TimeoutError:
         logger.error(f"Timeout during /predict_batch for {len(mints)} mints")
         await loading_msg.edit_text(
-            "❌ <b>Request Timed Out</b>\n\n"
+            "âŒ <b>Request Timed Out</b>\n\n"
             "The prediction service is taking too long to respond.\n"
             "Try reducing the number of tokens or try again later."
         )
     except aiohttp.ClientError as e:
         logger.error(f"HTTP error during /predict_batch: {e}")
         await loading_msg.edit_text(
-            "❌ <b>Connection Error</b>\n\n"
+            "âŒ <b>Connection Error</b>\n\n"
             "Failed to connect to the prediction service.\n"
             "Please try again in a moment."
         )
     except Exception as e:
         logger.exception(f"Error in /predict_batch command: {e}")
         await loading_msg.edit_text(
-            "❌ <b>An Unexpected Error Occurred</b>\n\n"
+            "âŒ <b>An Unexpected Error Occurred</b>\n\n"
             "Please try again later or contact support."
         )
 
@@ -1026,24 +1035,103 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     
     query = update.callback_query
     data = query.data
+    chat_id = str(query.from_user.id)
     
     # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
-       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
-       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
-       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
-       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
-       data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
-       data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_") or data == "mysettings_direct" or \
-       data == "set_reserve_menu" or data == "set_mintrade_menu" or data.startswith("set_reserve:") or data.startswith("set_mintrade:") or \
-       data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or data.startswith("set_default_sl:") or \
-       data.startswith("set_trade_size_mode_select:"):
+    if data.startswith("menu_") or data.startswith("init_capital:") or data.startswith("reset_capital") or \
+       data.startswith("custom_capital") or data.startswith("settings_") or data.startswith("alpha_") or \
+       data.startswith("setalerts_") or data.startswith("tp_") or data.startswith("predict_") or \
+       data.startswith("help_") or data.startswith("myalerts_") or data.startswith("history_") or \
+       data.startswith("performance_") or data == "watchlist_direct" or data == "portfolio_direct" or \
+       data == "pnl_direct" or data.startswith("resetcapital_") or data == "grades_done" or \
+       data.startswith("enable_") or data == "mysettings_direct" or data == "set_reserve_menu" or \
+       data == "set_mintrade_menu" or data.startswith("set_reserve:") or data.startswith("set_mintrade:") or \
+       data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or \
+       data.startswith("set_default_sl:") or data.startswith("set_trade_size_mode_select:") or \
+       data.startswith("grade_"):
         if portfolio_manager:
             await handle_menu_callback(update, context, user_manager, portfolio_manager)
         return
     
+    # --- Handle Mode Selection (Direct) ---
+    if data == "mode_alerts":
+        await query.answer()
+        user_manager.set_modes(chat_id, ["alerts"])
+        await query.edit_message_text("âœ… Mode set to <b>ðŸ”” Alerts Only</b>.", parse_mode="HTML")
+        return
+    elif data == "mode_papertrade":
+        await query.answer()
+        user_manager.set_modes(chat_id, ["papertrade"])
+        await query.edit_message_text(
+            "âœ… Mode set to <b>ðŸ“ˆ Paper Trading Only</b>.\n\n"
+            "Use <code>/papertrade [capital]</code> to set your starting funds.", 
+            parse_mode="HTML"
+        )
+        return
+    elif data == "mode_both":
+        await query.answer()
+        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
+        await query.edit_message_text(
+            "âœ… Mode set to <b>ðŸš€ Both Alerts & Paper Trading</b>.", 
+            parse_mode="HTML"
+        )
+        return
+
+    # --- Grade Configuration Presets ---
+    elif data == "config_grades":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
+        keyboard = [
+            [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
+             InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
+            [InlineKeyboardButton("ðŸ“Š All Grades", callback_data="preset_all")]
+        ]
+        await query.edit_message_text(
+            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
+            reply_markup=InlineKeyboardMarkup(keyboard), 
+            parse_mode="HTML"
+        )
+        return
+    elif data == "preset_critical":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
+        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
+        await query.edit_message_text("âœ… Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
+        return
+    elif data == "preset_critical_high":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
+        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
+        await query.edit_message_text("âœ… Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
+        return
+    elif data == "preset_all":
+        if not user_manager.is_subscribed(chat_id):
+            if user_manager.is_subscription_expired(chat_id):
+                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+            else:
+                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+            return
+        await query.answer()
+        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
+        await query.edit_message_text("âœ… Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
+        return
+
     # --- Handle Trading Button Callbacks ---
-    # Handle all buy-related callbacks (amount, TP, SL, custom)
     if (data.startswith("buy_amount:") or data.startswith("buy_custom:") or 
         data.startswith("buy_tp:") or data.startswith("buy_sl:") or
         data == "buy_tp_custom" or data == "buy_sl_custom"):
@@ -1051,1148 +1139,71 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             await buy_token_callback_handler(update, context, user_manager, portfolio_manager)
         return
     
-    # Handle message deletion (Cancel button)
+    # Handle message deletion
     if data == "delete_msg":
         await query.answer()
         await query.message.delete()
         return
     
-    # PnL pagination
+    # Pagination
     if data.startswith("pnl_page:"):
         if portfolio_manager:
             await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
         return
-    
-    # Portfolio pagination
     elif data.startswith("portfolio_page:"):
         if portfolio_manager:
             await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
         return
     
-    # Sell confirmation for single position
+    # Position management
     elif data.startswith("sell_confirm:"):
         if portfolio_manager:
             await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
         return
-    
-    # Execute single position sell
     elif data.startswith("sell_execute:"):
         if portfolio_manager:
             await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
         return
-    
-    # Sell all confirmation
     elif data == "sell_all_confirm":
         if portfolio_manager:
             await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
         return
-    
-    # Execute sell all
     elif data == "sell_all_execute":
         if portfolio_manager:
             await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
         return
-    
-    # Cancel sell
     elif data == "sell_cancel":
         await handle_sell_cancel_callback(update, context)
         return
     
-    # --- End Trading Button Callbacks ---
-    
-    # Acknowledge the click immediately
-    # For refresh, show a loading text
-    if data.startswith("refresh_alpha:"):
-        await query.answer("Refreshing data...")
-    else:
-        await query.answer() 
-    
-    chat_id = str(query.from_user.id)
-    data = query.data
-
     # --- Handle Alpha Refresh Button ---
     if data.startswith("refresh_alpha:"):
         try:
             mint = data.split(":", 1)[1]
-            
-            # Load the initial state using the correctly constructed path
+            from shared.file_io import safe_load
             alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
             initial_state = alerts_state.get(mint)
-            
             if not initial_state:
-                # If not found, it might be because the alert is too old or path issue persisting
-                await query.edit_message_text(
-                    "Error: Initial data not found for this token. It may be too old.",
-                    reply_markup=None
-                )
+                await query.answer("Record not found", show_alert=True)
                 return
-            
-            # --- Reply vs. Edit Logic ---
-            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
-            
-            if is_refresh_message:
-                # --- EDIT LOGIC (for subsequent clicks) ---
-                symbol = initial_state.get("symbol", "N/A")
-                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>\n\n<i>Please wait, fetching live data...</i> \n"""
-                loading_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                try:
-                    if query.message.text != loading_message:
-                        await query.edit_message_text(
-                            text=loading_message,
-                            parse_mode="HTML",
-                            reply_markup=loading_keyboard,
-                            disable_web_page_preview=True
-                        )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        await query.answer("Already refreshing...")
-                        return 
-                    raise 
-                
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-            
+            message = await format_alpha_refresh(mint, initial_state)
+            final_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Refresh â†»", callback_data=f"refresh_alpha:{mint}")]])
+            if query.message.text.startswith("ðŸ”„ Refresh:"):
+                await query.edit_message_text(text=message, parse_mode="HTML", reply_markup=final_keyboard)
             else:
-                # --- REPLY LOGIC (for first click on original alert) ---
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                await query.message.reply_html(
-                    text=message,
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-                
+                await query.message.reply_html(text=message, reply_markup=final_keyboard)
+            await query.answer("Refreshed!")
         except Exception as e:
-            if "message is not modified" in str(e).lower():
-                await query.answer("Data is already up to date.")
-            else:
-                logger.error(f"Failed to refresh alpha alert: {e}")
-                await query.answer("Error during refresh.", show_alert=True)
+            logger.error(f"Refresh error: {e}")
+            await query.answer("Refresh failed", show_alert=True)
         return
 
-    # --- Handle CA Analysis Button in Groups ---
+    # --- Handle CA Analysis Button ---
     if data.startswith("analyze_"):
-        if query.message.chat.type in ["group", "supergroup"]:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"<code>{mint_address}</code>",
-                    parse_mode="HTML"
-                )
-                return 
-            except Exception as e:
-                logging.warning(f"Failed to send CA in group: {e}")
-                try:
-                    await query.answer("Error sending address.", show_alert=True)
-                except:
-                    pass
-                return 
-        else:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
-            except Exception as e:
-                logging.warning(f"Failed to send CA in private chat: {e}")
-            return
-
-    # Allowed for all users
-    
-    
-    # --- Mode Selection ---
-    if data == "mode_alerts":
-        user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
-    elif data == "mode_papertrade":
-        user_manager.set_modes(chat_id, ["papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
-            "Use <code>/papertrade [capital]</code> to set your starting funds.\n"
-            "Example: <code>/papertrade 1000</code>", 
-            parse_mode="HTML"
-        )
-    elif data == "mode_both":
-        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.\n\n"
-            "You'll receive alerts AND auto-trade signals.\n"
-            "Use <code>/papertrade [capital]</code> to configure your trading capital.", 
-            parse_mode="HTML"
-        )
-
-    # --- Grade Configuration ---
-    elif data == "config_grades":
-        keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
-        ]
-        await query.edit_message_text(
-            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode="HTML"
-        )
-    elif data == "preset_critical":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
-    elif data == "preset_critical_high":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
-    elif data == "preset_all":
-        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
-
-
-    """Handle inline keyboard button callbacks."""
-    from alerts.trading_buttons import (
-        handle_pnl_page_callback, handle_portfolio_page_callback,
-        handle_sell_confirm_callback, handle_sell_execute_callback,
-        handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
-        handle_sell_cancel_callback
-    )
-    from alerts.menu_handler import handle_menu_callback
-    
-    query = update.callback_query
-    data = query.data
-    
-    # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
-       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
-       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
-       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
-       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
-       data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
-       data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_") or data == "mysettings_direct":
-        if portfolio_manager:
-            await handle_menu_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # --- Handle Trading Button Callbacks ---
-    # Handle all buy-related callbacks (amount, TP, SL, custom)
-    if (data.startswith("buy_amount:") or data.startswith("buy_custom:") or 
-        data.startswith("buy_tp:") or data.startswith("buy_sl:") or
-        data == "buy_tp_custom" or data == "buy_sl_custom"):
-        if portfolio_manager:
-            await buy_token_callback_handler(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Handle message deletion (Cancel button)
-    if data == "delete_msg":
         await query.answer()
-        await query.message.delete()
+        mint_address = data.split("_", 1)[1]
+        await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
         return
-    
-    # PnL pagination
-    if data.startswith("pnl_page:"):
-        if portfolio_manager:
-            await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Portfolio pagination
-    elif data.startswith("portfolio_page:"):
-        if portfolio_manager:
-            await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell confirmation for single position
-    elif data.startswith("sell_confirm:"):
-        if portfolio_manager:
-            await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute single position sell
-    elif data.startswith("sell_execute:"):
-        if portfolio_manager:
-            await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell all confirmation
-    elif data == "sell_all_confirm":
-        if portfolio_manager:
-            await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute sell all
-    elif data == "sell_all_execute":
-        if portfolio_manager:
-            await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Cancel sell
-    elif data == "sell_cancel":
-        await handle_sell_cancel_callback(update, context)
-        return
-    
-    # --- End Trading Button Callbacks ---
-    
-    # Acknowledge the click immediately
-    # For refresh, show a loading text
-    if data.startswith("refresh_alpha:"):
-        await query.answer("Refreshing data...")
-    else:
-        await query.answer() 
-    
-    chat_id = str(query.from_user.id)
-    data = query.data
-
-    # --- Handle Alpha Refresh Button ---
-    if data.startswith("refresh_alpha:"):
-        try:
-            mint = data.split(":", 1)[1]
-            
-            # Load the initial state using the correctly constructed path
-            alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-            initial_state = alerts_state.get(mint)
-            
-            if not initial_state:
-                # If not found, it might be because the alert is too old or path issue persisting
-                await query.edit_message_text(
-                    "Error: Initial data not found for this token. It may be too old.",
-                    reply_markup=None
-                )
-                return
-            
-            # --- Reply vs. Edit Logic ---
-            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
-            
-            if is_refresh_message:
-                # --- EDIT LOGIC (for subsequent clicks) ---
-                symbol = initial_state.get("symbol", "N/A")
-                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>\n\n<i>Please wait, fetching live data...</i> \n"""
-                loading_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                try:
-                    if query.message.text != loading_message:
-                        await query.edit_message_text(
-                            text=loading_message,
-                            parse_mode="HTML",
-                            reply_markup=loading_keyboard,
-                            disable_web_page_preview=True
-                        )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        await query.answer("Already refreshing...")
-                        return 
-                    raise 
-                
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-            
-            else:
-                # --- REPLY LOGIC (for first click on original alert) ---
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                await query.message.reply_html(
-                    text=message,
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-                
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                await query.answer("Data is already up to date.")
-            else:
-                logger.error(f"Failed to refresh alpha alert: {e}")
-                await query.answer("Error during refresh.", show_alert=True)
-        return
-
-    # --- Handle CA Analysis Button in Groups ---
-    if data.startswith("analyze_"):
-        if query.message.chat.type in ["group", "supergroup"]:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"<code>{mint_address}</code>",
-                    parse_mode="HTML"
-                )
-                return 
-            except Exception as e:
-                logging.warning(f"Failed to send CA in group: {e}")
-                try:
-                    await query.answer("Error sending address.", show_alert=True)
-                except:
-                    pass
-                return 
-        else:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
-            except Exception as e:
-                logging.warning(f"Failed to send CA in private chat: {e}")
-            return
-
-    # Allowed for all users
-    
-    
-    # --- Mode Selection ---
-    if data == "mode_alerts":
-        user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
-    elif data == "mode_papertrade":
-        user_manager.set_modes(chat_id, ["papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
-            "Use <code>/papertrade [capital]</code> to set your starting funds.\n"
-            "Example: <code>/papertrade 1000</code>", 
-            parse_mode="HTML"
-        )
-    elif data == "mode_both":
-        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.\n\n"
-            "You'll receive alerts AND auto-trade signals.\n"
-            "Use <code>/papertrade [capital]</code> to configure your trading capital.", 
-            parse_mode="HTML"
-        )
-
-    # --- Grade Configuration ---
-    elif data == "config_grades":
-        keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
-        ]
-        await query.edit_message_text(
-            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode="HTML"
-        )
-    elif data == "preset_critical":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
-    elif data == "preset_critical_high":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
-    elif data == "preset_all":
-        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
-
-
-    """Handle inline keyboard button callbacks."""
-    from alerts.trading_buttons import (
-        handle_pnl_page_callback, handle_portfolio_page_callback,
-        handle_sell_confirm_callback, handle_sell_execute_callback,
-        handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
-        handle_sell_cancel_callback
-    )
-    from alerts.menu_handler import handle_menu_callback
-    
-    query = update.callback_query
-    data = query.data
-    
-    # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
-       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
-       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
-       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
-       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
-       data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
-       data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_") or data == "mysettings_direct":
-        if portfolio_manager:
-            await handle_menu_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # --- Handle Trading Button Callbacks ---
-    # Handle all buy-related callbacks (amount, TP, SL, custom)
-    if (data.startswith("buy_amount:") or data.startswith("buy_custom:") or 
-        data.startswith("buy_tp:") or data.startswith("buy_sl:") or
-        data == "buy_tp_custom" or data == "buy_sl_custom"):
-        if portfolio_manager:
-            await buy_token_callback_handler(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Handle message deletion (Cancel button)
-    if data == "delete_msg":
-        await query.answer()
-        await query.message.delete()
-        return
-    
-    # PnL pagination
-    if data.startswith("pnl_page:"):
-        if portfolio_manager:
-            await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Portfolio pagination
-    elif data.startswith("portfolio_page:"):
-        if portfolio_manager:
-            await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell confirmation for single position
-    elif data.startswith("sell_confirm:"):
-        if portfolio_manager:
-            await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute single position sell
-    elif data.startswith("sell_execute:"):
-        if portfolio_manager:
-            await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell all confirmation
-    elif data == "sell_all_confirm":
-        if portfolio_manager:
-            await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute sell all
-    elif data == "sell_all_execute":
-        if portfolio_manager:
-            await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Cancel sell
-    elif data == "sell_cancel":
-        await handle_sell_cancel_callback(update, context)
-        return
-    
-    # --- End Trading Button Callbacks ---
-    
-    # Acknowledge the click immediately
-    # For refresh, show a loading text
-    if data.startswith("refresh_alpha:"):
-        await query.answer("Refreshing data...")
-    else:
-        await query.answer() 
-    
-    chat_id = str(query.from_user.id)
-    data = query.data
-
-    # --- Handle Alpha Refresh Button ---
-    if data.startswith("refresh_alpha:"):
-        try:
-            mint = data.split(":", 1)[1]
-            
-            # Load the initial state using the correctly constructed path
-            alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-            initial_state = alerts_state.get(mint)
-            
-            if not initial_state:
-                # If not found, it might be because the alert is too old or path issue persisting
-                await query.edit_message_text(
-                    "Error: Initial data not found for this token. It may be too old.",
-                    reply_markup=None
-                )
-                return
-            
-            # --- Reply vs. Edit Logic ---
-            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
-            
-            if is_refresh_message:
-                # --- EDIT LOGIC (for subsequent clicks) ---
-                symbol = initial_state.get("symbol", "N/A")
-                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>
-
-<i>Please wait, fetching live data...</i> 
-"""
-                loading_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                try:
-                    if query.message.text != loading_message:
-                        await query.edit_message_text(
-                            text=loading_message,
-                            parse_mode="HTML",
-                            reply_markup=loading_keyboard,
-                            disable_web_page_preview=True
-                        )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        await query.answer("Already refreshing...")
-                        return 
-                    raise 
-                
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-            
-            else:
-                # --- REPLY LOGIC (for first click on original alert) ---
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                await query.message.reply_html(
-                    text=message,
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-                
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                await query.answer("Data is already up to date.")
-            else:
-                logger.error(f"Failed to refresh alpha alert: {e}")
-                await query.answer("Error during refresh.", show_alert=True)
-        return
-
-    # --- Handle CA Analysis Button in Groups ---
-    if data.startswith("analyze_"):
-        if query.message.chat.type in ["group", "supergroup"]:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"<code>{mint_address}</code>",
-                    parse_mode="HTML"
-                )
-                return 
-            except Exception as e:
-                logging.warning(f"Failed to send CA in group: {e}")
-                try:
-                    await query.answer("Error sending address.", show_alert=True)
-                except:
-                    pass
-                return 
-        else:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
-            except Exception as e:
-                logging.warning(f"Failed to send CA in private chat: {e}")
-            return
-
-    # Allowed for all users
-    
-    
-    # --- Mode Selection ---
-    if data == "mode_alerts":
-        user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
-    elif data == "mode_papertrade":
-        user_manager.set_modes(chat_id, ["papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
-            "Use <code>/papertrade [capital]</code> to set your starting funds.\n"
-            "Example: <code>/papertrade 1000</code>", 
-            parse_mode="HTML"
-        )
-    elif data == "mode_both":
-        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.\n\n"
-            "You'll receive alerts AND auto-trade signals.\n"
-            "Use <code>/papertrade [capital]</code> to configure your trading capital.", 
-            parse_mode="HTML"
-        )
-
-    # --- Grade Configuration ---
-    elif data == "config_grades":
-        keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
-        ]
-        await query.edit_message_text(
-            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode="HTML"
-        )
-    elif data == "preset_critical":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
-    elif data == "preset_critical_high":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
-    elif data == "preset_all":
-        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
-    """Handle inline keyboard button callbacks."""
-    from alerts.trading_buttons import (
-        handle_pnl_page_callback, handle_portfolio_page_callback,
-        handle_sell_confirm_callback, handle_sell_execute_callback,
-        handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
-        handle_sell_cancel_callback
-    )
-    from alerts.menu_handler import handle_menu_callback
-    
-    query = update.callback_query
-    data = query.data
-    
-    # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
-       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
-       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
-       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
-       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
-       data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
-       data.startswith("resetcapital_") or data == "grades_done" or data.startswith("enable_") or data == "mysettings_direct":
-        if portfolio_manager:
-            await handle_menu_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # --- Handle Trading Button Callbacks ---
-    # Handle all buy-related callbacks (amount, TP, SL, custom)
-    if (data.startswith("buy_amount:") or data.startswith("buy_custom:") or 
-        data.startswith("buy_tp:") or data.startswith("buy_sl:") or
-        data == "buy_tp_custom" or data == "buy_sl_custom"):
-        if portfolio_manager:
-            await buy_token_callback_handler(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Handle message deletion (Cancel button)
-    if data == "delete_msg":
-        await query.answer()
-        await query.message.delete()
-        return
-    
-    # PnL pagination
-    if data.startswith("pnl_page:"):
-        if portfolio_manager:
-            await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Portfolio pagination
-    elif data.startswith("portfolio_page:"):
-        if portfolio_manager:
-            await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell confirmation for single position
-    elif data.startswith("sell_confirm:"):
-        if portfolio_manager:
-            await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute single position sell
-    elif data.startswith("sell_execute:"):
-        if portfolio_manager:
-            await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell all confirmation
-    elif data == "sell_all_confirm":
-        if portfolio_manager:
-            await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute sell all
-    elif data == "sell_all_execute":
-        if portfolio_manager:
-            await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Cancel sell
-    elif data == "sell_cancel":
-        await handle_sell_cancel_callback(update, context)
-        return
-    
-    # --- End Trading Button Callbacks ---
-    
-    # Acknowledge the click immediately
-    # For refresh, show a loading text
-    if data.startswith("refresh_alpha:"):
-        await query.answer("Refreshing data...")
-    else:
-        await query.answer() 
-    
-    chat_id = str(query.from_user.id)
-    data = query.data
-
-    # --- Handle Alpha Refresh Button ---
-    if data.startswith("refresh_alpha:"):
-        try:
-            mint = data.split(":", 1)[1]
-            
-            # Load the initial state using the correctly constructed path
-            alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-            initial_state = alerts_state.get(mint)
-            
-            if not initial_state:
-                # If not found, it might be because the alert is too old or path issue persisting
-                await query.edit_message_text(
-                    "Error: Initial data not found for this token. It may be too old.",
-                    reply_markup=None
-                )
-                return
-            
-            # --- Reply vs. Edit Logic ---
-            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
-            
-            if is_refresh_message:
-                # --- EDIT LOGIC (for subsequent clicks) ---
-                symbol = initial_state.get("symbol", "N/A")
-                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>
-
-<i>Please wait, fetching live data...</i> 
-"""
-                loading_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                try:
-                    if query.message.text != loading_message:
-                        await query.edit_message_text(
-                            text=loading_message,
-                            parse_mode="HTML",
-                            reply_markup=loading_keyboard,
-                            disable_web_page_preview=True
-                        )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        await query.answer("Already refreshing...")
-                        return 
-                    raise 
-                
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-            
-            else:
-                # --- REPLY LOGIC (for first click on original alert) ---
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                await query.message.reply_html(
-                    text=message,
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-                
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                await query.answer("Data is already up to date.")
-            else:
-                logger.error(f"Failed to refresh alpha alert: {e}")
-                await query.answer("Error during refresh.", show_alert=True)
-        return
-
-    # --- Handle CA Analysis Button in Groups ---
-    if data.startswith("analyze_"):
-        if query.message.chat.type in ["group", "supergroup"]:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"<code>{mint_address}</code>",
-                    parse_mode="HTML"
-                )
-                return 
-            except Exception as e:
-                logging.warning(f"Failed to send CA in group: {e}")
-                try:
-                    await query.answer("Error sending address.", show_alert=True)
-                except:
-                    pass
-                return 
-        else:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
-            except Exception as e:
-                logging.warning(f"Failed to send CA in private chat: {e}")
-            return
-
-    # Allowed for all users
-    
-    
-    # --- Mode Selection ---
-    if data == "mode_alerts":
-        user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
-    elif data == "mode_papertrade":
-        user_manager.set_modes(chat_id, ["papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
-            "Use <code>/papertrade [capital]</code> to set your starting funds.\n"
-            "Example: <code>/papertrade 1000</code>", 
-            parse_mode="HTML"
-        )
-    elif data == "mode_both":
-        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.\n\n"
-            "You'll receive alerts AND auto-trade signals.\n"
-            "Use <code>/papertrade [capital]</code> to configure your trading capital.", 
-            parse_mode="HTML"
-        )
-
-    # --- Grade Configuration ---
-    elif data == "config_grades":
-        keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
-        ]
-        await query.edit_message_text(
-            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode="HTML"
-        )
-    elif data == "preset_critical":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
-    elif data == "preset_critical_high":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
-    elif data == "preset_all":
-        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
-    """Handle inline keyboard button callbacks."""
-    from alerts.trading_buttons import (
-        handle_pnl_page_callback, handle_portfolio_page_callback,
-        handle_sell_confirm_callback, handle_sell_execute_callback,
-        handle_sell_all_confirm_callback, handle_sell_all_execute_callback,
-        handle_sell_cancel_callback
-    )
-    from alerts.menu_handler import handle_menu_callback
-    
-    query = update.callback_query
-    data = query.data
-    
-    # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("mode_") or data.startswith("grade_") or \
-       data.startswith("init_capital:") or data.startswith("reset_capital") or data.startswith("custom_capital") or \
-       data.startswith("settings_") or data.startswith("alpha_") or data.startswith("setalerts_") or \
-       data.startswith("tp_") or data.startswith("predict_") or data.startswith("help_") or \
-       data.startswith("myalerts_") or data.startswith("history_") or data.startswith("performance_") or \
-       data == "watchlist_direct" or data == "portfolio_direct" or data == "pnl_direct" or \
-            await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager):
-        return
-    
-    # Sell confirmation for single position
-    elif data.startswith("sell_confirm:"):
-        if portfolio_manager:
-            await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute single position sell
-    elif data.startswith("sell_execute:"):
-        if portfolio_manager:
-            await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Sell all confirmation
-    elif data == "sell_all_confirm":
-        if portfolio_manager:
-            await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Execute sell all
-    elif data == "sell_all_execute":
-        if portfolio_manager:
-            await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
-        return
-    
-    # Cancel sell
-    elif data == "sell_cancel":
-        await handle_sell_cancel_callback(update, context)
-        return
-    
-    # --- End Trading Button Callbacks ---
-    
-    # Acknowledge the click immediately
-    # For refresh, show a loading text
-    if data.startswith("refresh_alpha:"):
-        await query.answer("Refreshing data...")
-    else:
-        await query.answer() 
-    
-    chat_id = str(query.from_user.id)
-    data = query.data
-
-    # --- Handle Alpha Refresh Button ---
-    if data.startswith("refresh_alpha:"):
-        try:
-            mint = data.split(":", 1)[1]
-            
-            # Load the initial state using the correctly constructed path
-            alerts_state = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-            initial_state = alerts_state.get(mint)
-            
-            if not initial_state:
-                # If not found, it might be because the alert is too old or path issue persisting
-                await query.edit_message_text(
-                    "Error: Initial data not found for this token. It may be too old.",
-                    reply_markup=None
-                )
-                return
-            
-            # --- Reply vs. Edit Logic ---
-            is_refresh_message = query.message.text.startswith("🔄 <b>Refresh:")
-            
-            if is_refresh_message:
-                # --- EDIT LOGIC (for subsequent clicks) ---
-                symbol = initial_state.get("symbol", "N/A")
-                loading_message = f"""🔄 <b>Refreshing: ${symbol}</b>
-
-<i>Please wait, fetching live data...</i> 
-"""
-                loading_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refreshing... ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                try:
-                    if query.message.text != loading_message:
-                        await query.edit_message_text(
-                            text=loading_message,
-                            parse_mode="HTML",
-                            reply_markup=loading_keyboard,
-                            disable_web_page_preview=True
-                        )
-                except Exception as e:
-                    if "message is not modified" in str(e).lower():
-                        await query.answer("Already refreshing...")
-                        return 
-                    raise 
-                
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-            
-            else:
-                # --- REPLY LOGIC (for first click on original alert) ---
-                message = await format_alpha_refresh(mint, initial_state)
-                final_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Refresh ↻", callback_data=f"refresh_alpha:{mint}")]
-                ])
-                
-                await query.message.reply_html(
-                    text=message,
-                    reply_markup=final_keyboard,
-                    disable_web_page_preview=True
-                )
-                
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                await query.answer("Data is already up to date.")
-            else:
-                logger.error(f"Failed to refresh alpha alert: {e}")
-                await query.answer("Error during refresh.", show_alert=True)
-        return
-
-    # --- Handle CA Analysis Button in Groups ---
-    if data.startswith("analyze_"):
-        if query.message.chat.type in ["group", "supergroup"]:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text=f"<code>{mint_address}</code>",
-                    parse_mode="HTML"
-                )
-                return 
-            except Exception as e:
-                logging.warning(f"Failed to send CA in group: {e}")
-                try:
-                    await query.answer("Error sending address.", show_alert=True)
-                except:
-                    pass
-                return 
-        else:
-            try:
-                mint_address = data.split("_", 1)[1]
-                await query.message.reply_text(f"<code>{mint_address}</code>", parse_mode="HTML")
-            except Exception as e:
-                logging.warning(f"Failed to send CA in private chat: {e}")
-            return
-
-    # Allowed for all users
-    
-    
-    # --- Mode Selection ---
-    if data == "mode_alerts":
-        user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
-    elif data == "mode_papertrade":
-        user_manager.set_modes(chat_id, ["papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
-            "Use <code>/papertrade [capital]</code> to set your starting funds.\n"
-            "Example: <code>/papertrade 1000</code>", 
-            parse_mode="HTML"
-        )
-    elif data == "mode_both":
-        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
-        await query.edit_message_text(
-            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.\n\n"
-            "You'll receive alerts AND auto-trade signals.\n"
-            "Use <code>/papertrade [capital]</code> to configure your trading capital.", 
-            parse_mode="HTML"
-        )
-
-    # --- Grade Configuration ---
-    elif data == "config_grades":
-        keyboard = [
-            [InlineKeyboardButton("🔴 CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("🔥 CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("📊 All Grades", callback_data="preset_all")]
-        ]
-        await query.edit_message_text(
-            "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
-            reply_markup=InlineKeyboardMarkup(keyboard), 
-            parse_mode="HTML"
-        )
-    elif data == "preset_critical":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
-    elif data == "preset_critical_high":
-        user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("✅ Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
-    elif data == "preset_all":
-        user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("✅ Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
-
 
 async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Set global TP preference."""
@@ -2200,10 +1211,10 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
     if not context.args:
         await update.message.reply_html(
             "<b>Usage:</b> <code>/set_tp [median|mean|mode|number]</code>\n"
-            "• median: Use median historical ATH (Recommended - middle value)\n"
-            "• mean: Use average historical ATH (Aggressive - higher)\n"
-            "• mode: Use most frequent ATH (Conservative - most common)\n"
-            "• number: Fixed percentage (e.g., 50)"
+            "â€¢ median: Use median historical ATH (Recommended - middle value)\n"
+            "â€¢ mean: Use average historical ATH (Aggressive - higher)\n"
+            "â€¢ mode: Use most frequent ATH (Conservative - most common)\n"
+            "â€¢ number: Fixed percentage (e.g., 50)"
         )
         return
         
@@ -2212,11 +1223,11 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
         try:
             float(val)
         except ValueError:
-            await update.message.reply_text("❌ Invalid option.")
+            await update.message.reply_text("âŒ Invalid option.")
             return
 
     user_manager.update_user_prefs(chat_id, {"tp_preference": val})
-    await update.message.reply_html(f"✅ Global TP preference set to: <b>{val}</b>")
+    await update.message.reply_html(f"âœ… Global TP preference set to: <b>{val}</b>")
 
 async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Override TP for discovery signals."""
@@ -2227,8 +1238,8 @@ async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         val = float(context.args[0])
         user_manager.update_user_prefs(chat_id, {"tp_discovery": val})
-        await update.message.reply_text(f"✅ Discovery TP fixed at {val}%")
-    except: await update.message.reply_text("❌ Invalid number")
+        await update.message.reply_text(f"âœ… Discovery TP fixed at {val}%")
+    except: await update.message.reply_text("âŒ Invalid number")
 
 async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Override TP for alpha signals."""
@@ -2239,8 +1250,8 @@ async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     try:
         val = float(context.args[0])
         user_manager.update_user_prefs(chat_id, {"tp_alpha": val})
-        await update.message.reply_text(f"✅ Alpha TP fixed at {val}%")
-    except: await update.message.reply_text("❌ Invalid number")
+        await update.message.reply_text(f"âœ… Alpha TP fixed at {val}%")
+    except: await update.message.reply_text("âŒ Invalid number")
 
 
 async def view_tp_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
@@ -2253,12 +1264,12 @@ async def view_tp_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     tp_alpha = prefs.get("tp_alpha", "Default (Global)")
     
     msg = (
-        f"🎯 <b>Take Profit Settings</b>\n\n"
+        f"ðŸŽ¯ <b>Take Profit Settings</b>\n\n"
         f"<b>Global Preference:</b> {tp_global}\n"
         f"<i>Used when no specific override is set.</i>\n\n"
         f"<b>Overrides:</b>\n"
-        f"• Discovery Signals: <b>{tp_discovery}</b>\n"
-        f"• Alpha Signals: <b>{tp_alpha}</b>\n\n"
+        f"â€¢ Discovery Signals: <b>{tp_discovery}</b>\n"
+        f"â€¢ Alpha Signals: <b>{tp_alpha}</b>\n\n"
         f"Use the buttons in Settings > Take Profit to change these."
     )
     
@@ -2279,7 +1290,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """
     from alerts.price_fetcher import PriceFetcher
     
-    status_msg = await update.message.reply_text("🔎 Fetching token info...")
+    status_msg = await update.message.reply_text("ðŸ”Ž Fetching token info...")
     
     # Fetch token info
     token_info = await PriceFetcher.get_token_info(mint)
@@ -2288,7 +1299,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     rugcheck_data = await PriceFetcher.get_rugcheck_analysis(mint)
     
     if not token_info:
-        await status_msg.edit_text("❌ Could not find token info for this mint address.")
+        await status_msg.edit_text("âŒ Could not find token info for this mint address.")
         return
         
     symbol = token_info.get("symbol", "UNKNOWN")
@@ -2309,7 +1320,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         [
             InlineKeyboardButton("Custom Amount", callback_data=f"buy_custom:{mint}")
         ],
-        [InlineKeyboardButton("❌ Cancel", callback_data="delete_msg")]
+        [InlineKeyboardButton("âŒ Cancel", callback_data="delete_msg")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2321,7 +1332,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     price_change_24h = token_info.get("price_change_24h", 0)
     
     msg = (
-        f"💎 <b>Found {name} ({symbol})</b>\n"
+        f"ðŸ’Ž <b>Found {name} ({symbol})</b>\n"
         f"<code>{mint}</code>\n\n"
         f"<b>Price:</b> ${price:.6f}\n"
     )
@@ -2334,7 +1345,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if liquidity > 0:
         msg += f"<b>Liquidity:</b> ${liquidity:,.0f}\n"
     if price_change_24h != 0:
-        change_emoji = "📈" if price_change_24h > 0 else "📉"
+        change_emoji = "ðŸ“ˆ" if price_change_24h > 0 else "ðŸ“‰"
         msg += f"<b>24h Change:</b> {change_emoji} {price_change_24h:+.2f}%\n"
     
     # Add Educational Security Insights (White-labeled)
@@ -2350,9 +1361,9 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Safe/Risk assessment
         is_safe = score < 400  # Arbitrary threshold based on "warn" at 500
         risk_level = "LOW" if score < 200 else "MEDIUM" if score < 500 else "HIGH"
-        risk_emoji = "🟢" if score < 200 else "🟡" if score < 500 else "🔴"
+        risk_emoji = "ðŸŸ¢" if score < 200 else "ðŸŸ¡" if score < 500 else "ðŸ”´"
         
-        msg += f"\n\n<b>🛡️ SECURITY INSIGHTS</b>\n"
+        msg += f"\n\n<b>ðŸ›¡ï¸ SECURITY INSIGHTS</b>\n"
         msg += f"Risk Level: {risk_emoji} {risk_level} ({score})\n\n"
         
         # 1. Authority Analysis
@@ -2360,26 +1371,26 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         freeze_auth = rugcheck_data.get("freeze_authority")
         mutable = rugcheck_data.get("is_mutable", True)
         
-        msg += "<b>👮 Authority Status:</b>\n"
-        msg += f"• Mint Authority: {'✅ Disabled' if not mint_auth else '⚠️ Enabled'}\n"
-        msg += f"• Freeze Authority: {'✅ Disabled' if not freeze_auth else '⚠️ Enabled'}\n"
-        msg += f"• Metadata Mutable: {'⚠️ Yes' if mutable else '✅ No'}\n"
+        msg += "<b>ðŸ‘® Authority Status:</b>\n"
+        msg += f"â€¢ Mint Authority: {'âœ… Disabled' if not mint_auth else 'âš ï¸ Enabled'}\n"
+        msg += f"â€¢ Freeze Authority: {'âœ… Disabled' if not freeze_auth else 'âš ï¸ Enabled'}\n"
+        msg += f"â€¢ Metadata Mutable: {'âš ï¸ Yes' if mutable else 'âœ… No'}\n"
         
         # 2. Liquidity Analysis
         liq_locked = rugcheck_data.get("liquidity_locked_pct", 0)
-        msg += f"\n<b>💧 Liquidity Status:</b>\n"
-        msg += f"• Locked: {liq_locked:.1f}% {'✅' if liq_locked > 90 else '⚠️'}\n"
+        msg += f"\n<b>ðŸ’§ Liquidity Status:</b>\n"
+        msg += f"â€¢ Locked: {liq_locked:.1f}% {'âœ…' if liq_locked > 90 else 'âš ï¸'}\n"
         
         # 3. Holder Analysis
         top_holders = rugcheck_data.get("top_holders_pct", 0)
         top_holder = rugcheck_data.get("top_holder_pct", 0)
         insider_count = rugcheck_data.get("insider_wallets_count", 0)
         
-        msg += f"\n<b>👥 Holder Analysis:</b>\n"
-        msg += f"• Top 10 Hold: {top_holders:.1f}% {'✅' if top_holders < 30 else '⚠️'}\n"
-        msg += f"• Top 1 Holder: {top_holder:.1f}%\n"
+        msg += f"\n<b>ðŸ‘¥ Holder Analysis:</b>\n"
+        msg += f"â€¢ Top 10 Hold: {top_holders:.1f}% {'âœ…' if top_holders < 30 else 'âš ï¸'}\n"
+        msg += f"â€¢ Top 1 Holder: {top_holder:.1f}%\n"
         if insider_count > 0:
-            msg += f"• Insider Wallets: {insider_count} ⚠️\n"
+            msg += f"â€¢ Insider Wallets: {insider_count} âš ï¸\n"
         
         # 4. Critical Warnings
         dev_sold = rugcheck_data.get("dev_sold", False)
@@ -2392,22 +1403,22 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         if liq_locked < 80: warnings.append(f"Low Liquidity Lock ({liq_locked:.1f}%)")
         
         if warnings:
-            msg += "\n<b>⚠️ CRITICAL WARNINGS:</b>\n"
+            msg += "\n<b>âš ï¸ CRITICAL WARNINGS:</b>\n"
             for warn in warnings:
-                msg += f"• {warn}\n"
+                msg += f"â€¢ {warn}\n"
     
         
         # 5. Detailed Risks (from API)
         if risks:
-            msg += "\n<b>⚠️ Potential Risks:</b>\n"
+            msg += "\n<b>âš ï¸ Potential Risks:</b>\n"
             for risk in risks:
                 r_name = risk.get("name", "Unknown")
                 r_desc = risk.get("description", "")
                 if r_desc:
-                    msg += f"• {r_name}: {r_desc}\n"
+                    msg += f"â€¢ {r_name}: {r_desc}\n"
                 else:
-                    msg += f"• {r_name}\n"
-    msg += f"\n💰 <b>Select Amount to Buy:</b>"
+                    msg += f"â€¢ {r_name}\n"
+    msg += f"\nðŸ’° <b>Select Amount to Buy:</b>"
     await status_msg.edit_text(msg, reply_markup=reply_markup, parse_mode="HTML")
 
 
@@ -2437,7 +1448,7 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
         # Check if amount exceeds available capital
         if amount_float > available:
             error_msg = (
-                f"❌ <b>Insufficient Capital</b>\n\n"
+                f"âŒ <b>Insufficient Capital</b>\n\n"
                 f"<b>Amount Requested:</b> ${amount_float:,.2f}\n"
                 f"<b>Available Capital:</b> ${available:,.2f}\n"
                 f"<b>Total Capital:</b> ${capital:,.2f}\n"
@@ -2446,7 +1457,7 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
             )
             
             if update.callback_query:
-                await update.callback_query.answer("❌ Insufficient capital!", show_alert=True)
+                await update.callback_query.answer("âŒ Insufficient capital!", show_alert=True)
                 await update.callback_query.message.edit_text(error_msg, parse_mode="HTML")
             else:
                 await update.message.reply_html(error_msg)
@@ -2464,13 +1475,13 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
             InlineKeyboardButton("Custom", callback_data="buy_tp_custom"),
             InlineKeyboardButton("Skip (No TP)", callback_data="buy_tp:99999")
         ],
-        [InlineKeyboardButton("❌ Cancel", callback_data="delete_msg")]
+        [InlineKeyboardButton("âŒ Cancel", callback_data="delete_msg")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     msg = (
-        f"💰 <b>Amount Set:</b> ${float(amount):.2f}\n\n"
-        f"🎯 <b>Select Take Profit (TP)</b>\n"
+        f"ðŸ’° <b>Amount Set:</b> ${float(amount):.2f}\n\n"
+        f"ðŸŽ¯ <b>Select Take Profit (TP)</b>\n"
         f"At what percentage gain should the bot sell?"
     )
     
@@ -2502,15 +1513,15 @@ async def ask_buy_sl(update, context, mint, amount, tp):
             InlineKeyboardButton("Custom", callback_data="buy_sl_custom"),
             InlineKeyboardButton("Skip (No SL)", callback_data="buy_sl:-999")
         ],
-        [InlineKeyboardButton("❌ Cancel", callback_data="delete_msg")]
+        [InlineKeyboardButton("âŒ Cancel", callback_data="delete_msg")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     tp_display = "None" if float(tp) >= 99999 else f"{tp}%"
     msg = (
-        f"💰 <b>Amount:</b> ${float(amount):.2f}\n"
-        f"🎯 <b>TP:</b> {tp_display}\n\n"
-        f"🛑 <b>Select Stop Loss (SL)</b>\n"
+        f"ðŸ’° <b>Amount:</b> ${float(amount):.2f}\n"
+        f"ðŸŽ¯ <b>TP:</b> {tp_display}\n\n"
+        f"ðŸ›‘ <b>Select Stop Loss (SL)</b>\n"
         f"At what percentage loss should the bot sell?"
     )
     
@@ -2557,7 +1568,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
     elif data.startswith("buy_custom:"):
         _, mint = data.split(":")
         await query.message.reply_text(
-            "💰 <b>Enter Custom Amount</b>\n\n"
+            "ðŸ’° <b>Enter Custom Amount</b>\n\n"
             f"Send the amount in USD to buy {mint}\n"
             "Example: <code>250</code>",
             parse_mode="HTML"
@@ -2569,7 +1580,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
         mint = context.user_data.get("buy_mint")
         amount = context.user_data.get("buy_amount")
         await query.message.reply_text(
-            "🎯 <b>Enter Custom Take Profit</b>\n\n"
+            "ðŸŽ¯ <b>Enter Custom Take Profit</b>\n\n"
             "Send the percentage (e.g., 150):",
             parse_mode="HTML"
         )
@@ -2581,7 +1592,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
         amount = context.user_data.get("buy_amount")
         tp = context.user_data.get("buy_tp")
         await query.message.reply_text(
-            "🛑 <b>Enter Custom Stop Loss</b>\n\n"
+            "ðŸ›‘ <b>Enter Custom Stop Loss</b>\n\n"
             "Send the percentage (e.g., 25):",
             parse_mode="HTML"
         )
@@ -2600,9 +1611,9 @@ async def _execute_manual_buy(update, context, user_manager, portfolio_manager, 
     token_info = await PriceFetcher.get_token_info(mint)
     if not token_info:
         if update.callback_query:
-            await update.callback_query.message.edit_text("❌ Failed to fetch latest price. Try again.")
+            await update.callback_query.message.edit_text("âŒ Failed to fetch latest price. Try again.")
         else:
-            await update.message.reply_text("❌ Failed to fetch latest price. Try again.")
+            await update.message.reply_text("âŒ Failed to fetch latest price. Try again.")
         return
         
     price = token_info.get("price", 0.0)
@@ -2619,13 +1630,13 @@ async def _execute_manual_buy(update, context, user_manager, portfolio_manager, 
     sl_display = f"-{abs(float(sl)):.0f}%" if sl and sl != -999 else "None"
     
     msg = (
-        f"✅ <b>Buy Successful!</b>\n\n"
-        f"💎 <b>Token:</b> {symbol}\n"
-        f"💵 <b>Amount:</b> ${amount:,.2f}\n"
-        f"💲 <b>Entry Price:</b> ${price:.6f}\n\n"
+        f"âœ… <b>Buy Successful!</b>\n\n"
+        f"ðŸ’Ž <b>Token:</b> {symbol}\n"
+        f"ðŸ’µ <b>Amount:</b> ${amount:,.2f}\n"
+        f"ðŸ’² <b>Entry Price:</b> ${price:.6f}\n\n"
         f"<b>Trading Parameters:</b>\n"
-        f"🎯 <b>Take Profit:</b> +{tp_display}\n"
-        f"🛑 <b>Stop Loss:</b> {sl_display}\n\n"
+        f"ðŸŽ¯ <b>Take Profit:</b> +{tp_display}\n"
+        f"ðŸ›‘ <b>Stop Loss:</b> {sl_display}\n\n"
         f"Position added to portfolio."
     )
     
@@ -2645,7 +1656,7 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     if not context.args:
         await update.message.reply_text(
-            "❌ Usage: /closeposition <SYMBOL>\n"
+            "âŒ Usage: /closeposition <SYMBOL>\n"
             "Example: /closeposition SOL"
         )
         return
@@ -2654,7 +1665,7 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
     if not portfolio or not portfolio.get("positions"):
-        await update.message.reply_text("❌ No open positions.")
+        await update.message.reply_text("âŒ No open positions.")
         return
     
     # Find position
@@ -2667,7 +1678,7 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
             break
     
     if not position_key:
-        await update.message.reply_text(f"❌ Position {symbol} not found.")
+        await update.message.reply_text(f"âŒ Position {symbol} not found.")
         return
     
     # Get current ROI
@@ -2686,7 +1697,7 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     await portfolio_manager.exit_position(
         chat_id, position_key, 
-        "Manual Close 👤", 
+        "Manual Close ðŸ‘¤", 
         context.application, 
         exit_roi=current_roi
     )
@@ -2700,17 +1711,17 @@ async def closeall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
     if not portfolio or not portfolio.get("positions"):
-        await update.message.reply_text("❌ No open positions.")
+        await update.message.reply_text("âŒ No open positions.")
         return
     
     positions = portfolio["positions"]
     count = len(positions)
     
-    msg = f"⚠️ <b>Close All Positions?</b>\n\n"
+    msg = f"âš ï¸ <b>Close All Positions?</b>\n\n"
     msg += f"You have {count} open position(s):\n\n"
     
     for key, pos in positions.items():
-        msg += f"• {pos.get('symbol', 'N/A')} ({pos.get('signal_type', 'N/A')})\n"
+        msg += f"â€¢ {pos.get('symbol', 'N/A')} ({pos.get('signal_type', 'N/A')})\n"
     
     msg += f"\nType <code>/confirmcloseall</code> to proceed."
     
@@ -2725,7 +1736,7 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
     if not portfolio or not portfolio.get("positions"):
-        await update.message.reply_text("❌ No open positions to close.")
+        await update.message.reply_text("âŒ No open positions to close.")
         return
     
     active_tracking = await portfolio_manager.download_active_tracking()
@@ -2751,10 +1762,10 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         await portfolio_manager.exit_position(
             chat_id, key, 
-            "Manual Close All 👤", 
+            "Manual Close All ðŸ‘¤", 
             context.application, 
             exit_roi=current_roi
         )
         closed_count += 1
     
-    await update.message.reply_text(f"✅ Closed {closed_count} position(s).")
+    await update.message.reply_text(f"âœ… Closed {closed_count} position(s).")
