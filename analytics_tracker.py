@@ -824,23 +824,34 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     symbol = "N/A"
     name = "N/A"
     try:
-        meta = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("tokenMeta", {})
-        symbol = meta.get("symbol", "N/A")
-        name = meta.get("name", "N/A")
-        
-        if symbol == "N/A":
-            meta_alpha = signal_data.get("result", {}).get("token_metadata", {})
-            if meta_alpha:
-                symbol = meta_alpha.get("symbol", "N/A")
-                name = meta_alpha.get("name", "N/A")
-        
-        if symbol == "N/A":
-            meta_disc = signal_data.get("token_metadata", {}) or signal_data.get("token", {})
-            if meta_disc:
-                symbol = meta_disc.get("symbol", "N/A")
-                name = meta_disc.get("name", "N/A")
-    except Exception: 
-        pass
+        # 1. Try result -> token_metadata (Standard location in overlap_results)
+        result_block = signal_data.get("result", {})
+        if isinstance(result_block, dict):
+            # Check direct metadata first
+            meta_alpha = result_block.get("token_metadata", {})
+            if isinstance(meta_alpha, dict):
+                if meta_alpha.get("symbol"): symbol = meta_alpha.get("symbol")
+                if meta_alpha.get("name"): name = meta_alpha.get("name")
+            
+            # 2. If still missing, try deep RugCheck raw data
+            # Guard against 'security' being a string (e.g. "passed_rugcheck")
+            if name == "N/A" or symbol == "N/A":
+                sec_block = result_block.get("security")
+                if isinstance(sec_block, dict):
+                    raw_meta = sec_block.get("rugcheck_raw", {}).get("raw", {}).get("tokenMeta", {})
+                    if raw_meta:
+                        if symbol == "N/A": symbol = raw_meta.get("symbol", "N/A")
+                        if name == "N/A": name = raw_meta.get("name", "N/A")
+
+        # 3. Last resort: top-level metadata
+        if name == "N/A" or symbol == "N/A":
+            meta_disc = signal_data.get("token_metadata", {})
+            if isinstance(meta_disc, dict):
+                if symbol == "N/A": symbol = meta_disc.get("symbol", "N/A")
+                if name == "N/A": name = meta_disc.get("name", "N/A")
+                
+    except Exception as e: 
+        logger.debug(f"Name extraction failed for {mint}: {e}")
 
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
@@ -901,16 +912,18 @@ async def process_signals(signal_data: dict, signal_type: str):
     for mint, history in signal_data.items():
         if isinstance(history, list) and history:
             first_entry = history[0]
+            latest_entry = history[-1]
             ts_str = safe_get_timestamp(first_entry)
             if ts_str:
-                sorted_tokens.append((mint, first_entry, parse_ts(ts_str)))
+                # Store latest_entry for processing, but use first_entry timestamp for sorting
+                sorted_tokens.append((mint, latest_entry, parse_ts(ts_str)))
     
     sorted_tokens.sort(key=lambda x: x[2])
     
-    for mint, first_entry, ts in sorted_tokens:
+    for mint, entry_to_track, ts in sorted_tokens:
         composite_key = get_composite_key(mint, signal_type)
         if composite_key not in active_tracking:
-            await add_new_token_to_tracking(mint, signal_type, first_entry)
+            await add_new_token_to_tracking(mint, signal_type, entry_to_track)
 
 async def update_active_token_prices():
     """
