@@ -280,14 +280,14 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         
         status_msg = ""
         if is_already_enabled:
-            status_msg = f"<b>Current Status:</b> âœ… Enabled\n<b>Current Capital:</b> ${current_capital:,.2f}\n\n"
+            status_msg = f"<b>Current Status:</b> \u2705 Enabled\n<b>Current Capital:</b> ${current_capital:,.2f}\n\n"
         else:
-            status_msg = "<b>Current Status:</b> âŒ Not enabled\n\n"
+            status_msg = "<b>Current Status:</b> \u274C Not enabled\n\n"
         
         await update.message.reply_html(
-            f"ðŸ“ˆ <b>Paper Trading Setup</b>\n\n"
+            f"\U0001F4C8 <b>Paper Trading Setup</b>\n\n"
             f"{status_msg}"
-            f"<b>ðŸ“ How to use:</b>\n"
+            f"<b>\u270F\uFE0F How to use:</b>\n"
             f"<code>/papertrade [amount]</code>\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/papertrade 1000</code> - Start with $1,000\n"
@@ -340,20 +340,20 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     action_word = "updated to" if is_already_enabled else "set up with"
     
     await update.message.reply_html(
-        f"ðŸ“ˆ <b>Paper Trading {'Updated' if is_already_enabled else 'Enabled'}!</b>\n\n"
+        f"\U0001F4C8 <b>Paper Trading {'Updated' if is_already_enabled else 'Enabled'}!</b>\n\n"
         f"Your virtual portfolio has been {action_word} <b>${capital:,.2f} USD</b>.\n\n"
-        f"<b>ðŸŽ¯ Strategy Overview:</b>\n"
-        f"â€¢ Position Size: 8-12% per trade (max $150)\n"
-        f"â€¢ Partial Profits: 40% @ +40%, 30% @ +80%, 20% @ +150%\n"
-        f"â€¢ Trailing Stop: Dynamic 15-25% from peak\n"
-        f"â€¢ Liquidity Protection: Exit on 40% drain\n"
-        f"â€¢ Max Hold: 4 hours\n\n"
-        f"<b>ðŸ“Š Track Your Performance:</b>\n"
-        f"â€¢ /portfolio - View positions\n"
-        f"â€¢ /pnl - Check unrealized P/L\n"
-        f"â€¢ /performance - Detailed stats\n"
-        f"â€¢ /history - Trade log\n\n"
-        f"The bot will now automatically trade signals. Good luck! ðŸš€"
+        f"<b>\U0001F3AF Strategy Overview:</b>\n"
+        f"\u2022 Position Size: 8-12% per trade (max $150)\n"
+        f"\u2022 Partial Profits: 40% @ +40%, 30% @ +80%, 20% @ +150%\n"
+        f"\u2022 Trailing Stop: Dynamic 15-25% from peak\n"
+        f"\u2022 Liquidity Protection: Exit on 40% drain\n"
+        f"\u2022 Max Hold: 4 hours\n\n"
+        f"<b>\U0001F4CA Track Your Performance:</b>\n"
+        f"\u2022 /portfolio - View positions\n"
+        f"\u2022 /pnl - Check unrealized P/L\n"
+        f"\u2022 /performance - Detailed stats\n"
+        f"\u2022 /history - Trade log\n\n"
+        f"The bot will now automatically trade signals. Good luck! \U0001F680"
     )
 
 async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager, portfolio_manager: PortfolioManager, page: int = 0):
@@ -709,18 +709,18 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     user_stats = user_manager.get_user_stats(chat_id)
     
     msg = (
-        f"ðŸ“Š <b>Your Statistics</b>\n\n"
-        f"ðŸ“¬ Total alerts received: <b>{user_stats.get('alerts_received', 0)}</b>\n"
-        f"ðŸ“… Member since: <i>{user_stats.get('joined_at', 'Unknown')[:10] if user_stats.get('joined_at') else 'Unknown'}</i>\n"
+        f"\U0001F4CA <b>Your Statistics</b>\n\n"
+        f"\U0001F4EC Total alerts received: <b>{user_stats.get('alerts_received', 0)}</b>\n"
+        f"\U0001F4C5 Member since: <i>{user_stats.get('joined_at', 'Unknown')[:10] if user_stats.get('joined_at') else 'Unknown'}</i>\n"
     )
     
     if is_admin:
         platform_stats = user_manager.get_all_stats()
         msg += (
-            f"\nðŸ¢ <b>Platform Statistics (Admin)</b>\n"
-            f"â€¢ Total users: <b>{platform_stats['total_users']}</b>\n"
-            f"â€¢ Active users: <b>{platform_stats['active_users']}</b>\n"
-            f"â€¢ Total alerts sent: <b>{platform_stats['total_alerts_sent']}</b>\n"
+            f"\n\U0001F3E2 <b>Platform Statistics (Admin)</b>\n"
+            f"\u2022 Total users: <b>{platform_stats['total_users']}</b>\n"
+            f"\u2022 Active users: <b>{platform_stats['active_users']}</b>\n"
+            f"\u2022 Total alerts sent: <b>{platform_stats['total_alerts_sent']}</b>\n"
         )
     
     await update.message.reply_html(msg)
@@ -754,7 +754,7 @@ def _format_prediction_result(mint: str, data: dict) -> str:
         risk_tier = pred.get('risk_tier', 'N/A')
         
         lines = [
-            f"ðŸ¤– <b>ML Prediction for Token</b>",
+            f"\U0001F916 <b>ML Prediction for Token</b>",
             f"<code>{mint}</code>\n",
             f"<b>Win Probability:</b> {win_prob:.2f}%",
             f"<b>Confidence:</b> {html.escape(confidence)}",
@@ -778,10 +778,10 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             vol = key_metrics.get('volume_h24_usd', 0)
             fdv = key_metrics.get('market_cap_usd', 0)
             
-            lines.append(f"ðŸ’§ <b>Liquidity:</b> {fmt_num(liq)}")
-            lines.append(f"ðŸ“Š <b>24h Volume:</b> {fmt_num(vol)}")
+            lines.append(f"\U0001F4A7 <b>Liquidity:</b> {fmt_num(liq)}")
+            lines.append(f"\U0001F4CA <b>24h Volume:</b> {fmt_num(vol)}")
             if fdv > 0:
-                lines.append(f"ðŸ’° <b>Market Cap:</b> {fmt_num(fdv)}")
+                lines.append(f"\U0001F4B0 <b>Market Cap:</b> {fmt_num(fdv)}")
 
             # 2. Age & Price Action
             age_hours = key_metrics.get('token_age_hours', 0)
@@ -793,18 +793,18 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             else:
                 age_str = f"{age_hours:.1f}h"
                 
-            lines.append(f"â° <b>Token Age:</b> {age_str}")
+            lines.append(f"\U000023F0 <b>Token Age:</b> {age_str}")
             
             # Price Change with Direction
-            pch_emoji = "ðŸŸ¢" if price_change > 0 else "ðŸ”´"
+            pch_emoji = "\U0001F7E2" if price_change > 0 else "\U0001F534"
             lines.append(f"{pch_emoji} <b>24h Change:</b> {price_change:+.2f}%")
 
             # 3. Holders & Supply
             insider = key_metrics.get('insider_supply_pct', 0)
             top10 = key_metrics.get('top_10_holders_pct', 0)
             
-            lines.append(f"ðŸ‘¥ <b>Insider Holdings:</b> {insider:.1f}%")
-            lines.append(f"ðŸ³ <b>Top 10 Holders:</b> {top10:.1f}%")
+            lines.append(f"\U0001F465 <b>Insider Holdings:</b> {insider:.1f}%")
+            lines.append(f"\U0001F3F3 <b>Top 10 Holders:</b> {top10:.1f}%")
             
             # 4. Risk & Health (Interpretations)
             risk_score = key_metrics.get('pump_dump_risk_score', 0)
@@ -813,24 +813,24 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             # Interpret Risk (Lower is better)
             if risk_score <= 20:
                 risk_text = "Low (Safe)"
-                risk_emoji = "ðŸŸ¢"
+                risk_emoji = "\U0001F7E2"
             elif risk_score <= 50:
                 risk_text = "Moderate"
-                risk_emoji = "ðŸŸ¡"
+                risk_emoji = "\U0001F7E1"
             else:
                 risk_text = "High Risk"
-                risk_emoji = "ðŸ”´"
+                risk_emoji = "\U0001F534"
             
             # Interpret Health (Higher is better)
             if health_score >= 80:
                 health_text = "Strong"
-                health_emoji = "ðŸ’ª"
+                health_emoji = "\U0001F4AA"
             elif health_score >= 40:
                 health_text = "Average"
-                health_emoji = "âš ï¸"
+                health_emoji = "\u26A0\uFE0F"
             else:
                 health_text = "Weak"
-                health_emoji = "ðŸ¤’"
+                health_emoji = "\U0001F912"
             
             lines.append(f"{risk_emoji} <b>Risk Level:</b> {risk_text} ({risk_score:.0f})")
             lines.append(f"{health_emoji} <b>Market Health:</b> {health_text} ({health_score:.0f})")
@@ -842,7 +842,7 @@ def _format_prediction_result(mint: str, data: dict) -> str:
             for warning in warnings:
                 # Clean up specific common warning text if needed, otherwise just display
                 clean_warning = html.escape(warning)
-                lines.append(f"â€¢ {clean_warning}")
+                lines.append(f"\u2022 {clean_warning}")
         
         return "\n".join(lines)
         
@@ -864,7 +864,7 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         return
 
     mint = context.args[0].strip()
-    loading_msg = await update.message.reply_html(f"ðŸ¤– Analyzing token <code>{mint}</code>... Please wait.")
+    loading_msg = await update.message.reply_html(f"\U0001F916 Analyzing token <code>{mint}</code>... Please wait.")
     
     url = f"{FASTAPI_ML_URL}/token/{mint}/predict"
     
@@ -880,7 +880,7 @@ async def predict_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
                 error_msg = error_data.get('detail', 'Unknown error')
                 logger.warning(f"Prediction failed for {mint}, status {resp.status}: {error_msg}")
                 await loading_msg.edit_text(
-                    f"âŒ <b>Analysis Failed for <code>{mint}</code></b>\n\n"
+                    f"\u274C <b>Analysis Failed for <code>{mint}</code></b>\n\n"
                     f"<b>Error:</b> {html.escape(error_msg)}",
                     parse_mode="HTML"
                 )
@@ -916,7 +916,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         return
 
     loading_msg = await update.message.reply_html(
-        f"ðŸ¤– Analyzing <b>{len(mints)} tokens</b> in a batch... This may take a moment."
+        f"\U0001F916 Analyzing <b>{len(mints)} tokens</b> in a batch... This may take a moment."
     )
     
     # FIXED: Send as JSON array in request body, NOT inside a dict
@@ -952,11 +952,11 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         
                         # Action emoji
                         action_emoji = {
-                            "BUY": "ðŸŸ¢",
-                            "CONSIDER": "ðŸŸ¡",
-                            "SKIP": "ðŸŸ ",
-                            "AVOID": "ðŸ”´"
-                        }.get(action, "âšª")
+                            "BUY": "\U0001F7E2",
+                            "CONSIDER": "\U0001F7E1",
+                            "SKIP": "\U0001F7E0",
+                            "AVOID": "\U0001F534"
+                        }.get(action, "\u26AA")
                         
                         result_lines.append(
                             f"{action_emoji} <b>{mint_short}</b>\n"
@@ -968,7 +968,7 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         # Format error
                         error = item.get('error', 'Unknown error')
                         result_lines.append(
-                            f"âŒ <b>{mint_short}</b>\n"
+                            f"\u274C <b>{mint_short}</b>\n"
                             f"   Error: {html.escape(error)}\n"
                         )
                 
@@ -979,8 +979,8 @@ async def predict_batch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 
                 result_lines.append(
                     f"\n<b>Summary:</b>\n"
-                    f"âœ… Success: {successful} | âŒ Failed: {failed}\n"
-                    f"ðŸŸ¢ Buy Signals: {buy_signals}"
+                    f"\u2705 Success: {successful} | \u274C Failed: {failed}\n"
+                    f"\U0001F7E2 Buy Signals: {buy_signals}"
                 )
                 
                 final_msg = "\n".join(result_lines)
@@ -1187,8 +1187,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 await query.answer("Record not found", show_alert=True)
                 return
             message = await format_alpha_refresh(mint, initial_state)
-            final_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_alpha:{mint}")]])
-            if query.message.text.startswith("ðŸ”„ Refresh:"):
+            final_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\U0001F504 Refresh", callback_data=f"refresh_alpha:{mint}")]])
+            if query.message.text.startswith("\U0001F504 Refresh:"):
                 await query.edit_message_text(text=message, parse_mode="HTML", reply_markup=final_keyboard)
             else:
                 await query.message.reply_html(text=message, reply_markup=final_keyboard)
@@ -1211,10 +1211,10 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
     if not context.args:
         await update.message.reply_html(
             "<b>Usage:</b> <code>/set_tp [median|mean|mode|number]</code>\n"
-            "â€¢ median: Use median historical ATH (Recommended - middle value)\n"
-            "â€¢ mean: Use average historical ATH (Aggressive - higher)\n"
-            "â€¢ mode: Use most frequent ATH (Conservative - most common)\n"
-            "â€¢ number: Fixed percentage (e.g., 50)"
+            "\u2022 median: Use median historical ATH (Recommended - middle value)\n"
+            "\u2022 mean: Use average historical ATH (Aggressive - higher)\n"
+            "\u2022 mode: Use most frequent ATH (Conservative - most common)\n"
+            "\u2022 number: Fixed percentage (e.g., 50)"
         )
         return
         
@@ -1227,7 +1227,7 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
             return
 
     user_manager.update_user_prefs(chat_id, {"tp_preference": val})
-    await update.message.reply_html(f"âœ… Global TP preference set to: <b>{val}</b>")
+    await update.message.reply_html(f"\u2705 Global TP preference set to: <b>{val}</b>")
 
 async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Override TP for discovery signals."""
@@ -1238,7 +1238,7 @@ async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         val = float(context.args[0])
         user_manager.update_user_prefs(chat_id, {"tp_discovery": val})
-        await update.message.reply_text(f"âœ… Discovery TP fixed at {val}%")
+        await update.message.reply_text(f"\u2705 Discovery TP fixed at {val}%")
     except: await update.message.reply_text("âŒ Invalid number")
 
 async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
@@ -1250,7 +1250,7 @@ async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     try:
         val = float(context.args[0])
         user_manager.update_user_prefs(chat_id, {"tp_alpha": val})
-        await update.message.reply_text(f"âœ… Alpha TP fixed at {val}%")
+        await update.message.reply_text(f"\u2705 Alpha TP fixed at {val}%")
     except: await update.message.reply_text("âŒ Invalid number")
 
 
@@ -1264,12 +1264,12 @@ async def view_tp_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     tp_alpha = prefs.get("tp_alpha", "Default (Global)")
     
     msg = (
-        f"ðŸŽ¯ <b>Take Profit Settings</b>\n\n"
+        f"\U0001F3AF <b>Take Profit Settings</b>\n\n"
         f"<b>Global Preference:</b> {tp_global}\n"
         f"<i>Used when no specific override is set.</i>\n\n"
         f"<b>Overrides:</b>\n"
-        f"â€¢ Discovery Signals: <b>{tp_discovery}</b>\n"
-        f"â€¢ Alpha Signals: <b>{tp_alpha}</b>\n\n"
+        f"\u2022 Discovery Signals: <b>{tp_discovery}</b>\n"
+        f"\u2022 Alpha Signals: <b>{tp_alpha}</b>\n\n"
         f"Use the buttons in Settings > Take Profit to change these."
     )
     
@@ -1290,7 +1290,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """
     from alerts.price_fetcher import PriceFetcher
     
-    status_msg = await update.message.reply_text("ðŸ”Ž Fetching token info...")
+    status_msg = await update.message.reply_text("\U0001F50E Fetching token info...")
     
     # Fetch token info
     token_info = await PriceFetcher.get_token_info(mint)
@@ -1299,7 +1299,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     rugcheck_data = await PriceFetcher.get_rugcheck_analysis(mint)
     
     if not token_info:
-        await status_msg.edit_text("âŒ Could not find token info for this mint address.")
+        await status_msg.edit_text("\u274C Could not find token info for this mint address.")
         return
         
     symbol = token_info.get("symbol", "UNKNOWN")
@@ -1320,7 +1320,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         [
             InlineKeyboardButton("Custom Amount", callback_data=f"buy_custom:{mint}")
         ],
-        [InlineKeyboardButton("âŒ Cancel", callback_data="delete_msg")]
+        [InlineKeyboardButton("\u274C Cancel", callback_data="delete_msg")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1332,7 +1332,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     price_change_24h = token_info.get("price_change_24h", 0)
     
     msg = (
-        f"ðŸ’Ž <b>Found {name} ({symbol})</b>\n"
+        f"\U0001F48E <b>Found {name} ({symbol})</b>\n"
         f"<code>{mint}</code>\n\n"
         f"<b>Price:</b> ${price:.6f}\n"
     )
@@ -1345,7 +1345,7 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if liquidity > 0:
         msg += f"<b>Liquidity:</b> ${liquidity:,.0f}\n"
     if price_change_24h != 0:
-        change_emoji = "ðŸ“ˆ" if price_change_24h > 0 else "ðŸ“‰"
+        change_emoji = "\U0001F4C8" if price_change_24h > 0 else "\U0001F4C9"
         msg += f"<b>24h Change:</b> {change_emoji} {price_change_24h:+.2f}%\n"
     
     # Add Educational Security Insights (White-labeled)
@@ -1361,9 +1361,9 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Safe/Risk assessment
         is_safe = score < 400  # Arbitrary threshold based on "warn" at 500
         risk_level = "LOW" if score < 200 else "MEDIUM" if score < 500 else "HIGH"
-        risk_emoji = "ðŸŸ¢" if score < 200 else "ðŸŸ¡" if score < 500 else "ðŸ”´"
+        risk_emoji = "\U0001F7E2" if score < 200 else "\U0001F7E1" if score < 500 else "\U0001F534"
         
-        msg += f"\n\n<b>ðŸ›¡ï¸ SECURITY INSIGHTS</b>\n"
+        msg += f"\n\n<b>\U0001F6E1\uFE0F SECURITY INSIGHTS</b>\n"
         msg += f"Risk Level: {risk_emoji} {risk_level} ({score})\n\n"
         
         # 1. Authority Analysis
@@ -1371,26 +1371,26 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         freeze_auth = rugcheck_data.get("freeze_authority")
         mutable = rugcheck_data.get("is_mutable", True)
         
-        msg += "<b>ðŸ‘® Authority Status:</b>\n"
-        msg += f"â€¢ Mint Authority: {'âœ… Disabled' if not mint_auth else 'âš ï¸ Enabled'}\n"
-        msg += f"â€¢ Freeze Authority: {'âœ… Disabled' if not freeze_auth else 'âš ï¸ Enabled'}\n"
-        msg += f"â€¢ Metadata Mutable: {'âš ï¸ Yes' if mutable else 'âœ… No'}\n"
+        msg += "<b>\U0001F46E Authority Status:</b>\n"
+        msg += f"\u2022 Mint Authority: {'\u2705 Disabled' if not mint_auth else '\u26A0\uFE0F Enabled'}\n"
+        msg += f"\u2022 Freeze Authority: {'\u2705 Disabled' if not freeze_auth else '\u26A0\uFE0F Enabled'}\n"
+        msg += f"\u2022 Metadata Mutable: {'\u26A0\uFE0F Yes' if mutable else '\u2705 No'}\n"
         
         # 2. Liquidity Analysis
         liq_locked = rugcheck_data.get("liquidity_locked_pct", 0)
-        msg += f"\n<b>ðŸ’§ Liquidity Status:</b>\n"
-        msg += f"â€¢ Locked: {liq_locked:.1f}% {'âœ…' if liq_locked > 90 else 'âš ï¸'}\n"
+        msg += f"\n<b>\U0001F4A7 Liquidity Status:</b>\n"
+        msg += f"\u2022 Locked: {liq_locked:.1f}% {'\u2705' if liq_locked > 90 else '\u26A0\uFE0F'}\n"
         
         # 3. Holder Analysis
         top_holders = rugcheck_data.get("top_holders_pct", 0)
         top_holder = rugcheck_data.get("top_holder_pct", 0)
         insider_count = rugcheck_data.get("insider_wallets_count", 0)
         
-        msg += f"\n<b>ðŸ‘¥ Holder Analysis:</b>\n"
-        msg += f"â€¢ Top 10 Hold: {top_holders:.1f}% {'âœ…' if top_holders < 30 else 'âš ï¸'}\n"
-        msg += f"â€¢ Top 1 Holder: {top_holder:.1f}%\n"
+        msg += f"\n<b>\U0001F465 Holder Analysis:</b>\n"
+        msg += f"\u2022 Top 10 Hold: {top_holders:.1f}% {'\u2705' if top_holders < 30 else '\u26A0\uFE0F'}\n"
+        msg += f"\u2022 Top 1 Holder: {top_holder:.1f}%\n"
         if insider_count > 0:
-            msg += f"â€¢ Insider Wallets: {insider_count} âš ï¸\n"
+            msg += f"\u2022 Insider Wallets: {insider_count} \u26A0\uFE0F\n"
         
         # 4. Critical Warnings
         dev_sold = rugcheck_data.get("dev_sold", False)
@@ -1403,22 +1403,22 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         if liq_locked < 80: warnings.append(f"Low Liquidity Lock ({liq_locked:.1f}%)")
         
         if warnings:
-            msg += "\n<b>âš ï¸ CRITICAL WARNINGS:</b>\n"
+            msg += "\n<b>\u26A0\uFE0F CRITICAL WARNINGS:</b>\n"
             for warn in warnings:
-                msg += f"â€¢ {warn}\n"
+                msg += f"\u2022 {warn}\n"
     
         
         # 5. Detailed Risks (from API)
         if risks:
-            msg += "\n<b>âš ï¸ Potential Risks:</b>\n"
+            msg += "\n<b>\u26A0\uFE0F Potential Risks:</b>\n"
             for risk in risks:
                 r_name = risk.get("name", "Unknown")
                 r_desc = risk.get("description", "")
                 if r_desc:
-                    msg += f"â€¢ {r_name}: {r_desc}\n"
+                    msg += f"\u2022 {r_name}: {r_desc}\n"
                 else:
-                    msg += f"â€¢ {r_name}\n"
-    msg += f"\nðŸ’° <b>Select Amount to Buy:</b>"
+                    msg += f"\u2022 {r_name}\n"
+    msg += f"\n\U0001F4B0 <b>Select Amount to Buy:</b>"
     await status_msg.edit_text(msg, reply_markup=reply_markup, parse_mode="HTML")
 
 
@@ -1448,7 +1448,7 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
         # Check if amount exceeds available capital
         if amount_float > available:
             error_msg = (
-                f"âŒ <b>Insufficient Capital</b>\n\n"
+                f"\u274C <b>Insufficient Capital</b>\n\n"
                 f"<b>Amount Requested:</b> ${amount_float:,.2f}\n"
                 f"<b>Available Capital:</b> ${available:,.2f}\n"
                 f"<b>Total Capital:</b> ${capital:,.2f}\n"
@@ -1457,7 +1457,7 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
             )
             
             if update.callback_query:
-                await update.callback_query.answer("âŒ Insufficient capital!", show_alert=True)
+                await update.callback_query.answer("\u274C Insufficient capital!", show_alert=True)
                 await update.callback_query.message.edit_text(error_msg, parse_mode="HTML")
             else:
                 await update.message.reply_html(error_msg)
@@ -1480,8 +1480,8 @@ async def ask_buy_tp(update, context, mint, amount, portfolio_manager=None, user
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     msg = (
-        f"ðŸ’° <b>Amount Set:</b> ${float(amount):.2f}\n\n"
-        f"ðŸŽ¯ <b>Select Take Profit (TP)</b>\n"
+        f"\U0001F4B0 <b>Amount Set:</b> ${float(amount):.2f}\n\n"
+        f"\U0001F3AF <b>Select Take Profit (TP)</b>\n"
         f"At what percentage gain should the bot sell?"
     )
     
@@ -1519,9 +1519,9 @@ async def ask_buy_sl(update, context, mint, amount, tp):
     
     tp_display = "None" if float(tp) >= 99999 else f"{tp}%"
     msg = (
-        f"ðŸ’° <b>Amount:</b> ${float(amount):.2f}\n"
-        f"ðŸŽ¯ <b>TP:</b> {tp_display}\n\n"
-        f"ðŸ›‘ <b>Select Stop Loss (SL)</b>\n"
+        f"\U0001F4B0 <b>Amount:</b> ${float(amount):.2f}\n"
+        f"\U0001F3AF <b>TP:</b> {tp_display}\n\n"
+        f"\U0001F6D1 <b>Select Stop Loss (SL)</b>\n"
         f"At what percentage loss should the bot sell?"
     )
     
@@ -1568,7 +1568,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
     elif data.startswith("buy_custom:"):
         _, mint = data.split(":")
         await query.message.reply_text(
-            "ðŸ’° <b>Enter Custom Amount</b>\n\n"
+            "\U0001F4B0 <b>Enter Custom Amount</b>\n\n"
             f"Send the amount in USD to buy {mint}\n"
             "Example: <code>250</code>",
             parse_mode="HTML"
@@ -1580,7 +1580,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
         mint = context.user_data.get("buy_mint")
         amount = context.user_data.get("buy_amount")
         await query.message.reply_text(
-            "ðŸŽ¯ <b>Enter Custom Take Profit</b>\n\n"
+            "\U0001F3AF <b>Enter Custom Take Profit</b>\n\n"
             "Send the percentage (e.g., 150):",
             parse_mode="HTML"
         )
@@ -1592,7 +1592,7 @@ async def buy_token_callback_handler(update: Update, context: ContextTypes.DEFAU
         amount = context.user_data.get("buy_amount")
         tp = context.user_data.get("buy_tp")
         await query.message.reply_text(
-            "ðŸ›‘ <b>Enter Custom Stop Loss</b>\n\n"
+            "\U0001F6D1 <b>Enter Custom Stop Loss</b>\n\n"
             "Send the percentage (e.g., 25):",
             parse_mode="HTML"
         )
@@ -1630,13 +1630,13 @@ async def _execute_manual_buy(update, context, user_manager, portfolio_manager, 
     sl_display = f"-{abs(float(sl)):.0f}%" if sl and sl != -999 else "None"
     
     msg = (
-        f"âœ… <b>Buy Successful!</b>\n\n"
-        f"ðŸ’Ž <b>Token:</b> {symbol}\n"
-        f"ðŸ’µ <b>Amount:</b> ${amount:,.2f}\n"
-        f"ðŸ’² <b>Entry Price:</b> ${price:.6f}\n\n"
+        f"\u2705 <b>Buy Successful!</b>\n\n"
+        f"\U0001F48E <b>Token:</b> {symbol}\n"
+        f"\U0001F4B5 <b>Amount:</b> ${amount:,.2f}\n"
+        f"\U0001F4B2 <b>Entry Price:</b> ${price:.6f}\n\n"
         f"<b>Trading Parameters:</b>\n"
-        f"ðŸŽ¯ <b>Take Profit:</b> +{tp_display}\n"
-        f"ðŸ›‘ <b>Stop Loss:</b> {sl_display}\n\n"
+        f"\U0001F3AF <b>Take Profit:</b> +{tp_display}\n"
+        f"\U0001F6D1 <b>Stop Loss:</b> {sl_display}\n\n"
         f"Position added to portfolio."
     )
     
@@ -1697,8 +1697,8 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     await portfolio_manager.exit_position(
         chat_id, position_key, 
-        "Manual Close ðŸ‘¤", 
-        context.application, 
+        "Manual Close \U0001F464", 
+        context.application,  
         exit_roi=current_roi
     )
 
