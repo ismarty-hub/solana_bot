@@ -224,8 +224,8 @@ async def send_alpha_alert(
             try:
                 logger.info(f"📤 Sending alpha alert to user {chat_id}...")
                 
-                # Try to send with image if available
-                if image_url:
+                # Check message length for send_photo caption limit (1024)
+                if image_url and len(alert_msg) < 1000:
                     try:
                         await app.bot.send_photo(
                             chat_id=chat_id,
@@ -240,13 +240,26 @@ async def send_alpha_alert(
                     except Exception as photo_err:
                         logger.warning(f"📷 Photo send failed for {chat_id}, falling back to text: {photo_err}")
                 
-                # Fallback to text message
+                # If message is long or send_photo failed, use "Invisible Link" trick
+                # This makes the image appear as a preview even in a text message.
+                final_text = alert_msg
+                web_preview = True
+                
+                if image_url:
+                    # Prepend an invisible link (zero-width joiner) to the message
+                    # This tells Telegram to use this URL for the link preview.
+                    hidden_link = f'<a href="{image_url}">&#8205;</a>'
+                    final_text = hidden_link + alert_msg
+                    web_preview = True
+                    logger.debug(f"Inserted hidden image link for {chat_id}")
+
+                # Regular message (supports up to 4096 chars)
                 await app.bot.send_message(
                     chat_id=chat_id,
-                    text=alert_msg,
+                    text=final_text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode="HTML",
-                    disable_web_page_preview=True
+                    disable_web_page_preview=not web_preview
                 )
                 success_count += 1
                 logger.info(f"✅ Alert sent successfully to {chat_id}")

@@ -278,6 +278,10 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         # Extract image URL from dexscreener data in the entry
         dex_entry = result.get("dexscreener", {})
         image_url = dex_entry.get("info", {}).get("imageUrl")
+        
+        # Fallback to fresh dex_data if image_url is missing in historian entry
+        if not image_url:
+            image_url = dex_data.get("info", {}).get("imageUrl")
 
         pair = dex_data
         name = pair.get("baseToken", {}).get("name", "Unknown")
