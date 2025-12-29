@@ -1187,7 +1187,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
                 await query.answer("Record not found", show_alert=True)
                 return
             message = await format_alpha_refresh(mint, initial_state)
-            final_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Refresh â†»", callback_data=f"refresh_alpha:{mint}")]])
+            final_keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data=f"refresh_alpha:{mint}")]])
             if query.message.text.startswith("ðŸ”„ Refresh:"):
                 await query.edit_message_text(text=message, parse_mode="HTML", reply_markup=final_keyboard)
             else:

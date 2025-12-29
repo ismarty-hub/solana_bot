@@ -24,12 +24,11 @@ from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 
-from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE)
+from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE)
 
 # --- Constants ---
 ALPHA_POLL_INTERVAL_SECS = 30
 ALPHA_OVERLAP_FILE = Path(DATA_DIR) / "overlap_results_alpha.pkl"
-ALPHA_ALERTS_STATE_FILE = Path(DATA_DIR) / "alerts_state_alpha.json"
 
 
 # Setup logger
@@ -41,11 +40,70 @@ from alerts.user_manager import UserManager
 from alerts.formatters import _format_alpha_alert_async
 
 try:
-    from supabase_utils import download_alpha_overlap_results
+    from supabase_utils import download_alpha_overlap_results, download_file
     logger.info("✅ Successfully imported download_alpha_overlap_results")
 except Exception:
     logger.exception("❌ FAILED to import required functions from supabase_utils!")
     download_alpha_overlap_results = None
+    download_file = None
+
+# Path to active_tracking.json for ML_PASSED crosscheck
+ACTIVE_TRACKING_FILE = Path(DATA_DIR) / "active_tracking.json"
+
+
+def download_active_tracking() -> Dict[str, Any]:
+    """
+    Download active_tracking.json from Supabase to check initial ML_PASSED status.
+    Returns empty dict if download fails or file doesn't exist.
+    """
+    if USE_SUPABASE and download_file:
+        try:
+            remote_path = "analytics/active_tracking.json"
+            ok = download_file(str(ACTIVE_TRACKING_FILE), remote_path, bucket=BUCKET_NAME)
+            if ok and ACTIVE_TRACKING_FILE.exists():
+                data = safe_load(ACTIVE_TRACKING_FILE, {})
+                logger.debug(f"Downloaded active_tracking.json with {len(data)} tokens")
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to download active_tracking.json: {e}")
+    
+    # Fallback to local file
+    if ACTIVE_TRACKING_FILE.exists():
+        return safe_load(ACTIVE_TRACKING_FILE, {})
+    
+    return {}
+
+
+def check_initial_ml_passed(mint: str, active_tracking: Dict[str, Any]) -> bool:
+    """
+    Check if a token's INITIAL ML_PASSED status was True from active_tracking.json.
+    
+    Returns:
+        True if token NOT found in active_tracking (new token, allow alert)
+        True if token found with ML_PASSED=True (allow alert)
+        False if token found with ML_PASSED=False (block permanently)
+    """
+    # Check alpha entry first
+    alpha_key = f"{mint}_alpha"
+    if alpha_key in active_tracking:
+        initial_ml_passed = active_tracking[alpha_key].get("ML_PASSED", False)
+        if not initial_ml_passed:
+            logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
+            return False
+        return True
+    
+    # Check discovery entry as fallback
+    discovery_key = f"{mint}_discovery"
+    if discovery_key in active_tracking:
+        initial_ml_passed = active_tracking[discovery_key].get("ML_PASSED", False)
+        if not initial_ml_passed:
+            logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
+            return False
+        return True
+    
+    # Token not found in active_tracking - it's new, allow the alert
+    logger.debug(f"✅ Token {mint[:8]}... not in active_tracking - allowing alert for new token")
+    return True
 
 
 def load_latest_alpha_tokens() -> Dict[str, Any] | None:
@@ -117,7 +175,7 @@ async def send_alpha_alert(
         # 2. Call the async formatter
         logger.info(f"📝 Formatting alert for {mint}...")
         try:
-            alert_msg, alert_meta = await _format_alpha_alert_async(mint, latest_data)
+            alert_msg, alert_meta, image_url = await _format_alpha_alert_async(mint, latest_data)
         except Exception as e:
             logger.exception(f"❌ Failed to format alert for {mint}: {e}")
             alerted_tokens[mint] = {
@@ -154,6 +212,8 @@ async def send_alpha_alert(
             alert_msg = change_header + alert_msg
         
         logger.info(f"📄 Message preview (first 200 chars): {alert_msg[:200]}")
+        if image_url:
+            logger.info(f"🖼️ Token image URL available: {image_url[:50]}...")
 
         # 4. Define keyboard and send to all users
         keyboard = [[InlineKeyboardButton(f"🔄 Refresh Price ({symbol})", callback_data=f"refresh_alpha:{mint}")]]
@@ -163,6 +223,24 @@ async def send_alpha_alert(
         for chat_id in alpha_subscribers:
             try:
                 logger.info(f"📤 Sending alpha alert to user {chat_id}...")
+                
+                # Try to send with image if available
+                if image_url:
+                    try:
+                        await app.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_url,
+                            caption=alert_msg,
+                            reply_markup=InlineKeyboardMarkup(keyboard),
+                            parse_mode="HTML"
+                        )
+                        success_count += 1
+                        logger.info(f"✅ Photo alert sent successfully to {chat_id}")
+                        continue
+                    except Exception as photo_err:
+                        logger.warning(f"📷 Photo send failed for {chat_id}, falling back to text: {photo_err}")
+                
+                # Fallback to text message
                 await app.bot.send_message(
                     chat_id=chat_id,
                     text=alert_msg,
@@ -281,6 +359,9 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 await asyncio.sleep(ALPHA_POLL_INTERVAL_SECS)
                 continue
 
+            # Download active_tracking.json for ML_PASSED initial status crosscheck
+            active_tracking = download_active_tracking()
+
             # Load latest tokens from PKL
             latest_tokens = load_latest_alpha_tokens()
             if not latest_tokens:
@@ -300,9 +381,15 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 current_grade = latest_data.get("result", {}).get("grade", "N/A")
                 ml_passed = latest_data.get("ML_PASSED", False)
 
-                # ML Filtering: Only send alerts if ML check passed
+                # ML Filtering: Only send alerts if ML check passed in overlap file
                 if not ml_passed:
                     logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False")
+                    continue
+                
+                # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
+                # This prevents alerts for tokens that initially failed ML but later passed
+                if not check_initial_ml_passed(mint, active_tracking):
+                    logger.info(f"⛔ BLOCKED alpha alert for {mint[:8]}... - initial ML_PASSED was False")
                     continue
                 
                 # Check if token exists in state

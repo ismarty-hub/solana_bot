@@ -37,8 +37,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 OVERLAP_FILE = DATA_DIR / "overlap_results.pkl"
 USER_PREFS_FILE = DATA_DIR / "bot_user_prefs.pkl"
 USER_STATS_FILE = DATA_DIR / "bot_user_stats.pkl"
-ALERTS_STATE_FILE = DATA_DIR / "bot_alerts_state.pkl"
-ALPHA_ALERTS_STATE_FILE = DATA_DIR / "alerts_state_alpha.pkl"
+ALERTS_STATE_FILE = DATA_DIR / "bot_alerts_state.json"
+ALPHA_ALERTS_STATE_FILE = DATA_DIR / "alerts_state_alpha.json"
 GROUPS_FILE = DATA_DIR / "bot_groups.pkl"  
 PORTFOLIOS_FILE = DATA_DIR / "bot_portfolios.pkl"
 

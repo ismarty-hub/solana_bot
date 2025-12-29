@@ -17,8 +17,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import (
     OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, 
     GROUPS_FILE, PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, 
-    POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES, ALPHA_ALERTS_STATE_FILE
+    POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES, ALPHA_ALERTS_STATE_FILE,
+    DATA_DIR
 )
+from pathlib import Path
 from shared.file_io import safe_load, safe_save
 from shared.utils import fetch_marketcap_and_fdv, truncate_address
 from alerts.formatters import format_alert_html
@@ -33,6 +35,63 @@ except Exception as e:
     download_overlap_results = None
     upload_file = None
     download_file = None
+
+# Path to active_tracking.json for ML_PASSED crosscheck
+ACTIVE_TRACKING_FILE = Path(DATA_DIR) / "active_tracking.json"
+
+
+def download_active_tracking() -> Dict[str, Any]:
+    """
+    Download active_tracking.json from Supabase to check initial ML_PASSED status.
+    Returns empty dict if download fails or file doesn't exist.
+    """
+    if USE_SUPABASE and download_file:
+        try:
+            remote_path = "analytics/active_tracking.json"
+            ok = download_file(str(ACTIVE_TRACKING_FILE), remote_path, bucket=BUCKET_NAME)
+            if ok and ACTIVE_TRACKING_FILE.exists():
+                data = safe_load(ACTIVE_TRACKING_FILE, {})
+                logger.debug(f"Downloaded active_tracking.json with {len(data)} tokens")
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to download active_tracking.json: {e}")
+    
+    # Fallback to local file
+    if ACTIVE_TRACKING_FILE.exists():
+        return safe_load(ACTIVE_TRACKING_FILE, {})
+    
+    return {}
+
+
+def check_initial_ml_passed(mint: str, active_tracking: Dict[str, Any]) -> bool:
+    """
+    Check if a token's INITIAL ML_PASSED status was True from active_tracking.json.
+    
+    Returns:
+        True if token NOT found in active_tracking (new token, allow alert)
+        True if token found with ML_PASSED=True (allow alert)
+        False if token found with ML_PASSED=False (block permanently)
+    """
+    # Check discovery entry first
+    discovery_key = f"{mint}_discovery"
+    if discovery_key in active_tracking:
+        initial_ml_passed = active_tracking[discovery_key].get("ML_PASSED", False)
+        if not initial_ml_passed:
+            logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
+            return False
+        return True
+    
+    # Check alpha entry as fallback
+    alpha_key = f"{mint}_alpha"
+    if alpha_key in active_tracking:
+        initial_ml_passed = active_tracking[alpha_key].get("ML_PASSED", False)
+        if not initial_ml_passed:
+            logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
+            return False
+        return True
+    
+    # Token not found in active_tracking - it's new, allow the alert
+    return True
 
 
 def upload_all_bot_data_to_supabase():
@@ -403,6 +462,9 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 await asyncio.sleep(POLL_INTERVAL_SECS)
                 continue
 
+            # Download active_tracking.json for ML_PASSED initial status crosscheck
+            active_tracking = download_active_tracking()
+
             alerts_sent_this_cycle = 0
             state_updated_this_cycle = 0
 
@@ -519,6 +581,10 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     if not ml_passed:
                         logger.debug(f"⏭️ Skipping broadcast for {token_id[:8]}... - ML_PASSED is False")
                         alerts_state[token_id]["broadcasted"] = True
+                    # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
+                    elif not check_initial_ml_passed(token_id, active_tracking):
+                        logger.info(f"⛔ BLOCKED broadcast for {token_id[:8]}... - initial ML_PASSED was False")
+                        alerts_state[token_id]["broadcasted"] = True
                     else:
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         try:
@@ -544,6 +610,11 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     # ML Filtering: Only send alerts if ML check passed
                     if not token_info.get("ml_passed"):
                         logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False")
+                        continue
+                    
+                    # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
+                    if not check_initial_ml_passed(token_id, active_tracking):
+                        logger.info(f"⛔ BLOCKED alert for {token_id[:8]}... - initial ML_PASSED was False")
                         continue
 
                     if is_grade_change:

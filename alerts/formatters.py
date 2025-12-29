@@ -256,17 +256,17 @@ def format_alpha_alert(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str,
         return asyncio.run(_format_alpha_alert_async(mint, entry))
 
 
-async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Optional[str]]:
     """
     Format alpha alert with enhanced ML insights.
-    Returns (message_html_string, initial_state_dict)
+    Returns (message_html_string, initial_state_dict, image_url)
     """
     try:
         # Fetch current market data
         dex_data = await _get_dexscreener_data(mint)
         if not dex_data:
             logger.warning(f"No DexScreener data for {mint}, skipping alert.")
-            return None, None
+            return None, None, None
 
         # Extract token metadata
         result = entry.get("result", {})
@@ -274,6 +274,10 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         rugcheck = security.get("rugcheck", {})
         rugcheck_raw_outer = security.get("rugcheck_raw", {})
         rugcheck_raw = rugcheck_raw_outer.get("raw", rugcheck_raw_outer)
+        
+        # Extract image URL from dexscreener data in the entry
+        dex_entry = result.get("dexscreener", {})
+        image_url = dex_entry.get("info", {}).get("imageUrl")
 
         pair = dex_data
         name = pair.get("baseToken", {}).get("name", "Unknown")
@@ -412,14 +416,15 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
             "pair_created_at": pair_dt.isoformat() if pair_dt else None,
             "symbol": symbol,
             "name": name,
-            "mint": mint
+            "mint": mint,
+            "image_url": image_url
         }
 
-        return msg, initial_state
+        return msg, initial_state, image_url
 
     except Exception as e:
         logger.exception(f"Error in _format_alpha_alert_async for {mint}: {e}")
-        return None, None
+        return None, None, None
 
 
 async def format_alpha_refresh(mint: str, initial_state: Dict[str, Any]) -> str:
