@@ -157,9 +157,14 @@ def download_bot_data_from_supabase():
 
     try:
         remote_path = f"paper_trade/{PORTFOLIOS_FILE.name}"
-        download_file(str(PORTFOLIOS_FILE), remote_path, bucket=BUCKET_NAME)
+        logger.info(f"⬇️ Downloading portfolios from Supabase: {remote_path}")
+        result = download_file(str(PORTFOLIOS_FILE), remote_path, bucket=BUCKET_NAME)
+        if result:
+            logger.info(f"✅ Successfully downloaded portfolios. Size: {len(result)} bytes")
+        else:
+            logger.warning("⚠️ Portfolio file not found on Supabase or download failed.")
     except Exception as e:
-        logger.debug(f"Could not download portfolios from Supabase: {e}")
+        logger.error(f"❌ Critical error downloading portfolios from Supabase: {e}")
 
 
 def download_latest_overlap():

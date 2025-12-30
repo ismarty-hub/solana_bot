@@ -218,18 +218,8 @@ async def on_startup(app: Application):
     except Exception as e:
         logger.error(f"Failed to set bot commands: {e}")
     
-    # Ensure data directory and files exist
+    # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    # Define default files and their initial content
-    default_files = {
-        USER_PREFS_FILE: {}, ALERTS_STATE_FILE: {}, USER_STATS_FILE: {},
-        GROUPS_FILE: {}, PORTFOLIOS_FILE: {},
-        ALPHA_ALERTS_STATE_FILE: {}
-    }
-    # Initialize local files if they don't exist
-    for file_path, default_content in default_files.items():
-        if not file_path.exists():
-            safe_save(file_path, default_content)
     logger.info(f"✅ Data directory initialized: {DATA_DIR}")
 
     if USE_SUPABASE:
@@ -255,6 +245,17 @@ async def on_startup(app: Application):
 
         except Exception as e:
             logger.error(f"❌ Startup overlap download failed: {e}")
+
+    # Initialize local files if they don't exist (ONLY after download attempt)
+    default_files = {
+        USER_PREFS_FILE: {}, ALERTS_STATE_FILE: {}, USER_STATS_FILE: {},
+        GROUPS_FILE: {}, PORTFOLIOS_FILE: {},
+        ALPHA_ALERTS_STATE_FILE: {}
+    }
+    for file_path, default_content in default_files.items():
+        if not file_path.exists():
+            logger.info(f"🆕 Creating new default file: {file_path.name}")
+            safe_save(file_path, default_content)
 
     # --- Initialize managers AFTER data has been potentially downloaded ---
     logger.info("🔧 Initializing managers...")

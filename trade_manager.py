@@ -35,13 +35,15 @@ class PortfolioManager:
     def __init__(self, portfolio_file: Path):
         self.file = portfolio_file
         self.portfolios = safe_load(self.file, {})
+        # Safety flag: only allow uploads if we actually have data or if this is the first save AFTER initialization
+        self._is_initialized = len(self.portfolios) > 0
         self.tp_metrics = {
             "calculated_at": None,
             "discovery": {"median_ath": 45.0, "mean_ath": 60.0, "mode_ath": 40.0},
             "alpha": {"median_ath": 50.0, "mean_ath": 70.0, "mode_ath": 45.0}
         }
         self._ensure_portfolio_structure()
-        logger.info(f"📈 PortfolioManager initialized. Loaded {len(self.portfolios)} portfolios.")
+        logger.info(f"📈 PortfolioManager initialized. Loaded {len(self.portfolios)} portfolios. (Initialized: {self._is_initialized})")
 
     async def calculate_tp_metrics_from_daily_files(self):
         """
@@ -179,9 +181,20 @@ class PortfolioManager:
     def save(self):
         """Save portfolios to disk and cloud."""
         safe_save(self.file, self.portfolios)
+        
+        # Mark as initialized once we've had at least one save (even if empty initially)
+        # but only if it was explicitly called (like during init_portfolio)
+        if not self._is_initialized and len(self.portfolios) > 0:
+            self._is_initialized = True
+            
         if USE_SUPABASE and upload_file:
+            if not self._is_initialized and len(self.portfolios) == 0:
+                logger.warning("⚠️ Skipping Supabase upload for empty/uninitialized portfolio to prevent data loss.")
+                return
+                
             try:
                 upload_file(str(self.file), bucket=BUCKET_NAME, remote_path=f"paper_trade/{self.file.name}")
+                logger.debug(f"✅ Synced portfolio to Supabase: {self.file.name}")
             except Exception as e:
                 logger.error(f"Failed to sync portfolio to Supabase: {e}")
 
