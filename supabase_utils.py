@@ -58,20 +58,31 @@ def get_supabase_client() -> Client:
 # -------------------
 # Dexscreener Helper
 # -------------------
-def fetch_dexscreener_price(token_id: str, debug: bool = True) -> float | None:
-    """Fetch current USD price for a token from Dexscreener (pairs[0].priceUsd)."""
+def fetch_dexscreener_token_info(token_id: str, debug: bool = True) -> dict:
+    """Fetch current USD price, symbol, and name for a token from Dexscreener."""
     try:
         url = f"https://api.dexscreener.com/latest/dex/tokens/{token_id}"
         resp = requests.get(url, timeout=10)
         data = resp.json()
-        price = data.get("pairs", [{}])[0].get("priceUsd")
-        # if debug:
-        #     print(f"💰 Dexscreener price for {token_id}: {price}")
-        return float(price) if price else None
+        pair = data.get("pairs", [{}])[0]
+        price = pair.get("priceUsd")
+        base_token = pair.get("baseToken", {})
+        
+        return {
+            "price_usd": float(price) if price else None,
+            "symbol": base_token.get("symbol"),
+            "name": base_token.get("name")
+        }
     except Exception as e:
         if debug:
             print(f"⚠️ Dexscreener fetch failed for {token_id}: {e}")
-        return None
+        return {}
+
+
+def fetch_dexscreener_price(token_id: str, debug: bool = True) -> float | None:
+    """Old helper kept for backward compatibility if needed, though now redirects to info."""
+    info = fetch_dexscreener_token_info(token_id, debug=debug)
+    return info.get("price_usd")
 
 
 # -------------------
@@ -172,14 +183,29 @@ def prepare_json_from_pkl(pkl_path: str, debug: bool = True) -> bytes:
             else:
                 target_dict = latest # Fallback
             
-            # Ensure dexscreener section exists
+            # Ensure dexscreener and token_metadata sections exist
             if "dexscreener" not in target_dict or not isinstance(target_dict.get("dexscreener"), dict):
                 target_dict["dexscreener"] = {}
+            if "token_metadata" not in target_dict or not isinstance(target_dict.get("token_metadata"), dict):
+                target_dict["token_metadata"] = {}
                 
+            # Fetch current info from Dexscreener
+            info = fetch_dexscreener_token_info(token_id, debug=debug)
+            
             # Add current price if missing
-            if "current_price_usd" not in target_dict["dexscreener"]:
-                price = fetch_dexscreener_price(token_id, debug=debug)
-                target_dict["dexscreener"]["current_price_usd"] = price
+            if target_dict["dexscreener"].get("current_price_usd") is None:
+                target_dict["dexscreener"]["current_price_usd"] = info.get("price_usd")
+            
+            # Enrich symbol and name in token_metadata
+            meta = target_dict["token_metadata"]
+            if meta.get("symbol") in [None, "N/A", "Unknown", ""]:
+                if info.get("symbol"):
+                    meta["symbol"] = info["symbol"]
+                    if debug: print(f"💎 Enriched {token_id} with symbol: {info['symbol']}")
+                    
+            if meta.get("name") in [None, "N/A", "Unknown", ""]:
+                if info.get("name"):
+                    meta["name"] = info["name"]
             
             filtered[token_id] = history
 

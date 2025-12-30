@@ -24,8 +24,9 @@ from datetime import datetime, timedelta, timezone
 from supabase import create_client, Client
 from dateutil import parser
 import copy
+import statistics
 from dotenv import load_dotenv
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 load_dotenv()
 
@@ -373,6 +374,32 @@ async def verify_suspicious_price_dexscreener(mint: str) -> Dict[str, Any] | Non
             
     return None
 
+async def fetch_token_metadata_dexscreener(mint: str) -> Dict[str, str] | None:
+    """
+    Fetch token symbol and name from Dexscreener.
+    """
+    global http_session
+    if not http_session or http_session.closed:
+        http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=DEXSCREENER_TIMEOUT))
+
+    url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+    
+    try:
+        async with http_session.get(url) as response:
+            if response.status == 200:
+                data = await response.json()
+                pairs = data.get("pairs")
+                if pairs:
+                    base_token = pairs[0].get("baseToken", {})
+                    return {
+                        "symbol": base_token.get("symbol", "N/A"),
+                        "name": base_token.get("name", "N/A")
+                    }
+    except Exception as e:
+        logger.debug(f"Dexscreener metadata fetch failed for {mint}: {e}")
+        
+    return None
+
 async def get_entry_data_from_json(mint: str, signal_type: str, signal_data: dict) -> Dict[str, float | None]:
     """
     Extract entry price, mcap, and liquidity from JSON based on signal type.
@@ -638,6 +665,8 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
     total_final_roi_all = sum((t.get("final_roi") or 0) for t in ml_passed_tokens)
     total_ath_roi_wins = sum(t.get("ath_roi", 0) for t in wins)
     
+    ath_rois = [float(t.get("ath_roi", 0)) for t in ml_passed_tokens]
+    
     daily_data["daily_summary"] = {
         "total_tokens": total_valid,
         "wins": len(wins),
@@ -646,7 +675,9 @@ async def update_daily_file_entry(date_str: str, signal_type: str, token_data: d
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
-        "max_roi": max((t.get("ath_roi", 0) for t in ml_passed_tokens), default=0),
+        "median_ath_roi": round(statistics.median(ath_rois), 2) if ath_rois else 0,
+        "tail_ath_roi": round(statistics.quantiles(ath_rois, n=4)[0], 2) if len(ath_rois) >= 2 else (ath_rois[0] if ath_rois else 0),
+        "max_roi": max(ath_rois, default=0),
     }
 
     saved_path = save_json(daily_data, remote_path)
@@ -843,12 +874,19 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
                         if symbol == "N/A": symbol = raw_meta.get("symbol", "N/A")
                         if name == "N/A": name = raw_meta.get("name", "N/A")
 
-        # 3. Last resort: top-level metadata
+        # 3. Try top-level metadata
         if name == "N/A" or symbol == "N/A":
             meta_disc = signal_data.get("token_metadata", {})
             if isinstance(meta_disc, dict):
                 if symbol == "N/A": symbol = meta_disc.get("symbol", "N/A")
                 if name == "N/A": name = meta_disc.get("name", "N/A")
+
+        # 4. Final attempt: Fetch from Dexscreener if still N/A
+        if name == "N/A" or symbol == "N/A":
+            dex_meta = await fetch_token_metadata_dexscreener(mint)
+            if dex_meta:
+                if symbol == "N/A": symbol = dex_meta.get("symbol", "N/A")
+                if name == "N/A": name = dex_meta.get("name", "N/A")
                 
     except Exception as e: 
         logger.debug(f"Name extraction failed for {mint}: {e}")
@@ -1055,6 +1093,7 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
 
     top_tokens = sorted(tokens, key=lambda x: x.get("ath_roi", 0), reverse=True)
     total_ath_roi = sum(float(t.get('ath_roi', 0.0)) for t in tokens)
+    ath_rois_list = [float(t.get("ath_roi", 0)) for t in tokens]
 
     return {
         "total_tokens": total_valid,
@@ -1067,10 +1106,13 @@ def calculate_timeframe_stats(tokens: list[dict]) -> dict:
         "average_ath_all": total_ath_roi_all / total_valid if total_valid > 0 else 0,
         "average_ath_wins": total_ath_roi_wins / len(wins) if len(wins) > 0 else 0,
         "average_final_roi": total_final_roi_all / total_valid if total_valid > 0 else 0,
+        "median_ath_roi": round(statistics.median(ath_rois_list), 2) if ath_rois_list else 0,
+        "tail_ath_roi": round(statistics.quantiles(ath_rois_list, n=4)[0], 2) if len(ath_rois_list) >= 2 else (ath_rois_list[0] if ath_rois_list else 0),
         "max_roi": max((t.get("ath_roi", 0) for t in tokens), default=0),
         "avg_time_to_ath_minutes": round(avg_time_to_ath, 2),
         "avg_time_to_50_percent_minutes": round(avg_time_to_50, 2),
         "total_aths_recorded": round(total_ath_roi, 2),
+        "ath_roi_distribution": ath_rois_list, # Store for cleaner overall aggregation
         "top_tokens": top_tokens[:10]
     }
 
@@ -1142,6 +1184,8 @@ async def generate_overall_analytics():
         if not d or not a: 
             continue
         
+        combined_ath_rois = d.get("ath_roi_distribution", []) + a.get("ath_roi_distribution", [])
+        
         total = d["total_tokens"] + a["total_tokens"]
         wins = d["wins"] + a["wins"]
         losses = d["losses"] + a["losses"]
@@ -1202,6 +1246,8 @@ async def generate_overall_analytics():
             "avg_time_to_ath_minutes": round(avg_time_ath_combined, 2),
             "avg_time_to_50_percent_minutes": round(avg_time_50_combined, 2),
             "total_aths_recorded": total_aths_combined,
+            "median_ath_roi": round(statistics.median(combined_ath_rois), 2) if combined_ath_rois else 0,
+            "tail_ath_roi": round(statistics.quantiles(combined_ath_rois, n=4)[0], 2) if len(combined_ath_rois) >= 2 else (combined_ath_rois[0] if combined_ath_rois else 0),
             "top_tokens": sorted(d["top_tokens"] + a["top_tokens"], key=lambda x: x["ath_roi"], reverse=True)[:10]
         }
 
