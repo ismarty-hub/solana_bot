@@ -326,16 +326,16 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                                 )
                                 continue
 
-                            # Alpha alerts filtering
-                            if signal_type == "alpha" and not user_prefs.get("alpha_alerts", False):
-                                logger.debug(f"User {chat_id} disabled alpha alerts; skipping {key}")
+                            # Alpha trading filtering (Decoupled)
+                            if signal_type == "alpha" and not user_prefs.get("trade_alpha_alerts", False):
+                                logger.debug(f"User {chat_id} disabled alpha auto-trading; skipping {key}")
                                 continue
 
-                            # Discovery grade filtering
+                            # Discovery grade trading filtering (Decoupled)
                             if signal_type == "discovery":
-                                allowed_grades = user_prefs.get("grades", ALL_GRADES)
-                                if grade not in allowed_grades:
-                                    logger.debug(f"User {chat_id} grade filter prevents {key} ({grade})")
+                                allowed_trade_grades = user_prefs.get("trade_grades", ALL_GRADES)
+                                if grade not in allowed_trade_grades:
+                                    logger.debug(f"User {chat_id} trade grade filter prevents {key} ({grade})")
                                     continue
 
                             # Build token info

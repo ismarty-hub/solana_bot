@@ -92,6 +92,17 @@ class UserManager:
             user["min_trade_size"] = 10.0
             modified = True
 
+        # --- NEW: Independent Trade Filters ---
+        if "trade_grades" not in user:
+            # Default to mirroring notification grades if they exist, otherwise ALL
+            user["trade_grades"] = user.get("grades", []) or ALL_GRADES
+            modified = True
+            
+        if "trade_alpha_alerts" not in user:
+            # Default to mirroring alpha notification toggle
+            user["trade_alpha_alerts"] = user.get("alpha_alerts", False)
+            modified = True
+
         if modified:
             prefs[chat_id] = user
             self._persist_prefs(prefs)
@@ -127,7 +138,10 @@ class UserManager:
             "tp_alpha": None,
             # Trading capital management
             "reserve_balance": 0.0,
-            "min_trade_size": 10.0
+            "min_trade_size": 10.0,
+            # Independent Trade Filters
+            "trade_grades": ALL_GRADES,
+            "trade_alpha_alerts": False,
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]

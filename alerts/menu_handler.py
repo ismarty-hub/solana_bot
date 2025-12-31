@@ -16,7 +16,7 @@ from alerts.menu_navigation import (
     show_ml_menu, show_settings_menu, show_mode_selection_menu,
     show_help_menu, show_help_topic, show_reserve_balance_menu, show_min_trade_size_menu,
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
-    show_trade_size_mode_menu
+    show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu
 )
 
 
@@ -490,6 +490,48 @@ async def handle_menu_callback(
         await myalerts_cmd(new_update, context, user_manager)
         return
     
+    # ========================================================================
+    # AUTO-TRADE FILTER HANDLERS (Decoupled)
+    # ========================================================================
+    elif data == "settings_trade_filters":
+        await query.answer()
+        await show_trade_filters_menu(query.message, edit=True)
+        return
+
+    elif data == "set_trade_grades_menu":
+        await query.answer()
+        await show_trade_grades_menu(query.message, user_manager, chat_id, edit=True)
+        return
+
+    elif data == "trade_alpha_menu":
+        await query.answer()
+        await show_trade_alpha_menu(query.message, user_manager, chat_id, edit=True)
+        return
+
+    elif data.startswith("trade_grade_"):
+        grade = data.replace("trade_grade_", "").upper()
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        trade_grades = user_prefs.get("trade_grades", [])
+        
+        if grade in trade_grades:
+            trade_grades.remove(grade)
+        else:
+            trade_grades.append(grade)
+        
+        user_manager.update_user_prefs(chat_id, {"trade_grades": trade_grades})
+        await show_trade_grades_menu(query.message, user_manager, chat_id, edit=True)
+        await query.answer()
+        return
+
+    elif data == "trade_alpha_toggle":
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        current = user_prefs.get("trade_alpha_alerts", False)
+        new_val = not current
+        user_manager.update_user_prefs(chat_id, {"trade_alpha_alerts": new_val})
+        await show_trade_alpha_menu(query.message, user_manager, chat_id, edit=True)
+        await query.answer(f"Alpha Trading {'Enabled' if new_val else 'Disabled'}")
+        return
+
     # ========================================================================
     # HELP MENU
     # ========================================================================

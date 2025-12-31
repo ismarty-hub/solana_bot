@@ -41,6 +41,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from alerts.user_manager import UserManager
 from trade_manager import PortfolioManager
+from config import ALL_GRADES
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,7 @@ async def show_settings_menu(message, user_manager: UserManager, portfolio_manag
     keyboard = [
         [InlineKeyboardButton("🔄 Bot Modes", callback_data="settings_mode")],
         [InlineKeyboardButton("📈 Paper Trading Settings", callback_data="settings_trading")],
-        [InlineKeyboardButton("📢 Alert Settings", callback_data="settings_alerts_submenu")],
+        [InlineKeyboardButton("🔔 Notification Filters", callback_data="setalerts_menu")],
         [InlineKeyboardButton("👤 View All Settings", callback_data="mysettings_direct")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
     ]
@@ -383,6 +384,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
             [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
             [InlineKeyboardButton("📊 Trade Size", callback_data="settings_trade_size_menu")],
+            [InlineKeyboardButton("🚜 Auto-Trade Filters", callback_data="settings_trade_filters")],
             [InlineKeyboardButton("🎯 Take Profit (TP)", callback_data="settings_tp")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
             [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
@@ -802,4 +804,81 @@ async def show_help_topic(message, topic: str):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await message.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
+
+
+# ============================================================================
+# AUTO-TRADE FILTER SUBMENUS
+# ============================================================================
+
+async def show_trade_filters_menu(message, edit=False):
+    """Display submenu for choosing auto-trade filter type (Grades or Alpha)."""
+    keyboard = [
+        [InlineKeyboardButton("🔍 Discovery Grades", callback_data="set_trade_grades_menu")],
+        [InlineKeyboardButton("⭐ Alpha Auto-Trade", callback_data="trade_alpha_menu")],
+        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        "🚜 <b>Auto-Trade Filters</b>\n\n"
+        "Control which signals the bot automatically trades.\n\n"
+        "• <b>Discovery Grades:</b> Choose which signal qualities to trade.\n"
+        "• <b>Alpha Auto-Trade:</b> Toggle trading for Alpha signals."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+async def show_trade_grades_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display menu for toggling trade-specific discovery grades."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    trade_grades = user_prefs.get("trade_grades", ALL_GRADES)
+    
+    keyboard = []
+    for grade in ALL_GRADES:
+        status = "✅" if grade in trade_grades else "❌"
+        keyboard.append([InlineKeyboardButton(f"{status} {grade}", callback_data=f"trade_grade_{grade}")])
+        
+    keyboard.append([InlineKeyboardButton("◀️ Back", callback_data="settings_trade_filters")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        "🔍 <b>Auto-Trade Grades</b>\n\n"
+        "Select which discovery signal grades will trigger a trade.\n"
+        "Trades will only be opened for the grades marked with ✅."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+async def show_trade_alpha_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display menu for toggling trade-specific alpha alerts."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    trade_alpha = user_prefs.get("trade_alpha_alerts", False)
+    
+    status = "✅ ENABLED" if trade_alpha else "❌ DISABLED"
+    toggle_text = "❌ Disable Alpha Trading" if trade_alpha else "✅ Enable Alpha Trading"
+    
+    keyboard = [
+        [InlineKeyboardButton(toggle_text, callback_data="trade_alpha_toggle")],
+        [InlineKeyboardButton("◀️ Back", callback_data="settings_trade_filters")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        "⭐ <b>Alpha Auto-Trade</b>\n\n"
+        f"<b>Current Status:</b> {status}\n\n"
+        "If enabled, the bot will automatically trade curated Alpha signals."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
 
