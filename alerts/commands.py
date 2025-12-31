@@ -1214,7 +1214,7 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
             "\u2022 median: Use median historical ATH (Middle value)\n"
             "\u2022 mean: Use average historical ATH (Aggressive - higher)\n"
             "\u2022 mode: Use most frequent ATH\n"
-            "\u2022 smart: Use conservative Tail ROI (25th percentile)\n"
+            "\u2022 smart: Use TP targets statistically reached 75% of the time\n"
             "\u2022 number: Fixed percentage (e.g., 50)"
         )
         return

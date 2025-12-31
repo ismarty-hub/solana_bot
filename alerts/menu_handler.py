@@ -373,12 +373,7 @@ async def handle_menu_callback(
     # ALERT SETTINGS SUBMENU (New)
     # ========================================================================
     elif data == "settings_alerts_submenu" or data == "settings_tp":
-        if not user_manager.is_subscribed(chat_id):
-            if user_manager.is_subscription_expired(chat_id):
-                await query.answer("⚠️ Subscription expired.", show_alert=True)
-            else:
-                await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
-            return
+        # Relaxed: All users can access the TP submenu to set Global TP
         await query.answer()
         await show_alert_settings_menu(query.message, edit=True)
         return
@@ -391,6 +386,22 @@ async def handle_menu_callback(
     
     elif data == "menu_trading":
         await show_trading_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
+        return
+    
+    elif data == "tp_global_menu":
+        await query.answer()
+        await query.message.reply_html(
+            "🎯 <b>Global Take Profit</b>\n\n"
+            "This applies to all trades (Paper Trading & Manual) unless overridden by signal-specific settings.\n\n"
+            "Send a number for take profit percentage:\n"
+            "Example: <code>50</code> (for 50%)\n\n"
+            "Or use special values:\n"
+            "• <code>median</code> - Use median historical ATH\n"
+            "• <code>mean</code> - Use average historical ATH\n"
+            "• <code>mode</code> - Use most frequent profit level\n"
+            "• <code>smart</code> - Use TP targets statistically reached 75% of the time"
+        )
+        context.user_data['awaiting_tp'] = True
         return
     
     elif data == "mode_alerts_set":
@@ -424,7 +435,7 @@ async def handle_menu_callback(
             "• <code>median</code> - Use median historical ATH\n"
             "• <code>mean</code> - Use average historical ATH\n"
             "• <code>mode</code> - Use most frequent profit level\n"
-            "• <code>smart</code> - Use conservative Tail ROI (25th percentile)"
+            "• <code>smart</code> - Use TP targets statistically reached 75% of the time"
         )
         context.user_data['awaiting_tp_discovery'] = True
         return
@@ -445,7 +456,7 @@ async def handle_menu_callback(
             "• <code>median</code> - Use median historical ATH\n"
             "• <code>mean</code> - Use average historical ATH\n"
             "• <code>mode</code> - Use most frequent profit level\n"
-            "• <code>smart</code> - Use conservative Tail ROI (25th percentile)"
+            "• <code>smart</code> - Use TP targets statistically reached 75% of the time"
         )
         context.user_data['awaiting_tp_alpha'] = True
         return

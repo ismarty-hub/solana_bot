@@ -504,6 +504,7 @@ async def show_trade_size_mode_menu(message, user_manager: UserManager, chat_id:
 async def show_alert_settings_menu(message, edit=False):
     """Display alert settings submenu (Take Profit settings)."""
     keyboard = [
+        [InlineKeyboardButton("🎯 Global TP", callback_data="tp_global_menu")],
         [InlineKeyboardButton("🔍 Discovery TP", callback_data="tp_discovery_menu")],
         [InlineKeyboardButton("⭐ Alpha TP", callback_data="tp_alpha_menu")],
         [InlineKeyboardButton("👀 View Current TP", callback_data="tp_view")],
@@ -514,15 +515,12 @@ async def show_alert_settings_menu(message, edit=False):
     
     menu_text = (
         f"📢 <b>Alert Settings</b>\n\n"
-        f"Configure alert-specific parameters:\n\n"
-        f"<b>Take Profit (TP):</b>\n"
-        f"Target profit % when auto-trading alerts.\n"
-        f"Options: median, mean, mode, <b>smart</b>, or number.\n\n"
-        f"<b>Signal Types:</b>\n"
-        f"• 🔍 Discovery - Regular token alerts\n"
-        f"• ⭐ Alpha - Premium curated alerts\n\n"
-        f"<b>Note:</b> These apply to auto-traded alerts only.\n"
-        f"Manual trades have their own TP/SL."
+        f"Configure Take Profit (TP) targets:\n\n"
+        f"🎯 <b>Global TP:</b> Applies to all trades (including manual and paper trading) unless overridden.\n\n"
+        f"<b>Signal Overrides:</b> (Subscriber Only)\n"
+        f"• 🔍 Discovery - Custom TP for discovery alerts\n"
+        f"• ⭐ Alpha - Custom TP for alpha alerts\n\n"
+        f"Options: median, mean, mode, <b>smart</b>, or number."
     )
     
     if edit:

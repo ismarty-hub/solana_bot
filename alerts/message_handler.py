@@ -63,6 +63,28 @@ async def handle_text_message(
             return
         
         # ====================================================================
+        # TAKE PROFIT - GLOBAL
+        # ====================================================================
+        if context.user_data.get('awaiting_tp'):
+            context.user_data['awaiting_tp'] = False
+            
+            val = text.lower()
+            if val not in ["median", "mean", "mode", "smart"]:
+                try:
+                    float(val)
+                except ValueError:
+                    await update.message.reply_text("❌ Invalid value. Use 'median', 'mean', 'mode', 'smart', or a number.")
+                    return
+            
+            user_manager.update_user_prefs(chat_id, {"tp_preference": val})
+            await update.message.reply_html(
+                f"✅ <b>Global TP Set!</b>\n\n"
+                f"<b>Value:</b> {val.capitalize() if val in ['median', 'mean', 'mode', 'smart'] else val + '%'}\n"
+                f"This will be used as the default for all trades."
+            )
+            return
+
+        # ====================================================================
         # TAKE PROFIT - DISCOVERY
         # ====================================================================
         if context.user_data.get('awaiting_tp_discovery'):
