@@ -42,6 +42,8 @@ async def handle_menu_callback(
     data = query.data
     chat_id = str(query.from_user.id)
     
+    logger.info(f"Processing menu callback: '{data}' from user {chat_id}")
+    
     # query.answer() removed from here to avoid double-answering
     # It will be called within each handler block as needed.
     

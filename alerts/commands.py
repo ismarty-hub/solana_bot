@@ -37,9 +37,9 @@ def get_mode_status_text(user_prefs: dict) -> str:
     modes = user_prefs.get("modes", [])
     status = []
     if "alerts" in modes:
-        status.append("ðŸ”” Alerts")
+        status.append("\U0001F514 Notifications")
     if "papertrade" in modes:
-        status.append("ðŸ“ˆ Paper Trading")
+        status.append("\U0001F4C8 Paper Trading")
     
     if not status:
         return "No active modes."
@@ -50,7 +50,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     from alerts.menu_navigation import show_main_menu
     
     chat_id = str(update.effective_chat.id)
-    logging.info(f"ðŸš€ User {chat_id} started bot")
+    logging.info(f"\U0001F680 User {chat_id} started bot")
 
     # Ensure user exists and is active
     user_manager.activate_user(chat_id)
@@ -91,7 +91,7 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     if success:
         await update.message.reply_html(
             "ðŸš€ <b>Alpha Alerts Activated!</b>\n\n"
-            "âœ… You will now receive high-priority Alpha Alerts.\n"
+            "\u2705 You will now receive high-priority Alpha Alerts.\n"
             "<i>Use /myalerts to confirm your settings</i>"
         )
     else:
@@ -130,7 +130,7 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     if success:
         await update.message.reply_html(
             "ðŸ˜´ <b>Alpha Alerts Disabled</b>\n\n"
-            "âœ… You will no longer receive high-priority Alpha Alerts.\n"
+            "\u2705 You will no longer receive high-priority Alpha Alerts.\n"
             "<i>Use /myalerts to confirm your settings</i>"
         )
     else:
@@ -173,10 +173,10 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
             f"<b>ðŸ“ Manual Setup:</b>\n"
             f"Usage: <code>/setalerts GRADE1 GRADE2 ...</code>\n\n"
             f"<b>Available Grades:</b>\n"
-            f"â€¢ CRITICAL - Highest priority signals\n"
-            f"â€¢ HIGH - Strong signals\n"
-            f"â€¢ MEDIUM - Moderate signals\n"
-            f"â€¢ LOW - All signals\n\n"
+            f"\u2022 CRITICAL - Highest priority signals\n"
+            f"\u2022 HIGH - Strong signals\n"
+            f"\u2022 MEDIUM - Moderate signals\n"
+            f"\u2022 LOW - All signals\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/setalerts CRITICAL</code>\n"
             f"<code>/setalerts CRITICAL HIGH</code>\n"
@@ -189,7 +189,7 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     success = user_manager.update_user_prefs(chat_id, {"grades": chosen})
     
     if success:
-        await update.message.reply_html(f"âœ… Alert grades updated! You will now receive: <b>{', '.join(chosen)}</b>")
+        await update.message.reply_html(f"\u2705 Alert grades updated! You will now receive: <b>{', '.join(chosen)}</b>")
     else:
         await update.message.reply_text("âŒ Failed to save preferences. Please try again.")
 
@@ -197,7 +197,6 @@ async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     """Handle /myalerts command, now shows modes as well."""
     chat_id = str(update.effective_chat.id)
     # Allowed for all users
-    
     
     prefs = user_manager.get_user_prefs(chat_id)
     stats = user_manager.get_user_stats(chat_id)
@@ -207,19 +206,19 @@ async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
     last_alert_str = "Never" if not last_alert else f"<i>{last_alert[:10]}</i>"
 
     # --- New: Check Alpha Alert Status ---
-    alpha_status = "âœ… Subscribed" if prefs.get("alpha_alerts", False) else "âŒ Not Subscribed"
+    alpha_status = "\u2705 Subscribed" if prefs.get("alpha_alerts", False) else "\u274C Not Subscribed"
     # --- End New ---
     
     msg = (
-        f"ðŸ“Š <b>Your Settings</b>\n\n"
+        f"\U0001F4CA <b>Your Settings</b>\n\n"
         f"<b>Active Modes:</b> {get_mode_status_text(prefs)}\n"
         f"<b>Subscribed Grades:</b> {', '.join(prefs.get('grades', ALL_GRADES))}\n"
-        f"<b>ðŸš€ Alpha Alerts:</b> {alpha_status}\n\n"
-        f"<b>Total alerts received:</b> {total_alerts}\n"
-        f"<b>Last alert:</b> {last_alert_str}\n\n"
+        f"<b>\U0001F680 Alpha Notifications:</b> {alpha_status}\n\n"
+        f"<b>Total signals received:</b> {total_alerts}\n"
+        f"<b>Last signal:</b> {last_alert_str}\n\n"
         f"Use /start to change your mode.\n"
-        f"Use /setalerts to change alert grades.\n"
-        f"Use /alpha_subscribe or /alpha_unsubscribe to manage alpha alerts."
+        f"Use /setalerts to change notification grades.\n"
+        f"Use /alpha_subscribe or /alpha_unsubscribe to manage alpha notifications."
     )
     await update.message.reply_html(msg)
 
@@ -227,37 +226,37 @@ async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_mana
     """Handle /stop command."""
     chat_id = str(update.effective_chat.id)
     user_manager.deactivate_user(chat_id)
-    await update.message.reply_html("ðŸ˜” You have been unsubscribed from all alerts and services. Use /start to reactivate.")
+    await update.message.reply_html("\U0001F614 You have been unsubscribed from all notifications and services. Use /start to reactivate.")
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     help_text = (
-        "ðŸ¤– <b>Bot Help & Commands</b>\n\n"
+        "\U0001F916 <b>Bot Help & Commands</b>\n\n"
         "<b>--- Core Commands ---</b>\n"
-        "â€¢ /start - Change bot mode (Alerts/Trading)\n"
-        "â€¢ /myalerts - View your current settings & stats\n"
-        "â€¢ /setalerts - Set which grade alerts you receive\n"
-        "â€¢ /stop - Unsubscribe from everything\n\n"
-        "<b>--- ðŸ”¥ Alpha Alerts ---</b>\n"
-        "â€¢ /alpha_subscribe - Opt-in to high-priority alpha alerts\n"
-        "â€¢ /alpha_unsubscribe - Opt-out of alpha alerts\n\n"
+        "\u2022 /start - Change bot mode (Notifications/Trading)\n"
+        "\u2022 /myalerts - View your current settings & stats\n"
+        "\u2022 /setalerts - Set which grade notifications you receive\n"
+        "\u2022 /stop - Unsubscribe from everything\n\n"
+        "<b>--- \U0001F525 Alpha Notifications ---</b>\n"
+        "\u2022 /alpha_subscribe - Opt-in to high-priority alpha notifications\n"
+        "\u2022 /alpha_unsubscribe - Opt-out of alpha notifications\n\n"
         
-        "<b>--- ðŸ¤– ML Predictions (NEW) ---</b>\n"
-        "â€¢ /predict [mint] - Get ML prediction for one token\n"
-        "â€¢ /predict_batch [mints...] - Get ML predictions for multiple tokens\n\n"
+        "<b>--- \U0001F916 ML Predictions (NEW) ---</b>\n"
+        "\u2022 /predict [mint] - Get ML prediction for one token\n"
+        "\u2022 /predict_batch [mints...] - Get ML predictions for multiple tokens\n\n"
 
         "<b>--- Paper Trading ---</b>\n"
-        "â€¢ /papertrade [capital] - Set trading capital and enable paper trading\n"
+        "\u2022 /papertrade [capital] - Set trading capital and enable paper trading\n"
         "  Example: <code>/papertrade 1000</code>\n"
-        "â€¢ /portfolio - View detailed portfolio with all positions\n"
-        "â€¢ /pnl - Get current unrealized P/L update\n"
-        "â€¢ /history [limit] - View trade history (default: last 10)\n"
-        "â€¢ /performance - View detailed trading performance stats\n"
-        "â€¢ /watchlist - View tokens being watched for entry\n"
-        "â€¢ /resetcapital [amount] - Reset trading capital\n\n"
+        "\u2022 /portfolio - View detailed portfolio with all positions\n"
+        "\u2022 /pnl - Get current unrealized P/L update\n"
+        "\u2022 /history [limit] - View trade history (default: last 10)\n"
+        "\u2022 /performance - View detailed trading performance stats\n"
+        "\u2022 /watchlist - View tokens being watched for entry\n"
+        "\u2022 /resetcapital [amount] - Reset trading capital\n\n"
         "<b>--- General ---</b>\n"
-        "â€¢ /help - Show this help message\n"
-        "â€¢ /stats - View your usage statistics"
+        "\u2022 /help - Show this help message\n"
+        "\u2022 /stats - View your usage statistics"
     )
     await update.message.reply_html(help_text)
 
@@ -294,9 +293,9 @@ async def papertrade_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             f"<code>/papertrade 5000</code> - Start with $5,000\n"
             f"<code>/papertrade 10000</code> - Start with $10,000\n\n"
             f"<b>Requirements:</b>\n"
-            f"â€¢ Minimum: $100\n"
-            f"â€¢ Maximum: $1,000,000\n\n"
-            f"ðŸ’¡ <i>Tip: Start with $1,000-$5,000 for realistic results</i>"
+            f"\u2022 Minimum: $100\n"
+            f"\u2022 Maximum: $1,000,000\n\n"
+            f"\U0001F4A1 <i>Tip: Start with $1,000-$5,000 for realistic results</i>"
         )
         return
     
@@ -418,7 +417,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
                 return
             if limit > 50:
                 await update.message.reply_html(
-                    "âš ï¸ <b>Limit Too High</b>\n\n"
+                    "\u26A0\uFE0F <b>Limit Too High</b>\n\n"
                     "Maximum is 50 trades at a time.\n"
                     "Showing last 50 trades instead..."
                 )
@@ -437,7 +436,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     
     if not history:
         await update.message.reply_html(
-            "ðŸ“œ <b>No Trade History</b>\n\n"
+            "\U0001F4DC <b>No Trade History</b>\n\n"
             "You haven't closed any trades yet.\n\n"
             "Start trading to see your results here!\n"
             "Use <code>/portfolio</code> to see open positions."
@@ -448,10 +447,10 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     recent_trades = history[-limit:]
     recent_trades.reverse()  # Most recent first
     
-    msg = f"ðŸ“œ <b>Trade History (Last {len(recent_trades)}/{len(history)})</b>\n\n"
+    msg = f"\U0001F4DC <b>Trade History (Last {len(recent_trades)}/{len(history)})</b>\n\n"
     
     for i, trade in enumerate(recent_trades, 1):
-        pnl_symbol = "ðŸŸ¢" if trade.get('total_pnl_usd', trade.get('pnl_usd', 0)) > 0 else "ðŸ”´"
+        pnl_symbol = "\U0001F7E2" if trade.get('total_pnl_usd', trade.get('pnl_usd', 0)) > 0 else "\U0001F534"
         pnl_usd = trade.get('total_pnl_usd', trade.get('pnl_usd', 0))
         pnl_pct = trade.get('total_pnl_percent', trade.get('pnl_percent', 0))
         
@@ -476,7 +475,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     )
     
     if len(history) > limit:
-        msg += f"<i>ðŸ’¡ Use /history {min(limit + 10, 50)} to see more</i>"
+        msg += f"<i>\U0001F4A1 Use /history {min(limit + 10, 50)} to see more</i>"
     
     await update.message.reply_html(msg)
 
@@ -494,7 +493,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     history = portfolio.get('trade_history', [])
     
     if not history:
-        await update.message.reply_html("ðŸ“Š No trades yet. Performance stats will appear after your first closed trade.")
+        await update.message.reply_html("\U0001F4CA No trades yet. Performance stats will appear after your first closed trade.")
         return
     
     total_trades = stats.get('total_trades', 0)
@@ -533,30 +532,30 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     roi = ((total_value - starting_capital) / starting_capital * 100) if starting_capital > 0 else 0
     
     msg = (
-        f"ðŸ“Š <b>Trading Performance Report</b>\n\n"
-        f"<b>ðŸ’° Capital:</b>\n"
-        f"â€¢ Starting: ${starting_capital:,.2f}\n"
-        f"â€¢ Current Total: ${total_value:,.2f}\n"
-        f"â€¢ ROI: <b>{roi:+.2f}%</b>\n\n"
+        f"\U0001F4CA <b>Trading Performance Report</b>\n\n"
+        f"<b>\U0001F4B0 Capital:</b>\n"
+        f"\u2022 Starting: ${starting_capital:,.2f}\n"
+        f"\u2022 Current Total: ${total_value:,.2f}\n"
+        f"\u2022 ROI: <b>{roi:+.2f}%</b>\n\n"
         f"<b>ðŸ“ˆ Trade Statistics:</b>\n"
-        f"â€¢ Total Trades: <b>{total_trades}</b>\n"
-        f"â€¢ Wins: <b>{wins}</b> | Losses: <b>{losses}</b>\n"
-        f"â€¢ Win Rate: <b>{win_rate:.1f}%</b>\n"
-        f"â€¢ Total P/L: <b>${total_pnl:,.2f}</b>\n\n"
-        f"<b>ðŸ’µ Trade Metrics:</b>\n"
-        f"â€¢ Best Trade: <b>+{best_trade:.1f}%</b>\n"
-        f"â€¢ Worst Trade: <b>{worst_trade:.1f}%</b>\n"
-        f"â€¢ Avg Win: <b>${avg_win:,.2f}</b>\n"
-        f"â€¢ Avg Loss: <b>${avg_loss:,.2f}</b>\n"
-        f"â€¢ Avg Hold Time: <b>{avg_hold_time:.0f} minutes</b>\n\n"
+        f"\u2022 Total Trades: <b>{total_trades}</b>\n"
+        f"\u2022 Wins: <b>{wins}</b> | Losses: <b>{losses}</b>\n"
+        f"\u2022 Win Rate: <b>{win_rate:.1f}%</b>\n"
+        f"\u2022 Total P/L: <b>${total_pnl:,.2f}</b>\n\n"
+        f"<b>\U0001F4B5 Trade Metrics:</b>\n"
+        f"\u2022 Best Trade: <b>+{best_trade:.1f}%</b>\n"
+        f"\u2022 Worst Trade: <b>{worst_trade:.1f}%</b>\n"
+        f"\u2022 Avg Win: <b>${avg_win:,.2f}</b>\n"
+        f"\u2022 Avg Loss: <b>${avg_loss:,.2f}</b>\n"
+        f"\u2022 Avg Hold Time: <b>{avg_hold_time:.0f} minutes</b>\n\n"
     )
     
     if reentry_trades > 0:
         msg += (
-            f"<b>ðŸ”„ Re-entry Stats:</b>\n"
-            f"â€¢ Re-entry Trades: <b>{reentry_trades}</b>\n"
-            f"â€¢ Re-entry Wins: <b>{reentry_wins}</b>\n"
-            f"â€¢ Re-entry Win Rate: <b>{reentry_rate:.1f}%</b>\n\n"
+            f"<b>\U0001F504 Re-entry Stats:</b>\n"
+            f"\u2022 Re-entry Trades: <b>{reentry_trades}</b>\n"
+            f"\u2022 Re-entry Wins: <b>{reentry_wins}</b>\n"
+            f"\u2022 Re-entry Win Rate: <b>{reentry_rate:.1f}%</b>\n\n"
         )
     
     # Exit reason breakdown
@@ -566,9 +565,9 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
     
     if exit_reasons:
-        msg += f"<b>ðŸ“¤ Exit Breakdown:</b>\n"
+        msg += f"<b>\U0001F4E4 Exit Breakdown:</b>\n"
         for reason, count in sorted(exit_reasons.items(), key=lambda x: x[1], reverse=True)[:5]:
-            msg += f"â€¢ {reason}: {count}\n"
+            msg += f"\u2022 {reason}: {count}\n"
     
     await update.message.reply_html(msg)
 
@@ -589,10 +588,10 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         await update.message.reply_html("ðŸ‘€ No tokens currently being watched. Waiting for new signals...")
         return
     
-    msg = f"ðŸ‘€ <b>Watchlist & Re-entry Candidates</b>\n\n"
+    msg = f"\U0001F440 <b>Watchlist & Re-entry Candidates</b>\n\n"
     
     if watchlist:
-        msg += f"<b>ðŸŽ¯ Waiting for Entry ({len(watchlist)}):</b>\n"
+        msg += f"<b>\U0001F3AF Waiting for Entry ({len(watchlist)}):</b>\n"
         for mint, item in watchlist.items():
             signal_time = item.get('signal_time', '')
             time_ago = "recently"
@@ -605,7 +604,7 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
                     pass
             
             msg += (
-                f"â€¢ <b>{item['symbol']}</b>\n"
+                f"\u2022 <b>{item['symbol']}</b>\n"
                 f"  Signal: ${item['signal_price']:.6f} ({time_ago})\n"
             )
         msg += "\n"
@@ -617,7 +616,7 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
             best_pnl = cand.get('best_pnl_pct', 0)
             
             msg += (
-                f"â€¢ <b>{cand['symbol']}</b>\n"
+                f"\u2022 <b>{cand['symbol']}</b>\n"
                 f"  Previous: {best_pnl:+.1f}% | Attempts: {attempts}/2\n"
             )
     
@@ -639,15 +638,15 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     if not context.args:
         # Show detailed prompt with current status
         await update.message.reply_html(
-            f"âš ï¸ <b>Reset Trading Capital</b>\n\n"
+            f"\u26A0\uFE0F <b>Reset Trading Capital</b>\n\n"
             f"<b>Current Status:</b>\n"
-            f"â€¢ Capital: ${current_capital:,.2f}\n"
-            f"â€¢ Open Positions: {open_positions}\n\n"
-            f"âš ï¸ <b>Warning:</b> This will:\n"
-            f"â€¢ Close ALL open positions\n"
-            f"â€¢ Clear watchlist and re-entry candidates\n"
-            f"â€¢ Reset your capital to a new amount\n"
-            f"â€¢ Preserve your trade history\n\n"
+            f"\u2022 Capital: ${current_capital:,.2f}\n"
+            f"\u2022 Open Positions: {open_positions}\n\n"
+            f"\u26A0\uFE0F <b>Warning:</b> This will:\n"
+            f"\u2022 Close ALL open positions\n"
+            f"\u2022 Clear watchlist and re-entry candidates\n"
+            f"\u2022 Reset your capital to a new amount\n"
+            f"\u2022 Preserve your trade history\n\n"
             f"<b>ðŸ“ Usage:</b>\n"
             f"<code>/resetcapital [amount]</code>\n\n"
             f"<b>Examples:</b>\n"
@@ -655,7 +654,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
             f"<code>/resetcapital 5000</code> - Reset to $5,000\n"
             f"<code>/resetcapital 10000</code> - Reset to $10,000\n\n"
             f"<b>Requirements:</b>\n"
-            f"â€¢ Min: $100 | Max: $1,000,000"
+            f"\u2022 Min: $100 | Max: $1,000,000"
         )
         return
     
@@ -694,11 +693,11 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     portfolio_manager.save()
     
     await update.message.reply_html(
-        f"âœ… <b>Portfolio Reset Complete</b>\n\n"
+        f"\u2705 <b>Portfolio Reset Complete</b>\n\n"
         f"<b>Changes:</b>\n"
-        f"â€¢ Closed: {old_positions} position(s)\n"
-        f"â€¢ New Capital: <b>${capital:,.2f}</b>\n"
-        f"â€¢ Trade History: âœ… Preserved\n\n"
+        f"\u2022 Closed: {old_positions} position(s)\n"
+        f"\u2022 New Capital: <b>${capital:,.2f}</b>\n"
+        f"\u2022 Trade History: \u2705 Preserved\n\n"
         f"<i>Ready to start fresh! ðŸš€</i>\n\n"
         f"The bot will now watch for new signals with your updated capital."
     )
@@ -1048,6 +1047,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
        data == "set_mintrade_menu" or data.startswith("set_reserve:") or data.startswith("set_mintrade:") or \
        data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or \
        data.startswith("set_default_sl:") or data.startswith("set_trade_size_mode_select:") or \
+       data.startswith("trade_") or data.startswith("set_trade_") or \
        data.startswith("grade_"):
         if portfolio_manager:
             await handle_menu_callback(update, context, user_manager, portfolio_manager)
@@ -1057,13 +1057,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     if data == "mode_alerts":
         await query.answer()
         user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("âœ… Mode set to <b>ðŸ”” Alerts Only</b>.", parse_mode="HTML")
+        await query.edit_message_text("\u2705 Mode set to <b>ðŸ”” Alerts Only</b>.", parse_mode="HTML")
         return
     elif data == "mode_papertrade":
         await query.answer()
         user_manager.set_modes(chat_id, ["papertrade"])
         await query.edit_message_text(
-            "âœ… Mode set to <b>ðŸ“ˆ Paper Trading Only</b>.\n\n"
+            "\u2705 Mode set to <b>ðŸ“ˆ Paper Trading Only</b>.\n\n"
             "Use <code>/papertrade [capital]</code> to set your starting funds.", 
             parse_mode="HTML"
         )
@@ -1072,7 +1072,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         await query.answer()
         user_manager.set_modes(chat_id, ["alerts", "papertrade"])
         await query.edit_message_text(
-            "âœ… Mode set to <b>ðŸš€ Both Alerts & Paper Trading</b>.", 
+            "\u2705 Mode set to <b>ðŸš€ Both Alerts & Paper Trading</b>.", 
             parse_mode="HTML"
         )
         return
@@ -1081,9 +1081,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     elif data == "config_grades":
         if not user_manager.is_subscribed(chat_id):
             if user_manager.is_subscription_expired(chat_id):
-                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Subscription expired.", show_alert=True)
             else:
-                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Active subscription required.", show_alert=True)
             return
         await query.answer()
         keyboard = [
@@ -1100,35 +1100,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     elif data == "preset_critical":
         if not user_manager.is_subscribed(chat_id):
             if user_manager.is_subscription_expired(chat_id):
-                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Subscription expired.", show_alert=True)
             else:
-                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Active subscription required.", show_alert=True)
             return
         await query.answer()
         user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL"]})
-        await query.edit_message_text("âœ… Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
+        await query.edit_message_text("\u2705 Alert grades updated: <b>CRITICAL</b> only.", parse_mode="HTML")
         return
     elif data == "preset_critical_high":
         if not user_manager.is_subscribed(chat_id):
             if user_manager.is_subscription_expired(chat_id):
-                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Subscription expired.", show_alert=True)
             else:
-                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Active subscription required.", show_alert=True)
             return
         await query.answer()
         user_manager.update_user_prefs(chat_id, {"grades": ["CRITICAL", "HIGH"]})
-        await query.edit_message_text("âœ… Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
+        await query.edit_message_text("\u2705 Alert grades updated: <b>CRITICAL + HIGH</b>.", parse_mode="HTML")
         return
     elif data == "preset_all":
         if not user_manager.is_subscribed(chat_id):
             if user_manager.is_subscription_expired(chat_id):
-                await query.answer("âš ï¸ Subscription expired.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Subscription expired.", show_alert=True)
             else:
-                await query.answer("âš ï¸ Active subscription required.", show_alert=True)
+                await query.answer("\u26A0\uFE0F Active subscription required.", show_alert=True)
             return
         await query.answer()
         user_manager.update_user_prefs(chat_id, {"grades": ALL_GRADES.copy()})
-        await query.edit_message_text("âœ… Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
+        await query.edit_message_text("\u2705 Alert grades updated: <b>ALL</b> grades.", parse_mode="HTML")
         return
 
     # --- Handle Trading Button Callbacks ---
@@ -1247,7 +1247,7 @@ async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
         val_float = float(val)
         user_manager.update_user_prefs(chat_id, {"tp_discovery": val_float})
         await update.message.reply_text(f"\u2705 Discovery TP fixed at {val_float}%")
-    except: await update.message.reply_text("â Œ Invalid option or number")
+    except: await update.message.reply_text("\u274C Invalid option or number")
 
 async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Override TP for alpha signals."""
@@ -1266,7 +1266,7 @@ async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         val_float = float(val)
         user_manager.update_user_prefs(chat_id, {"tp_alpha": val_float})
         await update.message.reply_text(f"\u2705 Alpha TP fixed at {val_float}%")
-    except: await update.message.reply_text("â Œ Invalid option or number")
+    except: await update.message.reply_text("\u274C Invalid option or number")
 
 
 async def view_tp_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
@@ -1732,11 +1732,11 @@ async def closeall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     positions = portfolio["positions"]
     count = len(positions)
     
-    msg = f"âš ï¸ <b>Close All Positions?</b>\n\n"
+    msg = f"\u26A0\uFE0F <b>Close All Positions?</b>\n\n"
     msg += f"You have {count} open position(s):\n\n"
     
     for key, pos in positions.items():
-        msg += f"â€¢ {pos.get('symbol', 'N/A')} ({pos.get('signal_type', 'N/A')})\n"
+        msg += f"\u2022 {pos.get('symbol', 'N/A')} ({pos.get('signal_type', 'N/A')})\n"
     
     msg += f"\nType <code>/confirmcloseall</code> to proceed."
     
@@ -1751,7 +1751,7 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
     if not portfolio or not portfolio.get("positions"):
-        await update.message.reply_text("âŒ No open positions to close.")
+        await update.message.reply_text("\u274C No open positions to close.")
         return
     
     active_tracking = await portfolio_manager.download_active_tracking()
@@ -1777,10 +1777,10 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         await portfolio_manager.exit_position(
             chat_id, key, 
-            "Manual Close All ðŸ‘¤", 
+            "Manual Close All \U0001F464", 
             context.application, 
             exit_roi=current_roi
         )
         closed_count += 1
     
-    await update.message.reply_text(f"âœ… Closed {closed_count} position(s).")
+    await update.message.reply_text(f"\u2705 Closed {closed_count} position(s).")
