@@ -1,7 +1,17 @@
-# ... (imports)
-import hashlib
+#!/usr/bin/env python3
+"""
+alerts/trading_buttons.py - Interactive trading buttons for /pnl and /portfolio commands
+"""
 
-# ... (logger)
+import logging
+import hashlib
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+
+logger = logging.getLogger(__name__)
+
+# Pagination constants
+PAGE_SIZE = 5
 
 def get_short_key(full_key: str) -> str:
     """Generate a short stable hash for a position key."""
@@ -16,27 +26,6 @@ def find_key_by_hash(portfolio: dict, short_key: str) -> str:
         if get_short_key(key) == short_key:
             return key
     return None
-
-# ... (send_pnl_page)
-# ... inside `for pos in page_positions`:
-    # ...
-    # Sell buttons for each position
-    for pos in page_positions:
-        key = f"{pos.get('mint', '')}_{pos.get('signal_type', '')}"
-        short_key = get_short_key(key)
-        symbol = pos.get('symbol', 'N/A')
-        # SC = Sell Confirm
-        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
-
-# ... (send_portfolio_page)
-# ... inside `for key in keys_page`:
-    for key in keys_page:
-        pos = active_positions[key]
-        short_key = get_short_key(key)
-        symbol = pos.get('symbol', 'N/A')
-        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
-
-# ... 
 async def handle_sell_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
                                        user_manager, portfolio_manager):
     """Handle sell confirmation for a single position."""
