@@ -91,7 +91,7 @@ async def handle_menu_callback(
             if user_manager.is_subscription_expired(chat_id):
                 await query.answer("⚠️ Subscription expired.", show_alert=True)
             else:
-                await query.answer("⚠️ Active subscription required for Alpha Alerts.", show_alert=True)
+                await query.answer("⚠️ Active subscription required for Alpha Notifications.", show_alert=True)
             return
         await show_alpha_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
@@ -637,10 +637,10 @@ async def handle_menu_callback(
         grades = user_prefs.get("grades", [])
         grades_text = ", ".join(grades) if grades else "None selected"
         await query.message.reply_html(
-            f"✅ <b>Alerts Configured!</b>\n\n"
+            f"✅ <b>Notifications Configured!</b>\n\n"
             f"<b>Selected Grades:</b>\n"
             f"{grades_text}\n\n"
-            f"You'll now receive alerts for these grades."
+            f"You'll now receive notifications for these grades."
         )
         return
     

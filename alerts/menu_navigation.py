@@ -76,7 +76,7 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
 
     keyboard = [
         [InlineKeyboardButton("📊 Dashboard & Trading", callback_data="menu_dashboard")],
-        [InlineKeyboardButton(f"🔔 Alerts {alerts_active}", callback_data="menu_alerts")],
+        [InlineKeyboardButton(f"🔔 Notifications {alerts_active}", callback_data="menu_alerts")],
         [InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings")],
         [InlineKeyboardButton("🤖 ML Predictions", callback_data="menu_ml")],
         [InlineKeyboardButton("ℹ️ Help", callback_data="menu_help")]
@@ -91,7 +91,7 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
         f"Welcome! Use the buttons to navigate all features.\n"
         f"Commands also work if you prefer typing.\n\n"
         f"<b>Active Modes:</b>\n"
-        f"• 🔔 Alerts: {alerts_active}\n"
+        f"• 🔔 Notifications: {alerts_active}\n"
         f"• 📈 Trading: {trading_active}\n\n"
         f"<b>Pro Tip:</b> Type /help anytime for all commands."
     )
@@ -176,20 +176,20 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
     alert_text = ", ".join(alert_grades) if alert_grades else "Not configured"
     
     keyboard = [
-        [InlineKeyboardButton("🎯 Set Alert Grades", callback_data="setalerts_menu")],
-        [InlineKeyboardButton(f"🌟 Alpha Alerts {alpha_alerts}", callback_data="alpha_menu")],
-        [InlineKeyboardButton("📋 View Settings", callback_data="myalerts_direct")],
+        [InlineKeyboardButton("🎯 Set Notification Grades", callback_data="setalerts_menu")],
+        [InlineKeyboardButton(f"🌟 Alpha Notifications {alpha_alerts}", callback_data="alpha_menu")],
+        [InlineKeyboardButton("📋 View Active Filters", callback_data="myalerts_direct")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     menu_text = (
-        f"🔔 <b>Alerts Menu</b>\n\n"
-        f"<b>Current Alert Grades:</b>\n"
+        f"🔔 <b>Notification Menu</b>\n\n"
+        f"<b>Current Notification Grades:</b>\n"
         f"{alert_text}\n\n"
-        f"<b>Alpha Alerts:</b> {alpha_alerts}\n\n"
-        f"Configure which tokens you want to be notified about."
+        f"<b>Alpha Notifications:</b> {alpha_alerts}\n\n"
+        f"Configure which signals you want to receive as messages."
     )
     
     if edit:
@@ -216,14 +216,14 @@ async def show_alert_grades_menu(message, edit=False):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     menu_text = (
-        f"🎯 <b>Select Alert Grades</b>\n\n"
+        f"🎯 <b>Notification Grades</b>\n\n"
         f"Click each grade to toggle it on/off.\n"
         f"When done, click 'Done Selecting'.\n\n"
         f"<b>Grades:</b>\n"
-        f"🔴 CRITICAL - Highest priority alerts\n"
-        f"🟠 HIGH - Important tokens\n"
-        f"🟡 MEDIUM - Regular alerts\n"
-        f"🟢 LOW - All tokens"
+        f"🔴 CRITICAL - Highest priority notifications\n"
+        f"🟠 HIGH - Important signals\n"
+        f"🟡 MEDIUM - Regular notifications\n"
+        f"🟢 LOW - All signals"
     )
     
     if edit:
@@ -233,7 +233,7 @@ async def show_alert_grades_menu(message, edit=False):
 
 
 async def show_alpha_alerts_menu(message, user_manager: UserManager, chat_id: str, edit=False):
-    """Display alpha alerts subscription menu."""
+    """Display alpha notifications subscription menu."""
     user_prefs = user_manager.get_user_prefs(chat_id)
     is_subscribed = user_prefs.get("alpha_alerts", False)
     
@@ -249,9 +249,9 @@ async def show_alpha_alerts_menu(message, user_manager: UserManager, chat_id: st
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     menu_text = (
-        f"🌟 <b>Alpha Alerts</b>\n\n"
+        f"🌟 <b>Alpha Notifications</b>\n\n"
         f"<b>Status:</b> {status}\n\n"
-        f"Alpha Alerts are high-priority, curated token opportunities with "
+        f"Alpha Notifications are high-priority, curated token opportunities with "
         f"advanced security analysis and ML insights.\n\n"
         f"<b>Benefits:</b>\n"
         f"• 🔍 Advanced security analysis\n"
@@ -279,7 +279,6 @@ async def show_settings_menu(message, user_manager: UserManager, portfolio_manag
     keyboard = [
         [InlineKeyboardButton("🔄 Bot Modes", callback_data="settings_mode")],
         [InlineKeyboardButton("📈 Paper Trading Settings", callback_data="settings_trading")],
-        [InlineKeyboardButton("🔔 Notification Filters", callback_data="setalerts_menu")],
         [InlineKeyboardButton("👤 View All Settings", callback_data="mysettings_direct")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
     ]
