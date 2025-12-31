@@ -664,7 +664,7 @@ async def tp_metrics_update_loop(portfolio_manager):
     - Tokens are filtered by signal_type (discovery calculates from discovery tokens, etc.)
     - ATH ROI values are rounded to nearest multiple of 5 before calculating mode
     """
-    logger.info("📈 TP Metrics update loop started! Will run at 2 AM UTC daily.")
+    logger.info("📈 TP Metrics update loop started! Will run every 8 hours.")
     
     # Run immediately on startup
     try:
@@ -676,19 +676,10 @@ async def tp_metrics_update_loop(portfolio_manager):
     
     while True:
         try:
-            # Calculate next 2 AM UTC
-            now = datetime.now(timezone.utc)
-            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
-            
-            # If 2 AM has already passed today, schedule for tomorrow's 2 AM
-            if now >= next_run:
-                next_run += timedelta(days=1)
-            
-            time_until_next_run = (next_run - now).total_seconds()
-            logger.info(f"⏰ Next TP metrics calculation in {time_until_next_run:.0f} seconds at {next_run.isoformat()}")
-            
-            # Sleep until 2 AM UTC
-            await asyncio.sleep(time_until_next_run)
+            # Refresh every 8 hours
+            interval_hours = 8
+            logger.info(f"⏰ Sleeping for {interval_hours} hours until next TP metrics update...")
+            await asyncio.sleep(interval_hours * 3600)
             
             # Run the calculation
             logger.info("🔄 Calculating TP metrics from past 3 days of analytics...")

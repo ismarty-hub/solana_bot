@@ -1210,16 +1210,17 @@ async def set_tp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_ma
     chat_id = str(update.effective_chat.id)
     if not context.args:
         await update.message.reply_html(
-            "<b>Usage:</b> <code>/set_tp [median|mean|mode|number]</code>\n"
-            "\u2022 median: Use median historical ATH (Recommended - middle value)\n"
+            "<b>Usage:</b> <code>/set_tp [median|mean|mode|smart|number]</code>\n"
+            "\u2022 median: Use median historical ATH (Middle value)\n"
             "\u2022 mean: Use average historical ATH (Aggressive - higher)\n"
-            "\u2022 mode: Use most frequent ATH (Conservative - most common)\n"
+            "\u2022 mode: Use most frequent ATH\n"
+            "\u2022 smart: Use conservative Tail ROI (25th percentile)\n"
             "\u2022 number: Fixed percentage (e.g., 50)"
         )
         return
         
     val = context.args[0].lower()
-    if val not in ["median", "mean", "mode"]:
+    if val not in ["median", "mean", "mode", "smart"]:
         try:
             float(val)
         except ValueError:
@@ -1233,25 +1234,39 @@ async def set_tp_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     """Override TP for discovery signals."""
     chat_id = str(update.effective_chat.id)
     if not context.args:
-        await update.message.reply_html("Usage: <code>/set_tp_discovery [number]</code>")
+        await update.message.reply_html("Usage: <code>/set_tp_discovery [median|mean|mode|smart|number]</code>")
         return
-    try:
-        val = float(context.args[0])
+    
+    val = context.args[0].lower()
+    if val in ["median", "mean", "mode", "smart"]:
         user_manager.update_user_prefs(chat_id, {"tp_discovery": val})
-        await update.message.reply_text(f"\u2705 Discovery TP fixed at {val}%")
-    except: await update.message.reply_text("âŒ Invalid number")
+        await update.message.reply_text(f"\u2705 Discovery TP set to {val} ATH")
+        return
+        
+    try:
+        val_float = float(val)
+        user_manager.update_user_prefs(chat_id, {"tp_discovery": val_float})
+        await update.message.reply_text(f"\u2705 Discovery TP fixed at {val_float}%")
+    except: await update.message.reply_text("â Œ Invalid option or number")
 
 async def set_tp_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
     """Override TP for alpha signals."""
     chat_id = str(update.effective_chat.id)
     if not context.args:
-        await update.message.reply_html("Usage: <code>/set_tp_alpha [number]</code>")
+        await update.message.reply_html("Usage: <code>/set_tp_alpha [median|mean|mode|smart|number]</code>")
         return
-    try:
-        val = float(context.args[0])
+    
+    val = context.args[0].lower()
+    if val in ["median", "mean", "mode", "smart"]:
         user_manager.update_user_prefs(chat_id, {"tp_alpha": val})
-        await update.message.reply_text(f"\u2705 Alpha TP fixed at {val}%")
-    except: await update.message.reply_text("âŒ Invalid number")
+        await update.message.reply_text(f"\u2705 Alpha TP set to {val} ATH")
+        return
+        
+    try:
+        val_float = float(val)
+        user_manager.update_user_prefs(chat_id, {"tp_alpha": val_float})
+        await update.message.reply_text(f"\u2705 Alpha TP fixed at {val_float}%")
+    except: await update.message.reply_text("â Œ Invalid option or number")
 
 
 async def view_tp_settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):

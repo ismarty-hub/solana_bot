@@ -39,8 +39,8 @@ class PortfolioManager:
         self._is_initialized = len(self.portfolios) > 0
         self.tp_metrics = {
             "calculated_at": None,
-            "discovery": {"median_ath": 45.0, "mean_ath": 60.0, "mode_ath": 40.0},
-            "alpha": {"median_ath": 50.0, "mean_ath": 70.0, "mode_ath": 45.0}
+            "discovery": {"median_ath": 45.0, "mean_ath": 60.0, "mode_ath": 40.0, "smart_ath": 35.0},
+            "alpha": {"median_ath": 50.0, "mean_ath": 70.0, "mode_ath": 45.0, "smart_ath": 40.0}
         }
         self._ensure_portfolio_structure()
         logger.info(f"📈 PortfolioManager initialized. Loaded {len(self.portfolios)} portfolios. (Initialized: {self._is_initialized})")
@@ -128,31 +128,41 @@ class PortfolioManager:
                     median_val = statistics.median(roi_values)
                     mean_val = statistics.mean(roi_values)
                     
-                    # Calculate mode (most frequent value)
-                    try:
-                        mode_val = statistics.mode(roi_values)
-                    except statistics.StatisticsError:
-                        # If no mode exists (all values unique), use median as fallback
-                        mode_val = median_val
+                    # Calculate Smart ATH (Tail ROI / 25th percentile)
+                    # For a list of 1, quantiles fails or is just the value. statistics.quantiles needs n >= 2
+                    if len(roi_values) >= 2:
+                        smart_val = statistics.quantiles(roi_values, n=4)[0]
+                    else:
+                        smart_val = roi_values[0]
                     
-                    # Ensure no zero or negative values - default to 40% if any are 0
+                    # Round each ATH ROI to nearest multiple of 5 for mode
+                    rounded_values = [round(v / 5) * 5 for v in roi_values]
+                    try:
+                        mode_val = statistics.mode(rounded_values)
+                    except statistics.StatisticsError:
+                        mode_val = median_val # Fallback if no unique mode
+                    
+                    # Default if any metric calculated is 0 or negative
                     if median_val <= 0: median_val = 40.0
                     if mean_val <= 0: mean_val = 40.0
                     if mode_val <= 0: mode_val = 40.0
+                    if smart_val <= 0: smart_val = 35.0
                     
                     self.tp_metrics[signal_type] = {
                         "median_ath": round(median_val, 1),
                         "mean_ath": round(mean_val, 1),
-                        "mode_ath": round(mode_val, 1)
+                        "mode_ath": round(mode_val, 1),
+                        "smart_ath": round(smart_val, 1)
                     }
                     
-                    logger.info(f"✅ Updated TP metrics for {signal_type}: median={median_val:.1f}%, mean={mean_val:.1f}%, mode={mode_val:.1f}% (from {len(roi_values)} tokens)")
+                    logger.info(f"✅ Updated TP metrics for {signal_type}: median={median_val:.1f}%, mean={mean_val:.1f}%, mode={mode_val:.1f}%, smart={smart_val:.1f}% (from {len(roi_values)} tokens)")
                 else:
                     logger.warning(f"⚠️ No {signal_type} tokens found in past 3 days. Using defaults.")
                     self.tp_metrics[signal_type] = {
                         "median_ath": 40.0,
                         "mean_ath": 40.0,
-                        "mode_ath": 40.0
+                        "mode_ath": 40.0,
+                        "smart_ath": 35.0
                     }
             
             self.tp_metrics["calculated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
@@ -510,8 +520,8 @@ class PortfolioManager:
             try:
                 tp_target = float(override_val)
             except (ValueError, TypeError):
-                # It's a string like "mode", "mean", "median" - look up from metrics
-                if override_val in ["median", "mean", "mode"]:
+                # It's a string like "mode", "mean", "median", "smart" - look up from metrics
+                if override_val in ["median", "mean", "mode", "smart"]:
                     tp_target = self.tp_metrics.get(signal_type, {}).get(f"{override_val}_ath", None)
         
         elif signal_type == "alpha" and "tp_alpha" in prefs and prefs["tp_alpha"] is not None:
@@ -537,6 +547,9 @@ class PortfolioManager:
             elif tp_preference == "mode":
                 # Use mode (most frequent) ATH from historical metrics
                 tp_target = self.tp_metrics.get(signal_type, {}).get("mode_ath", 40.0)
+            elif tp_preference == "smart":
+                # Use smart (Tail ROI) ATH from historical metrics
+                tp_target = self.tp_metrics.get(signal_type, {}).get("smart_ath", 35.0)
             else:
                 # Assume it's a fixed percentage
                 try:
@@ -594,7 +607,7 @@ class PortfolioManager:
         # Check for signal-type specific overrides first
         if signal_type == "discovery" and "tp_discovery" in prefs and prefs["tp_discovery"] is not None:
             override_val = prefs["tp_discovery"]
-            if override_val in ["median", "mean", "mode"]:
+            if override_val in ["median", "mean", "mode", "smart"]:
                 tp_source = f"{override_val} ATH (discovery override)"
             else:
                 try:
@@ -605,7 +618,7 @@ class PortfolioManager:
         
         elif signal_type == "alpha" and "tp_alpha" in prefs and prefs["tp_alpha"] is not None:
             override_val = prefs["tp_alpha"]
-            if override_val in ["median", "mean", "mode"]:
+            if override_val in ["median", "mean", "mode", "smart"]:
                 tp_source = f"{override_val} ATH (alpha override)"
             else:
                 try:
@@ -617,7 +630,7 @@ class PortfolioManager:
         # If no override, check global preference
         elif "tp_preference" in prefs:
             pref = prefs["tp_preference"]
-            if pref in ["median", "mean", "mode"]:
+            if pref in ["median", "mean", "mode", "smart"]:
                 tp_source = f"{pref} ATH"
             else:
                 try:

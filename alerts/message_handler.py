@@ -69,11 +69,11 @@ async def handle_text_message(
             context.user_data['awaiting_tp_discovery'] = False
             
             val = text.lower()
-            if val not in ["median", "mean", "mode"]:
+            if val not in ["median", "mean", "mode", "smart"]:
                 try:
                     float(val)
                 except ValueError:
-                    await update.message.reply_text("❌ Invalid value. Use 'median', 'mean', 'mode', or a number.")
+                    await update.message.reply_text("❌ Invalid value. Use 'median', 'mean', 'mode', 'smart', or a number.")
                     return
             
             user_manager.update_user_prefs(chat_id, {"tp_discovery": val})
@@ -90,11 +90,11 @@ async def handle_text_message(
             context.user_data['awaiting_tp_alpha'] = False
             
             val = text.lower()
-            if val not in ["median", "mean", "mode"]:
+            if val not in ["median", "mean", "mode", "smart"]:
                 try:
                     float(val)
                 except ValueError:
-                    await update.message.reply_text("❌ Invalid value. Use 'median', 'mean', 'mode', or a number.")
+                    await update.message.reply_text("❌ Invalid value. Use 'median', 'mean', 'mode', 'smart', or a number.")
                     return
             
             user_manager.update_user_prefs(chat_id, {"tp_alpha": val})

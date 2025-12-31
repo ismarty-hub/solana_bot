@@ -423,7 +423,8 @@ async def handle_menu_callback(
             "Or use special values:\n"
             "• <code>median</code> - Use median historical ATH\n"
             "• <code>mean</code> - Use average historical ATH\n"
-            "• <code>mode</code> - Use most frequent profit level"
+            "• <code>mode</code> - Use most frequent profit level\n"
+            "• <code>smart</code> - Use conservative Tail ROI (25th percentile)"
         )
         context.user_data['awaiting_tp_discovery'] = True
         return
@@ -443,7 +444,8 @@ async def handle_menu_callback(
             "Or use special values:\n"
             "• <code>median</code> - Use median historical ATH\n"
             "• <code>mean</code> - Use average historical ATH\n"
-            "• <code>mode</code> - Use most frequent profit level"
+            "• <code>mode</code> - Use most frequent profit level\n"
+            "• <code>smart</code> - Use conservative Tail ROI (25th percentile)"
         )
         context.user_data['awaiting_tp_alpha'] = True
         return

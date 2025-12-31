@@ -374,6 +374,10 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
         else:
             trade_size_display = f"💵 ${trade_size_value:,.2f} per trade"
         
+        # Get TP preference
+        tp_pref = user_prefs.get("tp_preference", "median")
+        tp_display = f"🎯 {tp_pref.capitalize()}" if tp_pref in ["median", "mean", "mode", "smart"] else f"🎯 {tp_pref}%"
+        
         keyboard = [
             [InlineKeyboardButton("💰 Reset Capital", callback_data="resetcapital_menu")],
             [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
@@ -395,6 +399,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             f"• Available: ${available:,.2f}\n"
             f"• Min Trade: ${min_trade:,.2f}\n"
             f"• Trade Size Mode: {trade_size_display}\n"
+            f"• Take Profit: {tp_display}\n"
             f"• Stop Loss: {sl_display}\n\n"
             f"<b>Adjust settings below:</b>"
         )
@@ -511,7 +516,8 @@ async def show_alert_settings_menu(message, edit=False):
         f"📢 <b>Alert Settings</b>\n\n"
         f"Configure alert-specific parameters:\n\n"
         f"<b>Take Profit (TP):</b>\n"
-        f"Target profit % when auto-trading alerts.\n\n"
+        f"Target profit % when auto-trading alerts.\n"
+        f"Options: median, mean, mode, <b>smart</b>, or number.\n\n"
         f"<b>Signal Types:</b>\n"
         f"• 🔍 Discovery - Regular token alerts\n"
         f"• ⭐ Alpha - Premium curated alerts\n\n"
