@@ -133,21 +133,6 @@ async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEF
         logger.exception(f"Error closing position for {chat_id}: {e}")
         await query.answer(f"❌ Error: {str(e)}")
 
-Features:
-- Pagination with Next/Back buttons
-- Individual Sell buttons for each position
-- Sell All button with confirmation
-- Callback handlers for all interactions
-"""
-
-import logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
-
-logger = logging.getLogger(__name__)
-
-# Pagination constants
-PAGE_SIZE = 5  # Positions per page
 
 async def send_pnl_page(message, chat_id: str, portfolio: dict, pnl_data: dict, page: int = 0):
     """
@@ -230,8 +215,9 @@ async def send_pnl_page(message, chat_id: str, portfolio: dict, pnl_data: dict, 
     # Sell buttons for each position
     for pos in page_positions:
         key = f"{pos.get('mint', '')}_{pos.get('signal_type', '')}"
+        short_key = get_short_key(key)
         symbol = pos.get('symbol', 'N/A')
-        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sell_confirm:{key}")])
+        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
     
     markup = InlineKeyboardMarkup(keyboard)
     msg += "\n<i>💡 Use /portfolio to see full position details</i>"
@@ -309,8 +295,9 @@ async def send_portfolio_page(message, chat_id: str, portfolio: dict, page: int 
     # Sell buttons per position
     for key in keys_page:
         pos = active_positions[key]
+        short_key = get_short_key(key)
         symbol = pos.get('symbol', 'N/A')
-        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sell_confirm:{key}")])
+        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
     
     markup = InlineKeyboardMarkup(keyboard)
     msg += "\n<i>💡 Use /pnl for live unrealized P/L</i>"
@@ -379,27 +366,27 @@ async def handle_sell_confirm_callback(update: Update, context: ContextTypes.DEF
     chat_id = str(query.from_user.id)
     
     try:
-        position_key = query.data.split(":")[1]
+        short_key = query.data.split(":")[1]
     except IndexError:
         await query.answer("❌ Invalid position key")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
-    if not portfolio or not portfolio.get("positions"):
-        await query.answer("❌ No open positions.")
+    full_key = find_key_by_hash(portfolio, short_key)
+    
+    if not full_key:
+        await query.answer("❌ Position not found or closed.")
         return
     
-    position = portfolio["positions"].get(position_key)
-    if not position:
-        await query.answer("❌ Position not found.")
-        return
+    position = portfolio["positions"].get(full_key)
+    # No need to check 'if not position' again as find_key_by_hash validates keys exist in portfolio
     
     symbol = position.get("symbol", "N/A")
     
     # Ask for confirmation
     confirm_keyboard = [
         [
-            InlineKeyboardButton("✅ Confirm Sell", callback_data=f"sell_execute:{position_key}"),
+            InlineKeyboardButton("✅ Confirm Sell", callback_data=f"sx:{short_key}"),
             InlineKeyboardButton("❌ Cancel", callback_data="sell_cancel")
         ]
     ]
@@ -421,20 +408,19 @@ async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEF
     chat_id = str(query.from_user.id)
     
     try:
-        position_key = query.data.split(":")[1]
+        short_key = query.data.split(":")[1]
     except IndexError:
         await query.answer("❌ Invalid position key")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
-    if not portfolio or not portfolio.get("positions"):
-        await query.answer("❌ No open positions.")
+    full_key = find_key_by_hash(portfolio, short_key)
+
+    if not full_key:
+        await query.answer("❌ Position not found or closed.")
         return
     
-    position = portfolio["positions"].get(position_key)
-    if not position:
-        await query.answer("❌ Position not found.")
-        return
+    position = portfolio["positions"].get(full_key)
     
     try:
         # Get current ROI
@@ -451,7 +437,7 @@ async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEF
         
         # Execute sell
         await portfolio_manager.exit_position(
-            chat_id, position_key,
+            chat_id, full_key,
             "Button Close 🔴",
             context.application,
             exit_roi=current_roi
