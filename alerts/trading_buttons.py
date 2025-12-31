@@ -1,6 +1,137 @@
-#!/usr/bin/env python3
-"""
-alerts/trading_buttons.py - Interactive trading buttons for /pnl and /portfolio commands
+# ... (imports)
+import hashlib
+
+# ... (logger)
+
+def get_short_key(full_key: str) -> str:
+    """Generate a short stable hash for a position key."""
+    return hashlib.sha256(full_key.encode()).hexdigest()[:12]
+
+def find_key_by_hash(portfolio: dict, short_key: str) -> str:
+    """Find the full key from the portfolio that matches the short hash."""
+    if not portfolio or "positions" not in portfolio:
+        return None
+    
+    for key in portfolio["positions"].keys():
+        if get_short_key(key) == short_key:
+            return key
+    return None
+
+# ... (send_pnl_page)
+# ... inside `for pos in page_positions`:
+    # ...
+    # Sell buttons for each position
+    for pos in page_positions:
+        key = f"{pos.get('mint', '')}_{pos.get('signal_type', '')}"
+        short_key = get_short_key(key)
+        symbol = pos.get('symbol', 'N/A')
+        # SC = Sell Confirm
+        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
+
+# ... (send_portfolio_page)
+# ... inside `for key in keys_page`:
+    for key in keys_page:
+        pos = active_positions[key]
+        short_key = get_short_key(key)
+        symbol = pos.get('symbol', 'N/A')
+        keyboard.append([InlineKeyboardButton(f"🔴 Sell {symbol}", callback_data=f"sc:{short_key}")])
+
+# ... 
+async def handle_sell_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                       user_manager, portfolio_manager):
+    """Handle sell confirmation for a single position."""
+    query = update.callback_query
+    chat_id = str(query.from_user.id)
+    
+    try:
+        short_key = query.data.split(":")[1]
+    except IndexError:
+        await query.answer("❌ Invalid position key")
+        return
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    full_key = find_key_by_hash(portfolio, short_key)
+    
+    if not full_key:
+        await query.answer("❌ Position not found or closed.")
+        return
+    
+    position = portfolio["positions"].get(full_key)
+    symbol = position.get("symbol", "N/A")
+    
+    # Ask for confirmation
+    confirm_keyboard = [
+        [
+            # SX = Sell Execute
+            InlineKeyboardButton("✅ Confirm Sell", callback_data=f"sx:{short_key}"),
+            InlineKeyboardButton("❌ Cancel", callback_data="sell_cancel")
+        ]
+    ]
+    
+    await query.edit_message_text(
+        f"⚠️ <b>Confirm Sell</b>\n\n"
+        f"Are you sure you want to sell <b>{symbol}</b>?\n\n"
+        f"This action cannot be undone.",
+        reply_markup=InlineKeyboardMarkup(confirm_keyboard),
+        parse_mode="HTML"
+    )
+    await query.answer()
+
+
+async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                       user_manager, portfolio_manager):
+    """Execute the actual sell."""
+    query = update.callback_query
+    chat_id = str(query.from_user.id)
+    
+    try:
+        short_key = query.data.split(":")[1]
+    except IndexError:
+        await query.answer("❌ Invalid position key")
+        return
+    
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    full_key = find_key_by_hash(portfolio, short_key)
+    
+    if not full_key:
+        await query.answer("❌ Position not found or closed.")
+        return
+    
+    position = portfolio["positions"].get(full_key)
+    
+    try:
+        # Get current ROI
+        active_tracking = await portfolio_manager.download_active_tracking()
+        analytics_key = f"{position.get('mint', '')}_{position.get('signal_type', '')}"
+        data = active_tracking.get(analytics_key, {})
+        
+        current_roi = float(data.get("current_roi", 0))
+        if current_roi == 0:
+            # Fallback
+            curr_price = await portfolio_manager.fetch_current_price_fallback(position.get("mint", ""))
+            if curr_price > 0:
+                current_roi = ((curr_price - position.get("entry_price", 0)) / position.get("entry_price", 1)) * 100
+        
+        # Execute sell
+        await portfolio_manager.exit_position(
+            chat_id, full_key,
+            "Button Close 🔴",
+            context.application,
+            exit_roi=current_roi
+        )
+        
+        symbol = position.get("symbol", "N/A")
+        await query.edit_message_text(
+            f"✅ <b>Position Closed</b>\n\n"
+            f"{symbol} has been sold.\n"
+            f"Final ROI: {current_roi:+.2f}%",
+            parse_mode="HTML"
+        )
+        await query.answer("✅ Position closed successfully!")
+        
+    except Exception as e:
+        logger.exception(f"Error closing position for {chat_id}: {e}")
+        await query.answer(f"❌ Error: {str(e)}")
 
 Features:
 - Pagination with Next/Back buttons

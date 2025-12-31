@@ -51,6 +51,47 @@ async def handle_menu_callback(
 
     
     # ========================================================================
+    # TRADING BUTTON HANDLERS
+    # ========================================================================
+    from alerts.trading_buttons import (
+        handle_pnl_page_callback,
+        handle_portfolio_page_callback,
+        handle_sell_confirm_callback,
+        handle_sell_execute_callback,
+        handle_sell_all_confirm_callback,
+        handle_sell_all_execute_callback,
+        handle_sell_cancel_callback
+    )
+
+    if data.startswith("sc:") or data.startswith("sell_confirm:"):
+        await handle_sell_confirm_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data.startswith("sx:") or data.startswith("sell_execute:"):
+        await handle_sell_execute_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data.startswith("pnl_page:"):
+        await handle_pnl_page_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data.startswith("portfolio_page:"):
+        await handle_portfolio_page_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data == "sell_all_confirm":
+        await handle_sell_all_confirm_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data == "sell_all_execute":
+        await handle_sell_all_execute_callback(update, context, user_manager, portfolio_manager)
+        return
+        
+    elif data == "sell_cancel":
+        await handle_sell_cancel_callback(update, context)
+        return
+
+    # ========================================================================
     # MAIN MENU
     # ========================================================================
     if data == "menu_main":
