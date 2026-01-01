@@ -489,7 +489,7 @@ async def show_trade_size_mode_menu(message, user_manager: UserManager, chat_id:
         f"💵 <b>Fixed Amount</b>\n"
         f"• Example: 50 (means $50 per trade)\n"
         f"• Constant size regardless of capital\n\n"
-        f"After selecting mode, you'll enter your custom value."
+        f"After selecting a mode, you will be prompted to enter your custom value."
     )
     
     if edit:
@@ -521,7 +521,7 @@ async def show_alert_settings_menu(message, edit=False):
         f"<b>Signal Overrides:</b> (Subscriber Only)\n"
         f"• 🔍 Discovery - Custom TP for discovery alerts\n"
         f"• ⭐ Alpha - Custom TP for alpha alerts\n\n"
-        f"Options: median, mean, mode, <b>smart</b>, or number."
+        f"Options: median, mean, mode, <b>smart</b>, or a custom number."
     )
     
     if edit:

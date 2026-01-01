@@ -160,14 +160,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Log the error
     logger.error(f"Exception while handling an update: {error}")
     
-    # Determine user-friendly message based on error type
+    # Determine a user-friendly message based on the error type
     if isinstance(error, TimedOut):
         user_message = "⚠️ Connection timed out. Please try again."
     elif isinstance(error, BadRequest):
         if "Query is too old" in str(error):
-            user_message = "⚠️ This button has expired. Please use /start to refresh."
+            user_message = "⚠️ This button has expired. Please try again, or use /start to refresh the menu."
         else:
-            user_message = f"❌ Request error: {str(error)[:50]}"
+            user_message = f"❌ Request error: {str(error)[:50]}..."
     elif isinstance(error, NetworkError):
         user_message = "📡 Network error. Please check your connection and try again."
     else:
