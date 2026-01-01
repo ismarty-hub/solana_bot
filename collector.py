@@ -1277,6 +1277,7 @@ class CollectorService:
         self.computer = FeatureComputer()
         
         self.active_snapshot_files: Set[str] = set()
+        self.processing_keys: Set[str] = set()  # Track signals currently being processed
         self.aggregator = SnapshotAggregator(config, self.supabase, self.persistence, self.active_snapshot_files)
         
         self.process_semaphore = asyncio.Semaphore(config.PROCESSOR_CONCURRENCY)
@@ -1284,7 +1285,7 @@ class CollectorService:
         log.info("CollectorService initialized.")
 
     async def _fetch_all_signals(self) -> List[Dict]:
-        """Fetches and flattens all signals from both files."""
+        """Fetches and flattens all signals from both files, keeping only the latest for each token."""
         tasks = {
             "discovery": self.supabase.download_json_file(self.config.SIGNAL_FILE_DISCOVERY),
             "alpha": self.supabase.download_json_file(self.config.SIGNAL_FILE_ALPHA),
@@ -1293,7 +1294,8 @@ class CollectorService:
         results = await asyncio.gather(*tasks.values())
         signal_data = dict(zip(tasks.keys(), results))
         
-        all_signals = []
+        latest_signals = {}  # (mint, signal_type) -> (timestamp, signal_dict)
+        
         for signal_type, data in signal_data.items():
             if not data or not isinstance(data, dict):
                 continue
@@ -1301,13 +1303,27 @@ class CollectorService:
             for mint, history_list in data.items():
                 if not isinstance(history_list, list):
                     continue
+                
                 for history_entry in history_list:
-                    all_signals.append({
-                        "signal_type": signal_type,
-                        "mint": mint,
-                        "data": history_entry
-                    })
-        return all_signals
+                    timestamp_str = self.computer._safe_get_timestamp(history_entry)
+                    if not timestamp_str:
+                        continue
+                    
+                    try:
+                        timestamp_dt = parser.isoparse(timestamp_str)
+                        key = (mint, signal_type)
+                        
+                        # Only keep the latest signal for this token/type pair
+                        if key not in latest_signals or timestamp_dt > latest_signals[key][0]:
+                            latest_signals[key] = (timestamp_dt, {
+                                "signal_type": signal_type,
+                                "mint": mint,
+                                "data": history_entry
+                            })
+                    except Exception:
+                        continue
+                        
+        return [item[1] for item in latest_signals.values()]
 
     def _build_canonical_snapshot(self, signal: Dict, features: Dict, 
                                   dex_raw: Optional[Dict], rug_raw: Optional[Dict], 
@@ -1370,104 +1386,103 @@ class CollectorService:
 
     async def process_signal(self, signal: Dict):
         """
-        CORRECTED: Main processing pipeline.
-        Fetches live data only if missing from signal file.
+        CORRECTED: Main processing pipeline with robust duplicate prevention.
         """
         mint = signal['mint']
         signal_type = signal['signal_type']
         history_entry = signal['data']
-
-        # Extract pre-fetched data from signal
-        dex_data = self.computer._safe_get_dex_data(history_entry)
-        rug_data = self.computer._safe_get_rug_data(history_entry)
-
-        # Compute initial features
-        features, checked_at_dt = self.computer.compute_features(
-            signal_type, history_entry, dex_data, rug_data, False
-        )
         
-        if not features or not checked_at_dt:
-            log.warning(f"Skipping signal for {mint} - missing base features")
+        # 1. In-memory Lifecycle Lock (Prevents race conditions in the same batch)
+        processing_key = f"{mint}_{signal_type}"
+        if processing_key in self.processing_keys:
+            log.debug(f"Already processing internal: {processing_key}")
             return
-
-        safe_timestamp = features['checked_at_utc'].replace(':', '-').replace('+', '_')
-        filename_base = f"{mint}_{safe_timestamp}_{signal_type}"
+            
+        self.processing_keys.add(processing_key)
         
-        remote_json_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_base}.json"
-
         try:
-            # Idempotency check
+            # 2. Extract timestamp and check basic features
+            features, checked_at_dt = self.computer.compute_features(
+                signal_type, history_entry, None, None, False
+            )
+            
+            if not features or not checked_at_dt:
+                log.warning(f"Skipping signal for {mint} - missing base features")
+                return
+
+            safe_timestamp = features['checked_at_utc'].replace(':', '-').replace('+', '_')
+            filename_base = f"{mint}_{safe_timestamp}_{signal_type}"
             filename_json = f"{filename_base}.json"
-            if filename_json in self.active_snapshot_files:
-                log.debug(f"Skipping already processed signal: {filename_base}")
-                return
+            remote_json_path = f"{self.config.SNAPSHOT_DIR_REMOTE}/{filename_json}"
+
+            # 3. Robust Idempotency Check (Active Monitoring Check)
+            # Check if ANY active snapshot exists for this (mint, signal_type)
+            search_prefix = f"{mint}_"
+            search_suffix = f"_{signal_type}.json"
             
-            if await self.supabase.check_file_exists(remote_json_path):
-                log.debug(f"Skipping already processed signal: {filename_base}")
-                self.active_snapshot_files.add(filename_json)
-                return
-        except Exception as e:
-            log.error(f"Failed idempotency check for {filename_base}: {e}")
-            return
-
-        # Check for active signal for same (mint, type)
-        search_prefix = f"{mint}_"
-        search_suffix = f"_{signal_type}.json"
-        for filename in self.active_snapshot_files:
-            if filename.startswith(search_prefix) and filename.endswith(search_suffix):
-                log.warning(f"Skipping new signal for ({mint}, {signal_type}) - active snapshot exists: {filename}")
-                return
-
-        log.info(f"Processing new signal: {filename_base}")
-
-        # Fetch only missing external data
-        tasks_to_run = {}
-        
-        if not dex_data:
-            log.warning(f"No pre-fetched Dex data for {filename_base}. Fetching live.")
-            tasks_to_run["dex_data"] = self.dex_client.get_token_data(mint)
-        
-        if not rug_data:
-            log.warning(f"No pre-fetched Rug data for {filename_base}. Fetching live.")
-            tasks_to_run["rug_data"] = self.rug_client.get_token_report(mint)
+            existing_active = [f for f in self.active_snapshot_files 
+                               if f.startswith(search_prefix) and f.endswith(search_suffix)]
             
-        # Holiday data is always fetched live
-        tasks_to_run["is_holiday"] = self.holiday_client.is_holiday(checked_at_dt, self.config.HOLIDAY_COUNTRY_CODES)
-        
-        try:
+            if existing_active:
+                log.info(f"Skipping: active snapshot already exists for {processing_key} -> {existing_active[0]}")
+                return
+
+            # Extra safety: Check Supabase directly if not in local cache
+            try:
+                if await self.supabase.check_file_exists(remote_json_path):
+                    log.debug(f"Skipping: file already exists on Supabase: {filename_json}")
+                    self.active_snapshot_files.add(filename_json)
+                    return
+            except Exception as e:
+                log.error(f"Failed remote idempotency check for {filename_base}: {e}")
+                return
+
+            log.info(f"Processing new signal: {filename_base}")
+
+            # 4. Data Gathering (Fetch live data if missing)
+            dex_data = self.computer._safe_get_dex_data(history_entry)
+            rug_data = self.computer._safe_get_rug_data(history_entry)
+            
+            tasks_to_run = {}
+            if not dex_data:
+                tasks_to_run["dex_data"] = self.dex_client.get_token_data(mint)
+            if not rug_data:
+                tasks_to_run["rug_data"] = self.rug_client.get_token_report(mint)
+            
+            tasks_to_run["is_holiday"] = self.holiday_client.is_holiday(checked_at_dt, self.config.HOLIDAY_COUNTRY_CODES)
+            
+            results_dict = {}
             if tasks_to_run:
                 task_keys = list(tasks_to_run.keys())
                 results = await asyncio.gather(*tasks_to_run.values(), return_exceptions=False)
                 results_dict = dict(zip(task_keys, results))
-            else:
-                results_dict = {}
 
             dex_data = dex_data or results_dict.get("dex_data")
             rug_data = rug_data or results_dict.get("rug_data")
             is_holiday = results_dict.get("is_holiday", False)
 
+            # 5. Final Feature Computation and Persistence
+            final_features, _ = self.computer.compute_features(
+                signal_type, history_entry, dex_data, rug_data, is_holiday
+            )
+
+            if not final_features:
+                log.error(f"Failed to compute final features for {filename_base}")
+                return
+
+            snapshot = self._build_canonical_snapshot(
+                signal, final_features, dex_data, rug_data, is_holiday, filename_base
+            )
+            
+            success = await self.persistence.save_snapshot(snapshot, filename_base)
+            if success:
+                self.active_snapshot_files.add(filename_json)
+                log.info(f"Successfully created snapshot: {filename_json}")
+
         except Exception as e:
-            log.error(f"Data-gathering failed for {filename_base}: {e}")
-            return
-
-        # Compute final features with all data
-        final_features, _ = self.computer.compute_features(
-            signal_type, history_entry, dex_data, rug_data, is_holiday
-        )
-
-        if not final_features:
-            log.error(f"Failed to compute final features for {filename_base}")
-            return
-
-        # Build and save snapshot
-        snapshot = self._build_canonical_snapshot(
-            signal, final_features, dex_data, rug_data, is_holiday, filename_base
-        )
-        
-        await self.persistence.save_snapshot(snapshot, filename_base)
-        
-        # Add to active cache
-        self.active_snapshot_files.add(f"{filename_base}.json")
+            log.error(f"Unexpected error in process_signal for {mint}: {e}", exc_info=True)
+        finally:
+            self.processing_keys.discard(processing_key)
 
     async def run_process_with_semaphore(self, signal: Dict):
         """Wrapper for process_signal with semaphore."""
