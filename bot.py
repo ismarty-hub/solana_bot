@@ -8,6 +8,7 @@ import asyncio
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults, MessageHandler, filters
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.error import TimedOut, BadRequest, NetworkError
 
 # --- Updated Config Imports ---
 # Now imports ALL settings from the new config.py
@@ -148,6 +149,43 @@ async def predict_batch_wrapper(update, context):
 async def set_tp_wrapper(update, context): await set_tp_cmd(update, context, user_manager)
 async def set_tp_discovery_wrapper(update, context): await set_tp_discovery_cmd(update, context, user_manager)
 async def set_tp_alpha_wrapper(update, context): await set_tp_alpha_cmd(update, context, user_manager)
+
+# ----------------------
+# Global Error Handler
+# ----------------------
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle errors gracefully and show user-friendly messages."""
+    error = context.error
+    
+    # Log the error
+    logger.error(f"Exception while handling an update: {error}")
+    
+    # Determine user-friendly message based on error type
+    if isinstance(error, TimedOut):
+        user_message = "⚠️ Connection timed out. Please try again."
+    elif isinstance(error, BadRequest):
+        if "Query is too old" in str(error):
+            user_message = "⚠️ This button has expired. Please use /start to refresh."
+        else:
+            user_message = f"❌ Request error: {str(error)[:50]}"
+    elif isinstance(error, NetworkError):
+        user_message = "📡 Network error. Please check your connection and try again."
+    else:
+        user_message = "❌ An unexpected error occurred. Please try again later."
+        # Log full traceback for unexpected errors
+        logger.exception(f"Unhandled exception: {error}")
+    
+    # Try to notify the user
+    try:
+        if update and update.effective_message:
+            await update.effective_message.reply_text(user_message)
+        elif update and update.callback_query:
+            try:
+                await update.callback_query.answer(user_message, show_alert=True)
+            except Exception:
+                pass  # Query might already be answered or expired
+    except Exception as notify_error:
+        logger.warning(f"Could not notify user of error: {notify_error}")
 
 # ----------------------
 # Startup hook
@@ -357,6 +395,10 @@ async def main():
     app.add_handler(CommandHandler("confirmcloseall", confirmcloseall_wrapper))
     
     logger.info("✅ All command handlers registered (including new alpha and ML commands).")
+    
+    # Register global error handler
+    app.add_error_handler(error_handler)
+    logger.info("✅ Global error handler registered.")
     
     # Run application with startup logic
     try:

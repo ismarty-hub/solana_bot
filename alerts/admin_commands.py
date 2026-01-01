@@ -140,7 +140,7 @@ async def adduser_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         # If Supabase sync is enabled
         if USE_SUPABASE:
             try:
-                periodic_supabase_sync()
+                asyncio.create_task(periodic_supabase_sync())
                 await update.message.reply_text(
                     f"✅ User {chat_id} added/updated.\n"
                     f"Expires on: `{expiry_date_str}`\n"
@@ -395,7 +395,7 @@ async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Sync to Supabase
         if USE_SUPABASE:
             try:
-                periodic_supabase_sync()
+                asyncio.create_task(periodic_supabase_sync())
                 sync_msg = "\nData synced to Supabase."
             except Exception as e:
                 logging.error(f"⚠️ Supabase sync failed: {e}")

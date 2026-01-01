@@ -57,7 +57,13 @@ class UserManager:
 
         # Ensure alpha_alerts boolean exists
         if "alpha_alerts" not in user:
-            user["alpha_alerts"] = False
+            user["alpha_alerts"] = True
+            modified = True
+
+        # Ensure grades list exists and is not empty by default
+        if not user.get("grades"):
+            from config import ALL_GRADES
+            user["grades"] = ALL_GRADES.copy()
             modified = True
 
         # Ensure 'subscribed' key exists
@@ -122,7 +128,7 @@ class UserManager:
         # Create default user entry
         now = self.now_iso()
         prefs[chat_id] = {
-            "grades": [],
+            "grades": ALL_GRADES.copy(),
             "created_at": now,
             "updated_at": now,
             "active": False,
@@ -131,7 +137,7 @@ class UserManager:
             "last_alert_at": None,
             "expires_at": None,
             "modes": ["alerts"],
-            "alpha_alerts": False,
+            "alpha_alerts": True,
             # New TP defaults
             "tp_preference": "median",
             "tp_discovery": None,
@@ -141,7 +147,7 @@ class UserManager:
             "min_trade_size": 10.0,
             # Independent Trade Filters
             "trade_grades": ALL_GRADES,
-            "trade_alpha_alerts": False,
+            "trade_alpha_alerts": True,
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]
@@ -330,11 +336,17 @@ class UserManager:
                     "tp_preference": "median"
                 }
 
+            # Ensure alerts are enabled when subscription is renewed
+            current_modes = prefs[chat_id].get("modes", [])
+            if "alerts" not in current_modes:
+                current_modes.append("alerts")
+            
             prefs[chat_id].update({
                 "updated_at": now,
                 "expires_at": expiry_date,
                 "active": True,
-                "subscribed": True
+                "subscribed": True,
+                "modes": current_modes
             })
 
             self._persist_prefs(prefs)

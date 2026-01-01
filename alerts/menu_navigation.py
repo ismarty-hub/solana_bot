@@ -66,8 +66,8 @@ async def show_main_menu(message, user_manager: UserManager, chat_id: str, edit=
         sub_status = "❌ Inactive"
         
     # Get expiry date if available
-    expires_at = user_prefs.get("expires_at", "N/A")
-    if expires_at != "N/A" and "Z" in expires_at:
+    expires_at = user_prefs.get("expires_at") or "N/A"
+    if expires_at and expires_at != "N/A" and "Z" in expires_at:
         expires_at = expires_at.replace("Z", "").replace("T", " ")[:16]
 
     # Determine active mode indicators
@@ -306,9 +306,9 @@ async def show_settings_menu(message, user_manager: UserManager, portfolio_manag
 async def show_mode_selection_menu(message, edit=False):
     """Display mode selection menu."""
     keyboard = [
-        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts_set")],
-        [InlineKeyboardButton("📈 Trading Only", callback_data="mode_papertrade_set")],
-        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both_set")],
+        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts")],
+        [InlineKeyboardButton("📈 Trading Only", callback_data="mode_papertrade")],
+        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
     ]
     

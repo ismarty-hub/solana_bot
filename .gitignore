@@ -1,3 +1,32 @@
 *.env
 solana_bot/
 data/
+__pycache__/
+
+# AI Utility & Diagnostic Scripts
+fix_encoding.py
+fix_lines.py
+verify_encoding.py
+check_import.py
+diagnostic.py
+diagnose_trade_blocks.py
+simple_verify.py
+verify_alerts.py
+verify_ml_filtering.py
+repair_analytics.py
+restore_features.py
+reset_snaoshot.py
+check_syntax.py
+
+# Backups & Logs
+*_old.py
+*.log
+*.txt
+!requirements.txt
+!README.md
+!*.md
+
+# State & Results
+*.json
+!prompt.json
+repair_temp/

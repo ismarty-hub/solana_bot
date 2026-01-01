@@ -161,7 +161,7 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         keyboard = [
             [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
              InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("ðŸ“Š All Grades", callback_data="preset_all")]
+            [InlineKeyboardButton("ðŸ❌Š All Grades", callback_data="preset_all")]
         ]
         
         current_grades = user_manager.get_user_prefs(chat_id).get('grades', [])
@@ -170,7 +170,7 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         await update.message.reply_html(
             f"âš™ï¸ <b>Configure Alert Grades</b>\n\n"
             f"<b>Current Setting:</b> {current_str}\n\n"
-            f"<b>ðŸ“ Manual Setup:</b>\n"
+            f"<b>ðŸ❌ Manual Setup:</b>\n"
             f"Usage: <code>/setalerts GRADE1 GRADE2 ...</code>\n\n"
             f"<b>Available Grades:</b>\n"
             f"\u2022 CRITICAL - Highest priority signals\n"
@@ -362,7 +362,7 @@ async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
+        await update.message.reply_html("❌ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -375,7 +375,7 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled.")
+        await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
     # Fetch live prices and calculate PnL
@@ -384,7 +384,7 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
         pnl_data = portfolio_manager.calculate_unrealized_pnl(chat_id, live_prices)
     except Exception as e:
         logger.exception(f"Error calculating PnL for {chat_id}: {e}")
-        await update.message.reply_html("âŒ Error fetching live prices. Please try again.")
+        await update.message.reply_html("❌ Error fetching live prices. Please try again.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -397,7 +397,7 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled.")
+        await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -485,7 +485,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled.")
+        await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -537,7 +537,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         f"\u2022 Starting: ${starting_capital:,.2f}\n"
         f"\u2022 Current Total: ${total_value:,.2f}\n"
         f"\u2022 ROI: <b>{roi:+.2f}%</b>\n\n"
-        f"<b>ðŸ“ˆ Trade Statistics:</b>\n"
+        f"<b>ðŸ❌ˆ Trade Statistics:</b>\n"
         f"\u2022 Total Trades: <b>{total_trades}</b>\n"
         f"\u2022 Wins: <b>{wins}</b> | Losses: <b>{losses}</b>\n"
         f"\u2022 Win Rate: <b>{win_rate:.1f}%</b>\n"
@@ -577,7 +577,7 @@ async def watchlist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled.")
+        await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -628,7 +628,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     prefs = user_manager.get_user_prefs(chat_id)
     
     if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("âŒ Paper trading is not enabled.")
+        await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -647,7 +647,7 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
             f"\u2022 Clear watchlist and re-entry candidates\n"
             f"\u2022 Reset your capital to a new amount\n"
             f"\u2022 Preserve your trade history\n\n"
-            f"<b>ðŸ“ Usage:</b>\n"
+            f"<b>ðŸ❌ Usage:</b>\n"
             f"<code>/resetcapital [amount]</code>\n\n"
             f"<b>Examples:</b>\n"
             f"<code>/resetcapital 1000</code> - Reset to $1,000\n"
@@ -1057,13 +1057,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     if data == "mode_alerts":
         await query.answer()
         user_manager.set_modes(chat_id, ["alerts"])
-        await query.edit_message_text("\u2705 Mode set to <b>ðŸ”” Alerts Only</b>.", parse_mode="HTML")
+        await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
         return
     elif data == "mode_papertrade":
         await query.answer()
         user_manager.set_modes(chat_id, ["papertrade"])
         await query.edit_message_text(
-            "\u2705 Mode set to <b>ðŸ“ˆ Paper Trading Only</b>.\n\n"
+            "✅ Mode set to <b>📈 Paper Trading Only</b>.\n\n"
             "Use <code>/papertrade [capital]</code> to set your starting funds.", 
             parse_mode="HTML"
         )
@@ -1072,7 +1072,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         await query.answer()
         user_manager.set_modes(chat_id, ["alerts", "papertrade"])
         await query.edit_message_text(
-            "\u2705 Mode set to <b>ðŸš€ Both Alerts & Paper Trading</b>.", 
+            "✅ Mode set to <b>🚀 Both Alerts & Paper Trading</b>.", 
             parse_mode="HTML"
         )
         return
@@ -1089,7 +1089,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         keyboard = [
             [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
              InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("ðŸ“Š All Grades", callback_data="preset_all")]
+            [InlineKeyboardButton("ðŸ❌Š All Grades", callback_data="preset_all")]
         ]
         await query.edit_message_text(
             "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
@@ -1386,26 +1386,26 @@ async def buy_token_process(update: Update, context: ContextTypes.DEFAULT_TYPE,
         freeze_auth = rugcheck_data.get("freeze_authority")
         mutable = rugcheck_data.get("is_mutable", True)
         
-        msg += "<b>\U0001F46E Authority Status:</b>\n"
-        msg += f"\u2022 Mint Authority: {'\u2705 Disabled' if not mint_auth else '\u26A0\uFE0F Enabled'}\n"
-        msg += f"\u2022 Freeze Authority: {'\u2705 Disabled' if not freeze_auth else '\u26A0\uFE0F Enabled'}\n"
-        msg += f"\u2022 Metadata Mutable: {'\u26A0\uFE0F Yes' if mutable else '\u2705 No'}\n"
+        msg += "<b>👮 Authority Status:</b>\n"
+        msg += f"• Mint Authority: {'✅ Disabled' if not mint_auth else '⚠️ Enabled'}\n"
+        msg += f"• Freeze Authority: {'✅ Disabled' if not freeze_auth else '⚠️ Enabled'}\n"
+        msg += f"• Metadata Mutable: {'⚠️ Yes' if mutable else '✅ No'}\n"
         
         # 2. Liquidity Analysis
         liq_locked = rugcheck_data.get("liquidity_locked_pct", 0)
-        msg += f"\n<b>\U0001F4A7 Liquidity Status:</b>\n"
-        msg += f"\u2022 Locked: {liq_locked:.1f}% {'\u2705' if liq_locked > 90 else '\u26A0\uFE0F'}\n"
+        msg += f"\n<b>💧 Liquidity Status:</b>\n"
+        msg += f"• Locked: {liq_locked:.1f}% {'✅' if liq_locked > 90 else '⚠️'}\n"
         
         # 3. Holder Analysis
         top_holders = rugcheck_data.get("top_holders_pct", 0)
         top_holder = rugcheck_data.get("top_holder_pct", 0)
         insider_count = rugcheck_data.get("insider_wallets_count", 0)
         
-        msg += f"\n<b>\U0001F465 Holder Analysis:</b>\n"
-        msg += f"\u2022 Top 10 Hold: {top_holders:.1f}% {'\u2705' if top_holders < 30 else '\u26A0\uFE0F'}\n"
-        msg += f"\u2022 Top 1 Holder: {top_holder:.1f}%\n"
+        msg += f"\n<b>👥 Holder Analysis:</b>\n"
+        msg += f"• Top 10 Hold: {top_holders:.1f}% {'✅' if top_holders < 30 else '⚠️'}\n"
+        msg += f"• Top 1 Holder: {top_holder:.1f}%\n"
         if insider_count > 0:
-            msg += f"\u2022 Insider Wallets: {insider_count} \u26A0\uFE0F\n"
+            msg += f"• Insider Wallets: {insider_count} ⚠️\n"
         
         # 4. Critical Warnings
         dev_sold = rugcheck_data.get("dev_sold", False)
