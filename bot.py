@@ -45,7 +45,7 @@ from alerts.commands import (
 # --- End Updated Command Imports ---
 
 from alerts.admin_commands import (
-    admin_stats_cmd, broadcast_cmd, adduser_cmd, debug_user_cmd, 
+    admin_stats_cmd, broadcast_cmd, adduser_cmd, genactivation_cmd, debug_user_cmd, 
     debug_system_cmd, force_download_cmd,
     addgroup_cmd, removegroup_cmd, listgroups_cmd,  
     is_admin_update, notify_new_group
@@ -90,6 +90,7 @@ async def stats_wrapper(update, context): await stats_cmd(update, context, user_
 async def admin_stats_wrapper(update, context): await admin_stats_cmd(update, context, user_manager)
 async def broadcast_wrapper(update, context): await broadcast_cmd(update, context, user_manager)
 async def adduser_wrapper(update, context): await adduser_cmd(update, context, user_manager)
+async def genactivation_wrapper(update, context): await genactivation_cmd(update, context, user_manager)
 async def debug_user_wrapper(update, context): await debug_user_cmd(update, context, user_manager)
 async def debug_system_wrapper(update, context): await debug_system_cmd(update, context, user_manager)
 async def force_download_wrapper(update, context): await force_download_cmd(update, context, user_manager)
@@ -231,6 +232,7 @@ async def on_startup(app: Application):
             BotCommand("admin", "View platform statistics"),
             BotCommand("broadcast", "Send message to all users"),
             BotCommand("adduser", "Add new subscriber"),
+            BotCommand("genactivation", "Generate activation code"),
             BotCommand("debuguser", "Debug user data"),
             BotCommand("debugsystem", "System diagnostics"),
             BotCommand("forcedownload", "Force download from Supabase"),
@@ -359,6 +361,7 @@ async def main():
     app.add_handler(CommandHandler("admin", admin_stats_wrapper))
     app.add_handler(CommandHandler("broadcast", broadcast_wrapper))
     app.add_handler(CommandHandler("adduser", adduser_wrapper))
+    app.add_handler(CommandHandler("genactivation", genactivation_wrapper))
     app.add_handler(CommandHandler("debuguser", debug_user_wrapper))
     app.add_handler(CommandHandler("debugsystem", debug_system_wrapper))
     app.add_handler(CommandHandler("forcedownload", force_download_wrapper))

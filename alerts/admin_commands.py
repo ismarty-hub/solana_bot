@@ -200,6 +200,38 @@ async def debug_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     await update.message.reply_html(debug_msg)
 
 
+async def genactivation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager):
+    """Admin command: generate an activation code for X days."""
+    if not is_admin_update(update):
+        await update.message.reply_text("⛔ Access denied. Admins only.")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("⚠️ Usage: /genactivation <days>")
+        return
+
+    try:
+        days = int(context.args[0])
+        if days <= 0:
+            await update.message.reply_text("❌ Days must be positive.")
+            return
+            
+        code = user_manager.generate_activation_code(days)
+        
+        await update.message.reply_html(
+            f"🎫 <b>Activation Code Generated!</b>\n\n"
+            f"• Code: <code>{code}</code>\n"
+            f"• Validity: {days} days\n\n"
+            f"<i>Send this code to the user. It can only be used once.</i>"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid number of days.")
+    except Exception as e:
+        logging.exception("❌ Error in /genactivation:")
+        await update.message.reply_text(f"❌ Failed to generate code: {e}")
+
+
 async def debug_system_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager):
     """Debug command to check system status and why alerts aren't being sent."""
     if not is_admin_update(update):

@@ -295,9 +295,24 @@ async def handle_text_message(
             return
         
                 # ====================================================================
-        # IMPLICIT COMMANDS (Mint Address Detection)
+        # ACTIVATION CODE REDEMPTION
         # ====================================================================
         import re
+        if re.match(r'^ACT-[A-Z0-9]{4}-[A-Z0-9]{4}$', text):
+            days = user_manager.redeem_activation_code(chat_id, text)
+            if days:
+                await update.message.reply_html(
+                    f"✅ <b>Success!</b>\n\n"
+                    f"Your account has been activated for <b>{days} days</b>.\n"
+                    f"Enjoy full access to the bot!"
+                )
+            else:
+                await update.message.reply_text("❌ Invalid or already used activation code.")
+            return
+
+        # ====================================================================
+        # IMPLICIT COMMANDS (Mint Address Detection)
+        # ====================================================================
         # Solana Mint Address Regex (Base58, 32-44 chars)
         mint_pattern = r'^[1-9A-HJ-NP-Za-km-z]{32,44}$'
         

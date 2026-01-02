@@ -41,6 +41,7 @@ ALERTS_STATE_FILE = DATA_DIR / "bot_alerts_state.json"
 ALPHA_ALERTS_STATE_FILE = DATA_DIR / "alerts_state_alpha.json"
 GROUPS_FILE = DATA_DIR / "bot_groups.pkl"  
 PORTFOLIOS_FILE = DATA_DIR / "bot_portfolios.pkl"
+ACTIVATION_CODES_FILE = DATA_DIR / "activation_codes.json"
 
 # ----------------------
 # Analytics Tracking Configuration

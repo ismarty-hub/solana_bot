@@ -6,10 +6,10 @@ alerts/user_manager.py - User management and preferences
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from shared.file_io import safe_load, safe_save
-from config import ALL_GRADES, ADMIN_USER_ID, USE_SUPABASE
+from config import ALL_GRADES, ADMIN_USER_ID, USE_SUPABASE, ACTIVATION_CODES_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,71 @@ class UserManager:
             safe_save(self.prefs_file, prefs)
         except Exception:
             logger.exception("Failed to persist prefs")
+
+    def _load_codes(self) -> Dict[str, Any]:
+        """Load codes from Supabase and then from local file."""
+        from config import BUCKET_NAME
+        try:
+            from supabase_utils import download_file
+            # Try to download from Supabase first
+            download_file(str(ACTIVATION_CODES_FILE), ACTIVATION_CODES_FILE.name, bucket=BUCKET_NAME)
+        except Exception as e:
+            logger.debug(f"Could not download activation codes from Supabase: {e}")
+            
+        return safe_load(ACTIVATION_CODES_FILE, {})
+
+    def _save_codes(self, codes: Dict[str, Any]):
+        """Save codes to local file and then upload to Supabase."""
+        from config import BUCKET_NAME
+        try:
+            safe_save(ACTIVATION_CODES_FILE, codes)
+            from supabase_utils import upload_file
+            upload_file(str(ACTIVATION_CODES_FILE), bucket=BUCKET_NAME)
+        except Exception as e:
+            logger.exception(f"Failed to persist activation codes: {e}")
+
+    def generate_activation_code(self, days: int) -> str:
+        """Generate a random unique activation code."""
+        import secrets
+        import string
+        
+        codes = self._load_codes()
+        
+        # Format: ACT-XXXX-XXXX
+        while True:
+            suffix = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+            code = f"ACT-{suffix[:4]}-{suffix[4:]}"
+            if code not in codes:
+                break
+        
+        codes[code] = {
+            "days": days,
+            "created_at": self.now_iso()
+        }
+        
+        self._save_codes(codes)
+        return code
+
+    def redeem_activation_code(self, chat_id: str, code: str) -> Optional[int]:
+        """
+        Redeem an activation code and activate user.
+        Returns number of days if successful, None otherwise.
+        """
+        codes = self._load_codes()
+        
+        if code not in codes:
+            return None
+        
+        data = codes.pop(code)
+        days = data.get("days", 0)
+        
+        # Save immediately to avoid double use
+        self._save_codes(codes)
+        
+        # Activate user
+        self.add_user_with_expiry(chat_id, days)
+        
+        return days
 
     def _normalize_user_record(self, chat_id: str, user: Dict[str, Any], prefs: Dict[str, Any]) -> None:
         """
