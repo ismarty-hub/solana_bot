@@ -75,7 +75,8 @@ class Config:
     AGGREGATOR_BATCH_SIZE: int = field(default_factory=lambda: int(os.getenv("AGGREGATOR_BATCH_SIZE", "10")))
     
     SNAPSHOT_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("SNAPSHOT_RETENTION_DAYS", "14")))
-    DATASET_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("DATASET_RETENTION_DAYS", "45")))
+    DATASET_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("DATASET_RETENTION_DAYS", "14")))
+    ANALYTICS_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("ANALYTICS_RETENTION_DAYS", "45")))
     CLEANUP_INTERVAL_HOURS: int = field(default_factory=lambda: int(os.getenv("CLEANUP_INTERVAL_HOURS", "24")))
 
     def __post_init__(self):
@@ -526,6 +527,63 @@ class SupabaseManager:
             
         except Exception as e:
             log.error(f"Cleanup failed for {folder}: {e}")
+            return 0
+
+    async def cleanup_old_folders(self, parent_folder: str, retention_days: int) -> int:
+        """Identify subfolders with date names and delete them if older than retention_days."""
+        try:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            log.info(f"Cleaning folders older than {retention_days} days in {parent_folder}")
+            
+            # List items in parent folder (Supabase list includes folder prefixes if requested)
+            # Actually, supa-python's list() returns objects. Subfolders usually appear as objects with no metadata or specific properties.
+            items = await self.list_files(parent_folder, limit=1000)
+            
+            folders_to_clean = []
+            for item in items:
+                # In Supabase list, folders often have no 'id' or are marked by specific attributes
+                # but we also check if the name matches a date pattern YYYY-MM-DD
+                name = item.get('name')
+                if not name:
+                    continue
+                
+                try:
+                    # Attempt to parse as date YYYY-MM-DD
+                    folder_date = datetime.strptime(name, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    if folder_date < cutoff_date:
+                        folders_to_clean.append(name)
+                except ValueError:
+                    # Not a date folder, skip
+                    continue
+            
+            if not folders_to_clean:
+                log.info(f"No old date-folders found in {parent_folder}")
+                return 0
+            
+            total_deleted_files = 0
+            for folder_name in folders_to_clean:
+                full_folder_path = f"{parent_folder}/{folder_name}"
+                log.info(f"Found old folder to delete: {full_folder_path}")
+                
+                # To "delete" a folder in Supabase, we must delete all its files
+                # List all files in this subfolder
+                files_in_folder = await self.list_files(full_folder_path, limit=5000)
+                if files_in_folder:
+                    log.info(f"Deleting {len(files_in_folder)} files in folder {full_folder_path}")
+                    for f in files_in_folder:
+                        try:
+                            await self.delete_file(f"{full_folder_path}/{f['name']}")
+                            total_deleted_files += 1
+                        except Exception as e:
+                            log.warning(f"Failed to delete file {f['name']} in {full_folder_path}: {e}")
+                else:
+                    log.info(f"Folder {full_folder_path} is already empty.")
+            
+            log.info(f"Cleanup complete for {parent_folder}: deleted {len(folders_to_clean)} folders ({total_deleted_files} files).")
+            return len(folders_to_clean)
+            
+        except Exception as e:
+            log.error(f"Folder cleanup failed for {parent_folder}: {e}")
             return 0
 
 # --- Persistence Manager ---
@@ -1551,19 +1609,37 @@ class CollectorService:
         if current_time - self.last_cleanup >= cleanup_interval_seconds:
             log.info("Starting storage cleanup cycle...")
             try:
-                # Cleanup snapshots
+                # 1. Cleanup snapshots (files)
                 deleted_snapshots = await self.supabase.cleanup_old_files(
                     self.config.SNAPSHOT_DIR_REMOTE, 
                     self.config.SNAPSHOT_RETENTION_DAYS
                 )
                 
-                # Cleanup datasets
-                deleted_datasets = await self.supabase.cleanup_old_files(
-                    self.config.DATASET_DIR_REMOTE, 
+                # 2. Cleanup daily analytics (files)
+                deleted_daily_discovery = await self.supabase.cleanup_old_files(
+                    "analytics/discovery/daily",
+                    self.config.ANALYTICS_RETENTION_DAYS # Use analytics retention (35d) for daily files
+                )
+                deleted_daily_alpha = await self.supabase.cleanup_old_files(
+                    "analytics/alpha/daily",
+                    self.config.ANALYTICS_RETENTION_DAYS
+                )
+                
+                # 3. Cleanup datasets (folders)
+                # Cleanup date-folders inside datasets/discovery and datasets/alpha
+                deleted_folders_discovery = await self.supabase.cleanup_old_folders(
+                    f"{self.config.DATASET_DIR_REMOTE}/discovery",
+                    self.config.DATASET_RETENTION_DAYS # 45 days
+                )
+                deleted_folders_alpha = await self.supabase.cleanup_old_folders(
+                    f"{self.config.DATASET_DIR_REMOTE}/alpha",
                     self.config.DATASET_RETENTION_DAYS
                 )
                 
-                log.info(f"Storage cleanup complete: Deleted {deleted_snapshots} snapshots + {deleted_datasets} datasets")
+                log.info(f"Storage cleanup complete: "
+                         f"Deleted {deleted_snapshots} snapshots, "
+                         f"{deleted_daily_discovery + deleted_daily_alpha} daily analytics files, "
+                         f"{deleted_folders_discovery + deleted_folders_alpha} dataset folders.")
             except Exception as e:
                 log.error(f"Storage cleanup failed: {e}", exc_info=True)
             finally:
