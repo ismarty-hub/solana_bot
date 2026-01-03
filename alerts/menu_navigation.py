@@ -170,6 +170,7 @@ async def show_dashboard_menu(message, user_manager: UserManager, portfolio_mana
 async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edit=False):
     """Display alerts configuration menu."""
     user_prefs = user_manager.get_user_prefs(chat_id)
+    modes = user_prefs.get("modes", [])
     alert_grades = user_prefs.get("grades", [])
     alpha_alerts = "✅" if user_prefs.get("alpha_alerts", False) else "❌"
     
