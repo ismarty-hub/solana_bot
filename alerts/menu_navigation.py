@@ -177,6 +177,7 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
     
     keyboard = [
         [InlineKeyboardButton("🎯 Set Notification Grades", callback_data="setalerts_menu")],
+        [InlineKeyboardButton(f"🔔 Notifications {'✅' if 'alerts' in modes else '⭕'}", callback_data="toggle_alerts")],
         [InlineKeyboardButton(f"🌟 Alpha Notifications {alpha_alerts}", callback_data="alpha_menu")],
         [InlineKeyboardButton("📋 View Active Filters", callback_data="myalerts_direct")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
@@ -198,16 +199,22 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
         await message.reply_html(menu_text, reply_markup=reply_markup)
 
 
-async def show_alert_grades_menu(message, edit=False):
-    """Display menu for selecting alert grades."""
+async def show_alert_grades_menu(message, user_manager, chat_id, edit=False):
+    """Display menu for selecting alert grades with current indicators."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    selected_grades = user_prefs.get("grades", [])
+    
+    def get_btn_text(grade_name, emoji):
+        return f"{'✅ ' if grade_name in selected_grades else ''}{emoji} {grade_name}"
+
     keyboard = [
         [
-            InlineKeyboardButton("🔴 CRITICAL", callback_data="grade_critical"),
-            InlineKeyboardButton("🟠 HIGH", callback_data="grade_high")
+            InlineKeyboardButton(get_btn_text("CRITICAL", "🔴"), callback_data="grade_critical"),
+            InlineKeyboardButton(get_btn_text("HIGH", "🟠"), callback_data="grade_high")
         ],
         [
-            InlineKeyboardButton("🟡 MEDIUM", callback_data="grade_medium"),
-            InlineKeyboardButton("🟢 LOW", callback_data="grade_low")
+            InlineKeyboardButton(get_btn_text("MEDIUM", "🟡"), callback_data="grade_medium"),
+            InlineKeyboardButton(get_btn_text("LOW", "🟢"), callback_data="grade_low")
         ],
         [InlineKeyboardButton("🔄 Done Selecting", callback_data="grades_done")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_alerts")]
@@ -306,9 +313,9 @@ async def show_settings_menu(message, user_manager: UserManager, portfolio_manag
 async def show_mode_selection_menu(message, edit=False):
     """Display mode selection menu."""
     keyboard = [
-        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts")],
-        [InlineKeyboardButton("📈 Trading Only", callback_data="mode_papertrade")],
-        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both")],
+        [InlineKeyboardButton("🔔 Alerts Only", callback_data="mode_alerts_set")],
+        [InlineKeyboardButton("📈 Trading Only", callback_data="mode_papertrade_set")],
+        [InlineKeyboardButton("🚀 Both Modes", callback_data="mode_both_set")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
     ]
     

@@ -107,6 +107,21 @@ async def handle_menu_callback(
         await show_alerts_menu(query.message, user_manager, chat_id, edit=True)
         return
     
+    elif data == "toggle_alerts":
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        modes = user_prefs.get("modes", [])
+        if "alerts" in modes:
+            modes.remove("alerts")
+            status_msg = "⭕ Notifications Disabled"
+        else:
+            modes.append("alerts")
+            status_msg = "✅ Notifications Enabled"
+        
+        user_manager.update_user_prefs(chat_id, {"modes": modes})
+        await query.answer(status_msg, show_alert=True)
+        await show_alerts_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
     elif data == "setalerts_menu":
         if not user_manager.is_subscribed(chat_id):
             if user_manager.is_subscription_expired(chat_id):
@@ -114,7 +129,7 @@ async def handle_menu_callback(
             else:
                 await query.answer("⚠️ Active subscription required for alert configuration.", show_alert=True)
             return
-        await show_alert_grades_menu(query.message, edit=True)
+        await show_alert_grades_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "myalerts_direct":
@@ -666,7 +681,7 @@ async def handle_menu_callback(
         user_manager.update_user_prefs(chat_id, {"grades": grades})
         
         # Show updated menu
-        await show_alert_grades_menu(query.message, edit=True)
+        await show_alert_grades_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data == "grades_done":
@@ -676,14 +691,24 @@ async def handle_menu_callback(
             else:
                 await query.answer("⚠️ Active subscription required.", show_alert=True)
             return
+        
+        # Ensure 'alerts' mode is enabled when grades are configured
         user_prefs = user_manager.get_user_prefs(chat_id)
+        modes = user_prefs.get("modes", [])
+        if "alerts" not in modes:
+            modes.append("alerts")
+            user_manager.update_user_prefs(chat_id, {"modes": modes})
+            mode_notice = "\n\n🔔 <b>Alert Notifications enabled automatically.</b>"
+        else:
+            mode_notice = ""
+
         grades = user_prefs.get("grades", [])
         grades_text = ", ".join(grades) if grades else "None selected"
         await query.message.reply_html(
             f"✅ <b>Notifications Configured!</b>\n\n"
             f"<b>Selected Grades:</b>\n"
             f"{grades_text}\n\n"
-            f"You'll now receive notifications for these grades."
+            f"You'll now receive notifications for these grades.{mode_notice}"
         )
         return
     

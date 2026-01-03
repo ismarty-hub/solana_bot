@@ -90,7 +90,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         return
     
     if not context.args:
-        await update.message.reply_text("Usage: /broadcast <message>")
+        await update.message.reply_text("Usage: /broadcast &lt;message&gt;")
         return
     
     message = " ".join(context.args)
@@ -122,7 +122,7 @@ async def adduser_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
         return
     
     if len(context.args) < 2:
-        await update.message.reply_text("⚠️ Usage: /adduser <chat_id> <days>")
+        await update.message.reply_text("⚠️ Usage: /adduser &lt;chat_id&gt; &lt;days&gt;")
         return
 
     try:
@@ -207,7 +207,7 @@ async def genactivation_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         return
     
     if not context.args:
-        await update.message.reply_text("⚠️ Usage: /genactivation <days>")
+        await update.message.reply_text("⚠️ Usage: /genactivation &lt;days&gt;")
         return
 
     try:
@@ -389,7 +389,7 @@ async def addgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not context.args:
         await update.message.reply_text(
-            "⚠️ Usage: /addgroup <group_chat_id>\n\n"
+            "⚠️ Usage: /addgroup &lt;group_chat_id&gt;\n\n"
             "Example: /addgroup -1001234567890"
         )
         return
@@ -457,7 +457,7 @@ async def removegroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not context.args:
         await update.message.reply_text(
-            "⚠️ Usage: /removegroup <group_chat_id>\n\n"
+            "⚠️ Usage: /removegroup &lt;group_chat_id&gt;\n\n"
             "Example: /removegroup -1001234567890"
         )
         return
