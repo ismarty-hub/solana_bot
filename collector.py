@@ -74,7 +74,7 @@ class Config:
     ANALYTICS_INDEX_TTL: int = field(default_factory=lambda: int(os.getenv("ANALYTICS_INDEX_TTL", "600")))
     AGGREGATOR_BATCH_SIZE: int = field(default_factory=lambda: int(os.getenv("AGGREGATOR_BATCH_SIZE", "10")))
     
-    SNAPSHOT_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("SNAPSHOT_RETENTION_DAYS", "7")))
+    SNAPSHOT_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("SNAPSHOT_RETENTION_DAYS", "14")))
     DATASET_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("DATASET_RETENTION_DAYS", "90")))
     CLEANUP_INTERVAL_HOURS: int = field(default_factory=lambda: int(os.getenv("CLEANUP_INTERVAL_HOURS", "24")))
 
