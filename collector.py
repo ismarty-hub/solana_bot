@@ -73,6 +73,10 @@ class Config:
     LONG_FINALIZE_HOURS: int = field(default_factory=lambda: int(os.getenv("LONG_FINALIZE_HOURS", "168")))
     ANALYTICS_INDEX_TTL: int = field(default_factory=lambda: int(os.getenv("ANALYTICS_INDEX_TTL", "600")))
     AGGREGATOR_BATCH_SIZE: int = field(default_factory=lambda: int(os.getenv("AGGREGATOR_BATCH_SIZE", "10")))
+    
+    SNAPSHOT_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("SNAPSHOT_RETENTION_DAYS", "7")))
+    DATASET_RETENTION_DAYS: int = field(default_factory=lambda: int(os.getenv("DATASET_RETENTION_DAYS", "90")))
+    CLEANUP_INTERVAL_HOURS: int = field(default_factory=lambda: int(os.getenv("CLEANUP_INTERVAL_HOURS", "24")))
 
     def __post_init__(self):
         if not self.SUPABASE_URL or not self.SUPABASE_KEY:
@@ -480,6 +484,49 @@ class SupabaseManager:
             except Exception as e:
                 log.error(f"Failed to list files in {folder}: {e}")
                 return []
+    
+    async def cleanup_old_files(self, folder: str, retention_days: int) -> int:
+        """Delete files older than retention_days. Returns count of deleted files."""
+        try:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+            log.info(f"Cleaning files older than {retention_days} days ({cutoff_date.isoformat()}) in {folder}")
+            
+            files_to_delete = []
+            files = await self.list_files(folder, limit=5000)
+            
+            for file_info in files:
+                try:
+                    created_at_str = file_info.get('created_at')
+                    if not created_at_str:
+                        continue
+                    
+                    created_at = parser.isoparse(created_at_str)
+                    if created_at < cutoff_date:
+                        files_to_delete.append(file_info['name'])
+                except Exception:
+                    continue
+            
+            if not files_to_delete:
+                log.info(f"No files to delete in {folder}")
+                return 0
+            
+            log.info(f"Found {len(files_to_delete)} files to delete in {folder}")
+            
+            deleted_count = 0
+            for filename in files_to_delete:
+                try:
+                    file_path = f"{folder}/{filename}"
+                    await self.delete_file(file_path)
+                    deleted_count += 1
+                except Exception as e:
+                    log.warning(f"Failed to delete {file_path}: {e}")
+            
+            log.info(f"Deleted {deleted_count}/{len(files_to_delete)} files from {folder}")
+            return deleted_count
+            
+        except Exception as e:
+            log.error(f"Cleanup failed for {folder}: {e}")
+            return 0
 
 # --- Persistence Manager ---
 
@@ -1281,7 +1328,10 @@ class CollectorService:
         self.aggregator = SnapshotAggregator(config, self.supabase, self.persistence, self.active_snapshot_files)
         
         self.process_semaphore = asyncio.Semaphore(config.PROCESSOR_CONCURRENCY)
+        # Initialize to past to trigger cleanup on first run, then every CLEANUP_INTERVAL_HOURS
+        self.last_cleanup = time.monotonic() - (config.CLEANUP_INTERVAL_HOURS * 3600)
         log.info(f"Processor concurrency: {config.PROCESSOR_CONCURRENCY}")
+        log.info(f"Retention: Snapshots={config.SNAPSHOT_RETENTION_DAYS}d, Datasets={config.DATASET_RETENTION_DAYS}d")
         log.info("CollectorService initialized.")
 
     async def _fetch_all_signals(self) -> List[Dict]:
@@ -1493,6 +1543,32 @@ class CollectorService:
         except Exception as e:
             log.error(f"Error processing {mint}: {e}", exc_info=True)
 
+    async def run_cleanup(self):
+        """Run storage cleanup if interval has elapsed."""
+        current_time = time.monotonic()
+        cleanup_interval_seconds = self.config.CLEANUP_INTERVAL_HOURS * 3600
+        
+        if current_time - self.last_cleanup >= cleanup_interval_seconds:
+            log.info("Starting storage cleanup cycle...")
+            try:
+                # Cleanup snapshots
+                deleted_snapshots = await self.supabase.cleanup_old_files(
+                    self.config.SNAPSHOT_DIR_REMOTE, 
+                    self.config.SNAPSHOT_RETENTION_DAYS
+                )
+                
+                # Cleanup datasets
+                deleted_datasets = await self.supabase.cleanup_old_files(
+                    self.config.DATASET_DIR_REMOTE, 
+                    self.config.DATASET_RETENTION_DAYS
+                )
+                
+                log.info(f"Storage cleanup complete: Deleted {deleted_snapshots} snapshots + {deleted_datasets} datasets")
+            except Exception as e:
+                log.error(f"Storage cleanup failed: {e}", exc_info=True)
+            finally:
+                self.last_cleanup = time.monotonic()
+
     async def run(self):
         """Main service loop."""
         log.info(f"Starting collector service. Poll: {self.config.POLL_INTERVAL}s, Aggregator: {self.config.AGGREGATOR_INTERVAL}s")
@@ -1537,6 +1613,9 @@ class CollectorService:
                     except Exception as e:
                         log.error(f"Aggregator failed: {e}", exc_info=True)
                         last_aggregation = time.monotonic()
+                
+                # Run storage cleanup if interval elapsed
+                await self.run_cleanup()
 
                 cycle_duration = time.monotonic() - start_time
                 log.info(f"Polling cycle finished in {cycle_duration:.2f}s.")
