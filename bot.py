@@ -38,6 +38,7 @@ from alerts.commands import (
     predict_cmd, predict_batch_cmd,
 
     set_tp_cmd, set_tp_discovery_cmd, set_tp_alpha_cmd,
+    set_min_prob_discovery_cmd, set_min_prob_alpha_cmd,
 
     closeposition_cmd, closeall_cmd, confirmcloseall_cmd
 )
@@ -151,6 +152,9 @@ async def set_tp_wrapper(update, context): await set_tp_cmd(update, context, use
 async def set_tp_discovery_wrapper(update, context): await set_tp_discovery_cmd(update, context, user_manager)
 async def set_tp_alpha_wrapper(update, context): await set_tp_alpha_cmd(update, context, user_manager)
 
+async def set_min_prob_discovery_wrapper(update, context): await set_min_prob_discovery_cmd(update, context, user_manager)
+async def set_min_prob_alpha_wrapper(update, context): await set_min_prob_alpha_cmd(update, context, user_manager)
+
 # ----------------------
 # Global Error Handler
 # ----------------------
@@ -221,6 +225,8 @@ async def on_startup(app: Application):
             # --- NEW: Add ML commands to menu ---
             BotCommand("predict", "🤖 Get ML prediction for a token"),
             BotCommand("predict_batch", "🤖 Get ML predictions for multiple tokens"),
+            BotCommand("set_min_prob_discovery", "🎯 Set min win % for Discovery"),
+            BotCommand("set_min_prob_alpha", "🎯 Set min win % for Alpha"),
         ]
         
         # Set commands for all users
@@ -392,6 +398,8 @@ async def main():
     app.add_handler(CommandHandler("set_tp", set_tp_wrapper))
     app.add_handler(CommandHandler("set_tp_discovery", set_tp_discovery_wrapper))
     app.add_handler(CommandHandler("set_tp_alpha", set_tp_alpha_wrapper))
+    app.add_handler(CommandHandler("set_min_prob_discovery", set_min_prob_discovery_wrapper))
+    app.add_handler(CommandHandler("set_min_prob_alpha", set_min_prob_alpha_wrapper))
 
     app.add_handler(CommandHandler("closeposition", closeposition_wrapper))
     app.add_handler(CommandHandler("closeall", closeall_wrapper))

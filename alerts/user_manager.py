@@ -174,6 +174,15 @@ class UserManager:
             user["trade_alpha_alerts"] = user.get("alpha_alerts", False)
             modified = True
 
+        # --- NEW: Minimum Probability Alert Filters ---
+        if "min_prob_discovery" not in user:
+            user["min_prob_discovery"] = 0.0
+            modified = True
+
+        if "min_prob_alpha" not in user:
+            user["min_prob_alpha"] = 0.0
+            modified = True
+
         if modified:
             prefs[chat_id] = user
             self._persist_prefs(prefs)
@@ -213,6 +222,9 @@ class UserManager:
             # Independent Trade Filters
             "trade_grades": ALL_GRADES,
             "trade_alpha_alerts": True,
+            # Probability Filters
+            "min_prob_discovery": 0.0,
+            "min_prob_alpha": 0.0,
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]

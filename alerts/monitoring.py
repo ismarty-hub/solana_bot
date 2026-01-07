@@ -307,6 +307,20 @@ async def send_alert_to_subscribers(
             continue
 
         try:
+            # Check Minimum Probability Filter
+            min_prob = prefs.get("min_prob_discovery", 0.0)
+            
+            # Extract probability (default to 1.0 if missing to be safe, or 0.0?)
+            # The structure is token_data["ml_prediction"]["probability"]
+            ml_pred = token_data.get("ml_prediction", {})
+            # If ml_prediction is just "passed" (bool) or empty, what do?
+            # Based on previous file reads, it has "probability".
+            prob = ml_pred.get("probability", 0.0) if isinstance(ml_pred, dict) else 0.0
+            
+            # Skip if probability is lower than user's threshold
+            if prob < min_prob:
+                continue
+
             await app.bot.send_message(
                 chat_id=int(chat_id), 
                 text=message, 

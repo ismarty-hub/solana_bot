@@ -239,7 +239,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\u2022 /stop - Unsubscribe from everything\n\n"
         "<b>--- \U0001F525 Alpha Notifications ---</b>\n"
         "\u2022 /alpha_subscribe - Opt-in to high-priority alpha notifications\n"
-        "\u2022 /alpha_unsubscribe - Opt-out of alpha notifications\n\n"
+        "\u2022 /alpha_unsubscribe - Opt-out of alpha notifications\n"
+        "\u2022 /set_min_prob_discovery [0-100] - Set min win chance for Discovery\n"
+        "\u2022 /set_min_prob_alpha [0-100] - Set min win chance for Alpha\n\n"
         
         "<b>--- \U0001F916 ML Predictions (NEW) ---</b>\n"
         "\u2022 /predict [mint] - Get ML prediction for one token\n"
@@ -1048,7 +1050,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
        data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or \
        data.startswith("set_default_sl:") or data.startswith("set_trade_size_mode_select:") or \
        data.startswith("trade_") or data.startswith("set_trade_") or \
-       data.startswith("grade_"):
+       data.startswith("grade_") or \
+       data == "min_prob_menu" or data.startswith("set_prob_"):
         if portfolio_manager:
             await handle_menu_callback(update, context, user_manager, portfolio_manager)
         return
@@ -1784,3 +1787,61 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         closed_count += 1
     
     await update.message.reply_text(f"\u2705 Closed {closed_count} position(s).")
+
+
+async def set_min_prob_discovery_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Set minimum probability for Discovery alerts."""
+    chat_id = str(update.effective_chat.id)
+    args = context.args
+
+    if not args:
+        current_val = user_manager.get_user_prefs(chat_id).get("min_prob_discovery", 0.0)
+        await update.message.reply_html(
+            f"🎯 <b>Min Discovery Probability</b>\n\n"
+            f"<b>Current:</b> {current_val * 100:.0f}%\n\n"
+            f"<b>Usage:</b> <code>/set_min_prob_discovery [0-100]</code>\n"
+            f"<i>Example: /set_min_prob_discovery 60 (for 60%+)</i>"
+        )
+        return
+
+    try:
+        val = float(args[0])
+        if val < 0 or val > 100:
+            raise ValueError
+        
+        # Convert 0-100 to 0.0-1.0
+        prob = val / 100.0
+        user_manager.update_user_prefs(chat_id, {"min_prob_discovery": prob})
+        await update.message.reply_html(f"✅ Discovery alerts minimum probability set to <b>{val:.0f}%</b>")
+
+    except ValueError:
+        await update.message.reply_text("❌ Please enter a number between 0 and 100.")
+
+
+async def set_min_prob_alpha_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager: UserManager):
+    """Set minimum probability for Alpha alerts."""
+    chat_id = str(update.effective_chat.id)
+    args = context.args
+
+    if not args:
+        current_val = user_manager.get_user_prefs(chat_id).get("min_prob_alpha", 0.0)
+        await update.message.reply_html(
+            f"🎯 <b>Min Alpha Probability</b>\n\n"
+            f"<b>Current:</b> {current_val * 100:.0f}%\n\n"
+            f"<b>Usage:</b> <code>/set_min_prob_alpha [0-100]</code>\n"
+            f"<i>Example: /set_min_prob_alpha 75 (for 75%+)</i>"
+        )
+        return
+
+    try:
+        val = float(args[0])
+        if val < 0 or val > 100:
+            raise ValueError
+        
+        # Convert 0-100 to 0.0-1.0
+        prob = val / 100.0
+        user_manager.update_user_prefs(chat_id, {"min_prob_alpha": prob})
+        await update.message.reply_html(f"✅ Alpha alerts minimum probability set to <b>{val:.0f}%</b>")
+
+    except ValueError:
+        await update.message.reply_text("❌ Please enter a number between 0 and 100.")

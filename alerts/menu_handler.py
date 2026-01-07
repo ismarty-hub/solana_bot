@@ -16,7 +16,9 @@ from alerts.menu_navigation import (
     show_ml_menu, show_settings_menu, show_mode_selection_menu,
     show_help_menu, show_help_topic, show_reserve_balance_menu, show_min_trade_size_menu,
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
-    show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu
+    show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
+    show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu,
+    show_min_prob_menu
 )
 
 
@@ -190,6 +192,34 @@ async def handle_menu_callback(
         temp_context = SimpleNamespace(args=[])
         temp_context.__dict__.update(context.__dict__)
         await alpha_unsubscribe_cmd(new_update, temp_context, user_manager)
+        return
+        temp_context.__dict__.update(context.__dict__)
+        await alpha_unsubscribe_cmd(new_update, temp_context, user_manager)
+        return
+    
+    elif data == "min_prob_menu":
+        if not user_manager.is_subscribed(chat_id):
+            await query.answer("⚠️ Active subscription required.", show_alert=True)
+            return
+        await show_min_prob_menu(query.message, user_manager, chat_id, edit=True)
+        return
+
+    elif data.startswith("set_prob_"):
+        # Format: set_prob_d:50 or set_prob_a:60
+        parts = data.split(":")
+        if len(parts) != 2:
+            return
+            
+        action_type = parts[0] # set_prob_d or set_prob_a
+        val = float(parts[1])
+        prob = val / 100.0
+        
+        target = "Discovery" if "d" in action_type else "Alpha"
+        key = "min_prob_discovery" if "d" in action_type else "min_prob_alpha"
+        
+        user_manager.update_user_prefs(chat_id, {key: prob})
+        await query.answer(f"{target} Prob Set to {val:.0f}%")
+        await show_min_prob_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     # ========================================================================

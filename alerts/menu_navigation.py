@@ -174,12 +174,17 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
     alert_grades = user_prefs.get("grades", [])
     alpha_alerts = "✅" if user_prefs.get("alpha_alerts", False) else "❌"
     
+    # New Probability Settings
+    min_prob_d = user_prefs.get("min_prob_discovery", 0.0) * 100
+    min_prob_a = user_prefs.get("min_prob_alpha", 0.0) * 100
+    
     alert_text = ", ".join(alert_grades) if alert_grades else "Not configured"
     
     keyboard = [
         [InlineKeyboardButton("🎯 Set Notification Grades", callback_data="setalerts_menu")],
         [InlineKeyboardButton(f"🔔 Notifications {'✅' if 'alerts' in modes else '⭕'}", callback_data="toggle_alerts")],
         [InlineKeyboardButton(f"🌟 Alpha Notifications {alpha_alerts}", callback_data="alpha_menu")],
+        [InlineKeyboardButton("🧠 Min Probability Filters", callback_data="min_prob_menu")],
         [InlineKeyboardButton("📋 View Active Filters", callback_data="myalerts_direct")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
     ]
@@ -191,7 +196,10 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
         f"<b>Current Notification Grades:</b>\n"
         f"{alert_text}\n\n"
         f"<b>Alpha Notifications:</b> {alpha_alerts}\n\n"
-        f"Configure which signals you want to receive as messages."
+        f"<b>Min. Win Probability:</b>\n"
+        f"• Discovery: <b>{min_prob_d:.0f}%</b>\n"
+        f"• Alpha: <b>{min_prob_a:.0f}%</b>\n\n"
+        f"Configure which signals you want to receive."
     )
     
     if edit:
@@ -266,6 +274,47 @@ async def show_alpha_alerts_menu(message, user_manager: UserManager, chat_id: st
         f"• 🤖 ML win probability\n"
         f"• ⚠️ Top 5 risks highlighted\n"
         f"• 📊 Detailed market metrics"
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+async def show_min_prob_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display minimum probability configuration menu."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    min_prob_d = user_prefs.get("min_prob_discovery", 0.0) * 100
+    min_prob_a = user_prefs.get("min_prob_alpha", 0.0) * 100
+    
+    keyboard = [
+        [InlineKeyboardButton(f"Discovery: {min_prob_d:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("Set 0%", callback_data="set_prob_d:0"),
+            InlineKeyboardButton("Set 50%", callback_data="set_prob_d:50"),
+            InlineKeyboardButton("Set 70%", callback_data="set_prob_d:70")
+        ],
+        [InlineKeyboardButton(f"Alpha: {min_prob_a:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("Set 0%", callback_data="set_prob_a:0"),
+            InlineKeyboardButton("Set 60%", callback_data="set_prob_a:60"),
+            InlineKeyboardButton("Set 80%", callback_data="set_prob_a:80")
+        ],
+        [InlineKeyboardButton("Use Commands for Custom %", callback_data="noop")],
+        [InlineKeyboardButton("◀️ Back", callback_data="menu_alerts")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        f"🧠 <b>Minimum Probability Filters</b>\n\n"
+        f"Filter out alerts with low predicted win rates.\n\n"
+        f"<b>Discovery Alerts:</b> {min_prob_d:.0f}%\n"
+        f"<b>Alpha Alerts:</b> {min_prob_a:.0f}%\n\n"
+        f"<b>Custom values?</b> Use commands:\n"
+        f"<code>/set_min_prob_discovery 65</code>\n"
+        f"<code>/set_min_prob_alpha 75</code>"
     )
     
     if edit:

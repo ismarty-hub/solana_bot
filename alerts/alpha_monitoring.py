@@ -222,6 +222,24 @@ async def send_alpha_alert(
 
         for chat_id in alpha_subscribers:
             try:
+                # --- NEW: Check Minimum Probability Filter ---
+                # Get fresh prefs (or use cached if manageable, but get_user_prefs reads file)
+                # To avoid disk I/O in loop for every user, we might want to cache or bulk load.
+                # But here, we just call get_user_prefs.
+                prefs = user_manager.get_user_prefs(chat_id)
+                min_prob = prefs.get("min_prob_alpha", 0.0)
+                
+                # Extract probability
+                # latest_data is the entry dict. result -> ml_prediction -> probability
+                result = latest_data.get("result", {})
+                ml_pred = result.get("ml_prediction", {})
+                prob = ml_pred.get("probability", 0.0) if isinstance(ml_pred, dict) else 0.0
+                
+                if prob < min_prob:
+                    # Skip silently
+                    continue
+                # ---------------------------------------------
+
                 logger.info(f"📤 Sending alpha alert to user {chat_id}...")
                 
                 # Check message length for send_photo caption limit (1024)
