@@ -383,6 +383,24 @@ async def handle_menu_callback(
         await show_mode_selection_menu(query.message, edit=True)
         return
     
+    elif data == "mode_alerts_set":
+        user_manager.set_modes(chat_id, ["alerts"])
+        await query.answer("🔔 Mode set to Alerts Only", show_alert=True)
+        await show_mode_selection_menu(query.message, edit=True)
+        return
+
+    elif data == "mode_papertrade_set":
+        user_manager.set_modes(chat_id, ["papertrade"])
+        await query.answer("📈 Mode set to Trading Only", show_alert=True)
+        await show_mode_selection_menu(query.message, edit=True)
+        return
+
+    elif data == "mode_both_set":
+        user_manager.set_modes(chat_id, ["alerts", "papertrade"])
+        await query.answer("🚀 Both Modes Enabled", show_alert=True)
+        await show_mode_selection_menu(query.message, edit=True)
+        return
+    
     # ========================================================================
     # PAPER TRADING SETTINGS SUBMENU (New)
     # ========================================================================
