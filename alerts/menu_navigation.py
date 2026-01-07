@@ -435,11 +435,16 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
         tp_pref = user_prefs.get("tp_preference", "median")
         tp_display = f"🎯 {tp_pref.capitalize()}" if tp_pref in ["median", "mean", "mode", "smart"] else f"🎯 {tp_pref}%"
         
+        # Get Auto-Trade status
+        auto_trade = user_prefs.get("auto_trade_enabled", True)
+        auto_trade_text = "🤖 Auto-Trade: ✅ ON" if auto_trade else "🤖 Auto-Trade: ❌ OFF"
+
         keyboard = [
             [InlineKeyboardButton("💰 Reset Capital", callback_data="resetcapital_menu")],
             [InlineKeyboardButton("💵 Reserve Balance", callback_data="set_reserve_menu")],
             [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
             [InlineKeyboardButton("📊 Trade Size", callback_data="settings_trade_size_menu")],
+            [InlineKeyboardButton(auto_trade_text, callback_data="toggle_auto_trade")],
             [InlineKeyboardButton("🚜 Auto-Trade Filters", callback_data="settings_trade_filters")],
             [InlineKeyboardButton("🎯 Take Profit (TP)", callback_data="settings_tp")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
@@ -458,7 +463,8 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             f"• Min Trade: ${min_trade:,.2f}\n"
             f"• Trade Size Mode: {trade_size_display}\n"
             f"• Take Profit: {tp_display}\n"
-            f"• Stop Loss: {sl_display}\n\n"
+            f"• Stop Loss: {sl_display}\n"
+            f"• Auto-Trading: {'✅ Enabled' if auto_trade else '❌ Disabled'}\n\n"
             f"<b>Adjust settings below:</b>"
         )
     

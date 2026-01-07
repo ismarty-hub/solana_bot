@@ -222,6 +222,7 @@ class UserManager:
             # Independent Trade Filters
             "trade_grades": ALL_GRADES,
             "trade_alpha_alerts": True,
+            "auto_trade_enabled": True,  # New: Toggle for automatic trade opening
             # Probability Filters
             "min_prob_discovery": 0.0,
             "min_prob_alpha": 0.0,
@@ -297,7 +298,7 @@ class UserManager:
         prefs = safe_load(self.prefs_file, {})
         trading_users = []
         for chat_id, user in prefs.items():
-            if user.get("active") and "papertrade" in user.get("modes", []):
+            if user.get("active") and "papertrade" in user.get("modes", []) and user.get("auto_trade_enabled", True):
                 trading_users.append(chat_id)
         return trading_users
 

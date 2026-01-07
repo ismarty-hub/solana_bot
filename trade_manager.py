@@ -229,6 +229,7 @@ class PortfolioManager:
         chat_id = str(chat_id)
         self.portfolios[chat_id] = {
             "capital_usd": float(capital),
+            "starting_capital": float(capital),
             "positions": {},
             "trade_history": [],
             "blacklist": {},

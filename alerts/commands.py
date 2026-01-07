@@ -363,7 +363,10 @@ async def portfolio_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    if "papertrade" not in prefs.get("modes", []):
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    active_positions = {k: v for k, v in portfolio.get("positions", {}).items() if v.get("status") == "active"}
+
+    if "papertrade" not in prefs.get("modes", []) and not active_positions:
         await update.message.reply_html("❌ Paper trading is not enabled. Use /papertrade [capital] to enable it.")
         return
     
@@ -376,7 +379,10 @@ async def pnl_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manag
     
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    if "papertrade" not in prefs.get("modes", []):
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    active_positions = {k: v for k, v in portfolio.get("positions", {}).items() if v.get("status") == "active"}
+
+    if "papertrade" not in prefs.get("modes", []) and not active_positions:
         await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     
@@ -397,9 +403,11 @@ async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_m
     """View trade history with optional limit and improved UX."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    
-    if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    history = portfolio.get('trade_history', [])
+
+    if "papertrade" not in prefs.get("modes", []) and not history:
+        await update.message.reply_html("❌ Paper trading is not enabled and no trade history found.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -485,9 +493,12 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     """View detailed trading performance statistics."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    
-    if "papertrade" not in prefs.get("modes", []):
-        await update.message.reply_html("❌ Paper trading is not enabled.")
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    history = portfolio.get('trade_history', [])
+    active_positions = {k: v for k, v in portfolio.get("positions", {}).items() if v.get("status") == "active"}
+
+    if "papertrade" not in prefs.get("modes", []) and not history and not active_positions:
+        await update.message.reply_html("❌ Paper trading is not enabled and no trade activity found.")
         return
     
     portfolio = portfolio_manager.get_portfolio(chat_id)
@@ -523,7 +534,7 @@ async def performance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
     reentry_rate = (reentry_wins / reentry_trades * 100) if reentry_trades > 0 else 0
     
     # Starting capital vs current
-    starting_capital = 1000.0  # Default, could be tracked
+    starting_capital = portfolio.get('starting_capital', 1000.0)
     current_capital = portfolio.get('capital_usd', 0)
     invested = sum(
         pos['investment_usd'] * (pos.get('remaining_percentage', 100) / 100.0)
@@ -628,8 +639,10 @@ async def resetcapital_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, u
     """Reset trading capital with improved UX and confirmation."""
     chat_id = str(update.effective_chat.id)
     prefs = user_manager.get_user_prefs(chat_id)
-    
-    if "papertrade" not in prefs.get("modes", []):
+    portfolio = portfolio_manager.get_portfolio(chat_id)
+    active_positions = {k: v for k, v in portfolio.get("positions", {}).items() if v.get("status") == "active"}
+
+    if "papertrade" not in prefs.get("modes", []) and not active_positions:
         await update.message.reply_html("❌ Paper trading is not enabled.")
         return
     

@@ -176,7 +176,7 @@ async def send_pnl_page(message, chat_id: str, portfolio: dict, pnl_data: dict, 
         
         tp = portfolio_pos.get('tp_used')
         sl = portfolio_pos.get('sl_used')
-        tp_display = f"+{float(tp):.0f}%" if tp else "N/A"
+        tp_display = f"+{float(tp):.0f}%" if tp and float(tp) < 99999 else "Adaptive" if tp and float(tp) >= 99999 else "N/A"
         sl_display = f"{float(sl):.0f}%" if sl else "N/A"
         
         msg += (
@@ -257,7 +257,7 @@ async def send_portfolio_page(message, chat_id: str, portfolio: dict, page: int 
             # Get TP and SL values
             tp = pos.get('tp_used')
             sl = pos.get('sl_used')
-            tp_display = f"+{float(tp):.0f}%" if tp else "N/A"
+            tp_display = f"+{float(tp):.0f}%" if tp and float(tp) < 99999 else "Adaptive" if tp and float(tp) >= 99999 else "N/A"
             sl_display = f"{float(sl):.0f}%" if sl else "N/A"
             
             msg += (
