@@ -1050,31 +1050,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     data = query.data
     chat_id = str(query.from_user.id)
     
-    # --- Handle Menu Navigation Callbacks First ---
-    if data.startswith("menu_") or data.startswith("init_capital:") or data.startswith("reset_capital") or \
-       data.startswith("custom_capital") or data.startswith("settings_") or data.startswith("alpha_") or \
-       data.startswith("setalerts_") or data.startswith("tp_") or data.startswith("predict_") or \
-       data.startswith("help_") or data.startswith("myalerts_") or data.startswith("history_") or \
-       data.startswith("performance_") or data == "watchlist_direct" or data == "portfolio_direct" or \
-       data == "pnl_direct" or data.startswith("resetcapital_") or data == "grades_done" or \
-       data.startswith("enable_") or data == "mysettings_direct" or data == "set_reserve_menu" or \
-       data == "set_mintrade_menu" or data.startswith("set_reserve:") or data.startswith("set_mintrade:") or \
-       data == "set_reserve_custom" or data == "set_mintrade_custom" or data == "set_default_sl_custom" or \
-       data.startswith("set_default_sl:") or data.startswith("set_trade_size_mode_select:") or \
-       data.startswith("trade_") or data.startswith("set_trade_") or \
-       data.startswith("grade_") or \
-       data == "min_prob_menu" or data.startswith("set_prob_"):
-        if portfolio_manager:
-            await handle_menu_callback(update, context, user_manager, portfolio_manager)
-        return
+    # --- Handle Menu Navigation Callbacks ---
+    menu_prefixes = [
+        "menu_", "init_capital:", "reset_capital", "custom_capital", "settings_", 
+        "alpha_", "setalerts_", "tp_", "predict_", "help_", "myalerts_", "history_", 
+        "performance_", "resetcapital_", "enable_", "set_reserve:", "set_mintrade:", 
+        "set_default_sl:", "set_trade_size_mode_select:", "trade_", "set_trade_", 
+        "grade_", "set_prob_", "mode_"
+    ]
+    menu_exact = [
+        "watchlist_direct", "portfolio_direct", "pnl_direct", "grades_done", 
+        "mysettings_direct", "set_reserve_menu", "set_mintrade_menu", 
+        "set_reserve_custom", "set_mintrade_custom", "set_default_sl_custom", 
+        "min_prob_menu", "settings_mode"
+    ]
+
+    is_menu = any(data.startswith(p) for p in menu_prefixes) or data in menu_exact
     
-    # --- Handle Mode Selection (Direct) ---
-    if data == "mode_alerts":
+    if is_menu:
+        try:
+            # Route to menu_handler.py
+            await handle_menu_callback(update, context, user_manager, portfolio_manager)
+            return
+        except Exception as e:
+            logger.exception(f"Error in handle_menu_callback for {data}: {e}")
+            try:
+                await query.answer("❌ Error processing menu request.", show_alert=True)
+            except:
+                pass
+            return
+
+    # --- Catch-all/Legacy Direct Handlers (If not routed above) ---
+    if data == "mode_alerts_legacy":
         await query.answer()
         user_manager.set_modes(chat_id, ["alerts"])
         await query.edit_message_text("✅ Mode set to <b>🔔 Alerts Only</b>.", parse_mode="HTML")
         return
-    elif data == "mode_papertrade":
+    elif data == "mode_papertrade_legacy":
         await query.answer()
         user_manager.set_modes(chat_id, ["papertrade"])
         await query.edit_message_text(

@@ -29,7 +29,7 @@ async def handle_menu_callback(
     update: Update, 
     context: ContextTypes.DEFAULT_TYPE, 
     user_manager: UserManager, 
-    portfolio_manager: PortfolioManager
+    portfolio_manager: Optional[PortfolioManager] = None
 ):
     """Route menu callbacks to appropriate handlers."""
     from alerts.commands import (
