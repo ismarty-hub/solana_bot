@@ -126,9 +126,9 @@ def get_composite_key(mint: str, signal_type: str) -> str:
     return f"{mint}_{signal_type}"
 
 
-def get_grade_from_overlap(mint: str) -> str:
+def get_token_data_from_overlap(mint: str) -> Dict[str, Any]:
     """
-    Attempt to read the token grade from the overlap results file.
+    Attempt to read token metadata (grade and ml_prediction) from overlap files.
     Checks discovery first, then alpha.
     """
     files_to_check = [OVERLAP_FILE, ALPHA_OVERLAP_FILE]
@@ -144,7 +144,6 @@ def get_grade_from_overlap(mint: str) -> str:
 
             history = overlap.get(mint)
             if not history:
-                # Handle case-insensitive or partial matches if necessary
                 for k, v in overlap.items():
                     if isinstance(k, str) and k.endswith(mint):
                         history = v
@@ -155,14 +154,13 @@ def get_grade_from_overlap(mint: str) -> str:
 
             last_entry = history[-1]
             result = last_entry.get("result", {}) if isinstance(last_entry, dict) else {}
-            grade = result.get("grade")
-            if grade:
-                return grade
+            if result:
+                return result
         except Exception as e:
             logger.debug(f"Error checking {overlap_file.name} for {mint}: {e}")
             continue
 
-    return "MEDIUM"
+    return {}
 
 
 def get_user_activation_time(user_prefs: Dict[str, Any]) -> Optional[datetime]:
@@ -294,10 +292,11 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         logger.debug(f"Skipping {key} - already processed (duplicate entry_time)")
                         continue
 
-                    # Grade assignment
-                    try:
-                        grade = get_grade_from_overlap(mint)
-                    except Exception:
+                    # Grade and Enriched Metadata assignment
+                    enriched_data = get_token_data_from_overlap(mint)
+                    grade = enriched_data.get("grade")
+                    
+                    if not grade:
                         ml_action = (data.get("ml_prediction") or {}).get("action", "UNKNOWN")
                         if signal_type == "alpha":
                             grade = "HIGH"
@@ -307,6 +306,14 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                             grade = "MEDIUM"
                         else:
                             grade = "MEDIUM"
+                    
+                    # Merge enriched ML prediction with data from active_tracking
+                    ml_prediction = data.get("ml_prediction") or {}
+                    if enriched_data.get("ml_prediction"):
+                        ml_prediction.update(enriched_data["ml_prediction"])
+                    
+                    # Merge ML Passed status (permissive - if either says passed)
+                    ml_passed = data.get("ML_PASSED", False) or enriched_data.get("ML_PASSED", False)
 
                     # Process for each trading user
                     for chat_id in trading_users:
@@ -351,8 +358,8 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                                 "entry_time": data.get("entry_time"),
                                 "entry_mcap": data.get("entry_mcap"),
                                 "entry_liquidity": data.get("entry_liquidity"),
-                                "ml_prediction": data.get("ml_prediction") if isinstance(data.get("ml_prediction"), dict) else {},
-                                "ml_passed": data.get("ML_PASSED", False),
+                                "ml_prediction": ml_prediction,
+                                "ml_passed": ml_passed,
                             }
 
                             await portfolio_manager.process_new_signal(

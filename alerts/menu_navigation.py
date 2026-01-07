@@ -323,6 +323,47 @@ async def show_min_prob_menu(message, user_manager: UserManager, chat_id: str, e
         await message.reply_html(menu_text, reply_markup=reply_markup)
 
 
+async def show_auto_min_prob_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display minimum probability configuration menu for auto-trading."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    min_prob_d = user_prefs.get("auto_min_prob_discovery", 0.0) * 100
+    min_prob_a = user_prefs.get("auto_min_prob_alpha", 0.0) * 100
+    
+    keyboard = [
+        [InlineKeyboardButton(f"Discovery Trade: {min_prob_d:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("Set 0%", callback_data="auto_prob_d:0"),
+            InlineKeyboardButton("Set 50%", callback_data="auto_prob_d:50"),
+            InlineKeyboardButton("Set 75%", callback_data="auto_prob_d:75")
+        ],
+        [InlineKeyboardButton(f"Alpha Trade: {min_prob_a:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("Set 0%", callback_data="auto_prob_a:0"),
+            InlineKeyboardButton("Set 60%", callback_data="auto_prob_a:60"),
+            InlineKeyboardButton("Set 85%", callback_data="auto_prob_a:85")
+        ],
+        [InlineKeyboardButton("Use Commands for Custom %", callback_data="noop")],
+        [InlineKeyboardButton("◀️ Back", callback_data="settings_trade_filters")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        f"🧠 <b>Auto-Trade Probability Filters</b>\n\n"
+        f"Control which signals are automatically executed based on their predicted win rate.\n\n"
+        f"<b>Discovery Auto-Trade Min:</b> {min_prob_d:.0f}%\n"
+        f"<b>Alpha Auto-Trade Min:</b> {min_prob_a:.0f}%\n\n"
+        f"<b>Custom values?</b> Use commands:\n"
+        f"<code>/set_auto_min_prob_discovery 65</code>\n"
+        f"<code>/set_auto_min_prob_alpha 75</code>"
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
 # ============================================================================
 # SETTINGS MENU (Reorganized)
 # ============================================================================
@@ -882,6 +923,7 @@ async def show_trade_filters_menu(message, edit=False):
     keyboard = [
         [InlineKeyboardButton("🔍 Discovery Grades", callback_data="set_trade_grades_menu")],
         [InlineKeyboardButton("⭐ Alpha Auto-Trade", callback_data="trade_alpha_menu")],
+        [InlineKeyboardButton("🧠 Min Probability Trade", callback_data="auto_min_prob_menu")],
         [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -890,7 +932,8 @@ async def show_trade_filters_menu(message, edit=False):
         "🚜 <b>Auto-Trade Filters</b>\n\n"
         "Control which signals the bot automatically trades.\n\n"
         "• <b>Discovery Grades:</b> Choose which signal qualities to trade.\n"
-        "• <b>Alpha Auto-Trade:</b> Toggle trading for Alpha signals."
+        "• <b>Alpha Auto-Trade:</b> Toggle trading for Alpha signals.\n"
+        "• <b>Min Probability Trade:</b> Set minimum win chance for auto-trades."
     )
     
     if edit:

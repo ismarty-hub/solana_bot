@@ -420,10 +420,23 @@ class PortfolioManager:
         if not token_data.get("ml_passed", False):
             logger.debug(f"⏭️ Skipping position for {token_data.get('mint', '')[:8]}... - ML_PASSED is False")
             return
+            
+        signal_type = token_data.get("signal_type", "discovery")
+        prefs = user_manager.get_user_prefs(chat_id)
+        
+        # Win Probability Filtering
+        ml_prediction = token_data.get("ml_prediction", {})
+        probability = ml_prediction.get("probability", 0.0) if isinstance(ml_prediction, dict) else 0.0
+        
+        min_prob_key = "auto_min_prob_discovery" if signal_type == "discovery" else "auto_min_prob_alpha"
+        min_prob_threshold = prefs.get(min_prob_key, 0.0)
+        
+        if probability < min_prob_threshold:
+            logger.info(f"⏭️ [{chat_id}] Skipping trade for {token_data.get('mint', '')[:8]}... - Probability {probability:.2f} < Min {min_prob_threshold:.2f}")
+            return
         
         portfolio = self.get_portfolio(chat_id)
         mint = token_data.get("mint")
-        signal_type = token_data.get("signal_type", "discovery")
         
         # Use data provided by analytics_monitoring
         entry_price = token_data.get("price")
@@ -473,7 +486,6 @@ class PortfolioManager:
 
         # Validate capital with reserve and min trade size
         capital = portfolio["capital_usd"]
-        prefs = user_manager.get_user_prefs(chat_id)
         reserve = prefs.get("reserve_balance", 0.0)
         min_trade = prefs.get("min_trade_size", 10.0)
         

@@ -227,6 +227,8 @@ class UserManager:
             # Probability Filters
             "min_prob_discovery": 0.0,
             "min_prob_alpha": 0.0,
+            "auto_min_prob_discovery": 0.0,  # New: Min win chance for auto-trading (discovery)
+            "auto_min_prob_alpha": 0.0,      # New: Min win chance for auto-trading (alpha)
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]

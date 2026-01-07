@@ -19,7 +19,7 @@ from alerts.menu_navigation import (
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
     show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu,
-    show_min_prob_menu
+    show_min_prob_menu, show_auto_min_prob_menu
 )
 
 
@@ -635,6 +635,21 @@ async def handle_menu_callback(
     elif data == "trade_alpha_menu":
         await query.answer()
         await show_trade_alpha_menu(query.message, user_manager, chat_id, edit=True)
+        return
+
+    elif data == "auto_min_prob_menu":
+        await query.answer()
+        await show_auto_min_prob_menu(query.message, user_manager, chat_id, edit=True)
+        return
+
+    elif data.startswith("auto_prob_"):
+        await query.answer()
+        action_type = data.split(":")[0]
+        value = float(data.split(":")[1]) / 100.0
+        
+        key = "auto_min_prob_discovery" if "d" in action_type else "auto_min_prob_alpha"
+        user_manager.update_user_prefs(chat_id, {key: value})
+        await show_auto_min_prob_menu(query.message, user_manager, chat_id, edit=True)
         return
 
     elif data.startswith("trade_grade_"):
