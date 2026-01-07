@@ -717,10 +717,22 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_man
     
     if is_admin:
         platform_stats = user_manager.get_all_stats()
+        
+        # Get segment counts
+        subs_count = len(user_manager.get_users_by_segment('subs'))
+        expired_count = len(user_manager.get_users_by_segment('expired'))
+        free_count = len(user_manager.get_users_by_segment('free'))
+        
         msg += (
             f"\n\U0001F3E2 <b>Platform Statistics (Admin)</b>\n"
             f"\u2022 Total users: <b>{platform_stats['total_users']}</b>\n"
-            f"\u2022 Active users: <b>{platform_stats['active_users']}</b>\n"
+            f"\u2022 Active users: <b>{platform_stats['active_users']}</b>\n\n"
+            
+            f"<b>\U0001F4CA User Segments:</b>\n"
+            f"\u2022 \U0001F48E Subscribers: <b>{subs_count}</b>\n"
+            f"\u2022 \U0001F570 Expired: <b>{expired_count}</b>\n"
+            f"\u2022 \U0001F193 Free: <b>{free_count}</b>\n\n"
+            
             f"\u2022 Total alerts sent: <b>{platform_stats['total_alerts_sent']}</b>\n"
         )
     
