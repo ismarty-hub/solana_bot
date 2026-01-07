@@ -6,6 +6,7 @@ Handles all menu-related button callbacks and routes them to command functions.
 """
 
 import logging
+from typing import Optional, List
 from telegram import Update
 from telegram.ext import ContextTypes
 from alerts.user_manager import UserManager

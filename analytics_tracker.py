@@ -893,8 +893,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
 
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
-    # Get ML_PASSED from signal data
-    ml_passed = signal_data.get("ML_PASSED", False)
+    # Get ML_PASSED from signal data, default to True (permit alerts/trading by default)
+    ml_passed = signal_data.get("ML_PASSED", True)
     
     token_data = {
         "mint": mint,

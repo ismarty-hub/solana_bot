@@ -75,7 +75,7 @@ def check_initial_ml_passed(mint: str, active_tracking: Dict[str, Any]) -> bool:
     # Check discovery entry first
     discovery_key = f"{mint}_discovery"
     if discovery_key in active_tracking:
-        initial_ml_passed = active_tracking[discovery_key].get("ML_PASSED", False)
+        initial_ml_passed = active_tracking[discovery_key].get("ML_PASSED", True)
         if not initial_ml_passed:
             logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
             return False
@@ -84,7 +84,7 @@ def check_initial_ml_passed(mint: str, active_tracking: Dict[str, Any]) -> bool:
     # Check alpha entry as fallback
     alpha_key = f"{mint}_alpha"
     if alpha_key in active_tracking:
-        initial_ml_passed = active_tracking[alpha_key].get("ML_PASSED", False)
+        initial_ml_passed = active_tracking[alpha_key].get("ML_PASSED", True)
         if not initial_ml_passed:
             logger.debug(f"⛔ Token {mint[:8]}... had initial ML_PASSED=False in active_tracking")
             return False
