@@ -114,10 +114,10 @@ async def handle_menu_callback(
         modes = user_prefs.get("modes", [])
         if "alerts" in modes:
             modes.remove("alerts")
-            status_msg = "⭕ Notifications Disabled"
+            status_msg = "⭕ Discovery Notifications Disabled"
         else:
             modes.append("alerts")
-            status_msg = "✅ Notifications Enabled"
+            status_msg = "✅ Discovery Notifications Enabled"
         
         user_manager.update_user_prefs(chat_id, {"modes": modes})
         await query.answer(status_msg, show_alert=True)
@@ -735,10 +735,10 @@ async def handle_menu_callback(
         grades = user_prefs.get("grades", [])
         grades_text = ", ".join(grades) if grades else "None selected"
         await query.message.reply_html(
-            f"✅ <b>Notifications Configured!</b>\n\n"
+            f"✅ <b>Discovery Notifications Configured!</b>\n\n"
             f"<b>Selected Grades:</b>\n"
             f"{grades_text}\n\n"
-            f"You'll now receive notifications for these grades.{mode_notice}"
+            f"You'll now receive Discovery notifications for these grades.{mode_notice}"
         )
         return
     

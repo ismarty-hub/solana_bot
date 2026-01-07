@@ -181,8 +181,8 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
     alert_text = ", ".join(alert_grades) if alert_grades else "Not configured"
     
     keyboard = [
-        [InlineKeyboardButton("🎯 Set Notification Grades", callback_data="setalerts_menu")],
-        [InlineKeyboardButton(f"🔔 Notifications {'✅' if 'alerts' in modes else '⭕'}", callback_data="toggle_alerts")],
+        [InlineKeyboardButton("🎯 Set Discovery Grades", callback_data="setalerts_menu")],
+        [InlineKeyboardButton(f"🔔 Discovery Notifications {'✅' if 'alerts' in modes else '⭕'}", callback_data="toggle_alerts")],
         [InlineKeyboardButton(f"🌟 Alpha Notifications {alpha_alerts}", callback_data="alpha_menu")],
         [InlineKeyboardButton("🧠 Min Probability Filters", callback_data="min_prob_menu")],
         [InlineKeyboardButton("📋 View Active Filters", callback_data="myalerts_direct")],
@@ -192,8 +192,8 @@ async def show_alerts_menu(message, user_manager: UserManager, chat_id: str, edi
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     menu_text = (
-        f"🔔 <b>Notification Menu</b>\n\n"
-        f"<b>Current Notification Grades:</b>\n"
+        f"🔔 <b>Discovery Notifications</b>\n\n"
+        f"<b>Current Discovery Grades:</b>\n"
         f"{alert_text}\n\n"
         f"<b>Alpha Notifications:</b> {alpha_alerts}\n\n"
         f"<b>Min. Win Probability:</b>\n"
@@ -232,7 +232,7 @@ async def show_alert_grades_menu(message, user_manager, chat_id, edit=False):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     menu_text = (
-        f"🎯 <b>Notification Grades</b>\n\n"
+        f"🎯 <b>Discovery Grades</b>\n\n"
         f"Click each grade to toggle it on/off.\n"
         f"When done, click 'Done Selecting'.\n\n"
         f"<b>Grades:</b>\n"

@@ -45,6 +45,12 @@ async def admin_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, us
         f"• Active users: {platform_stats['active_users']}\n"
         f"• Inactive users: {inactive_users}\n"
         f"• New users (7 days): {recent_users}\n\n"
+        
+        f"<b>📊 User Segments:</b>\n"
+        f"• 💎 Subscribers: {len(user_manager.get_users_by_segment('subs'))}\n"
+        f"• 🕰️ Expired: {len(user_manager.get_users_by_segment('expired'))}\n"
+        f"• 🆓 Free (Never Subbed): {len(user_manager.get_users_by_segment('free'))}\n\n"
+        
         f"• Total alerts sent: {platform_stats['total_alerts_sent']}\n"
     )
     
@@ -84,35 +90,104 @@ async def force_download_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager):
-    """Handle /broadcast command - send message to all active users."""
+    """
+    Handle /broadcast command - send message to targeted user segments.
+    Usage: /broadcast [target] [message]
+    Targets: all, subs, expired, free
+    Supports attaching images or replying to images.
+    """
     if not is_admin_update(update):
         await update.message.reply_text("Access denied.")
         return
     
-    if not context.args:
-        await update.message.reply_text("Usage: /broadcast &lt;message&gt;")
+    # 1. Parse Arguments & Target
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "📢 <b>Broadcast Usage</b>\n\n"
+            "<code>/broadcast [target] [message]</code>\n\n"
+            "<b>Targets:</b>\n"
+            "• <code>all</code> - All active users\n"
+            "• <code>subs</code> - Active subscribers\n"
+            "• <code>expired</code> - Expired subscribers\n"
+            "• <code>free</code> - Never subscribed\n\n"
+            "<i>You can attach an image or reply to one.</i>",
+            parse_mode="HTML"
+        )
         return
+
+    target = args[0].lower()
+    valid_targets = ["all", "subs", "expired", "free"]
     
-    message = " ".join(context.args)
-    active_users = user_manager.get_active_users()
+    if target not in valid_targets:
+        await update.message.reply_text(f"❌ Invalid target '{target}'.\nValid targets: {', '.join(valid_targets)}")
+        return
+
+    # 2. Get Message Content & Media
+    msg_text = " ".join(args[1:])
+    photo_file_id = None
+    
+    # Check for direct photo attachment
+    if update.message.photo:
+        photo_file_id = update.message.photo[-1].file_id
+        # If no message provided in args, check caption, but remember args included command
+        if not msg_text:
+            # If command was in caption, context.args parsed it. 
+            # If command was /broadcast target, msg_text is empty.
+            pass
+
+    # Check for reply to photo
+    elif update.message.reply_to_message and update.message.reply_to_message.photo:
+        photo_file_id = update.message.reply_to_message.photo[-1].file_id
+
+    if not msg_text and not photo_file_id:
+        await update.message.reply_text("❌ Please provide a message or image.")
+        return
+
+    # 3. Get Recipients
+    recipients = user_manager.get_users_by_segment(target)
+    
+    if not recipients:
+        await update.message.reply_text(f"⚠️ No users found in target group '{target}'.")
+        return
+
+    await update.message.reply_text(f"🚀 Starting broadcast to <b>{len(recipients)}</b> users via '{target}'...", parse_mode="HTML")
+
+    # 4. Send Broadcast
     sent = 0
     failed = 0
     
-    for chat_id in active_users.keys():
+    for chat_id in recipients:
         try:
-            await context.bot.send_message(
-                chat_id=int(chat_id),
-                text=f"📢 <b>Announcement</b>\n\n{message}",
-                parse_mode="HTML"
-            )
+            if photo_file_id:
+                # Send photo with caption
+                await context.bot.send_photo(
+                    chat_id=int(chat_id),
+                    photo=photo_file_id,
+                    caption=f"📢 <b>Announcement</b>\n\n{msg_text}" if msg_text else None,
+                    parse_mode="HTML"
+                )
+            else:
+                # Send text only
+                await context.bot.send_message(
+                    chat_id=int(chat_id),
+                    text=f"📢 <b>Announcement</b>\n\n{msg_text}",
+                    parse_mode="HTML"
+                )
             sent += 1
         except Exception as e:
-            logging.warning(f"Failed broadcast to {chat_id}: {e}")
+            # Don't log every failure to console to avoid spam, maybe debug
+            logging.debug(f"Failed broadcast to {chat_id}: {e}")
             failed += 1
         
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05) # Rate limit protection
     
-    await update.message.reply_html(f"✅ Broadcast complete!\n• Sent: {sent}\n• Failed: {failed}")
+    await update.message.reply_html(
+        f"✅ <b>Broadcast Complete!</b>\n"
+        f"• Target: {target}\n"
+        f"• Sent: {sent}\n"
+        f"• Failed: {failed}"
+    )
 
 
 async def adduser_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user_manager):

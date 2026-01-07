@@ -330,6 +330,37 @@ class UserManager:
         prefs = safe_load(self.prefs_file, {})
         return {k: v for k, v in prefs.items() if v.get("active", True)}
 
+    def get_users_by_segment(self, segment: str) -> List[str]:
+        """
+        Get list of chat_ids for a specific user segment.
+        Segments: 'all', 'subs', 'expired', 'free'
+        """
+        prefs = safe_load(self.prefs_file, {})
+        # Filter for active users first (active=True means they haven't blocked/stopped bot)
+        active_users = [k for k, v in prefs.items() if v.get("active", False) is not False]
+        
+        if segment == 'all':
+            return active_users
+            
+        elif segment == 'subs':
+            return [uid for uid in active_users if self.is_subscribed(uid)]
+            
+        elif segment == 'expired':
+            return [uid for uid in active_users if self.is_subscription_expired(uid)]
+            
+        elif segment == 'free':
+            # Users who are active but never subscribed (subscribed=False AND no expires_at set)
+            # This excludes users who were subscribed but expired
+            free_users = []
+            for uid in active_users:
+                user = prefs[uid]
+                # Check they are NOT subscribed and NEVER had an expiry date
+                if not user.get("subscribed") and not user.get("expires_at"):
+                    free_users.append(uid)
+            return free_users
+            
+        return []
+
     def get_user_stats(self, chat_id: str) -> Dict[str, Any]:
         """Get user statistics."""
         stats = safe_load(self.stats_file, {})
