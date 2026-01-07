@@ -653,8 +653,11 @@ class PortfolioManager:
         )
         
         try:
-            await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-            logger.info(f"✅ [{chat_id}] Opened position: {symbol}")
+            if prefs.get("trade_notifications_enabled", True):
+                await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+                logger.info(f"✅ [{chat_id}] Opened position: {symbol}")
+            else:
+                logger.info(f"🔇 [{chat_id}] Opened position (notifications disabled): {symbol}")
         except Exception:
             pass
 
@@ -744,8 +747,16 @@ class PortfolioManager:
             f"<b>Capital:</b> ${portfolio['capital_usd']:,.2f}"
         )
         try:
-            await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
-        except: pass
+            # Check user preference for trade notifications
+            prefs = user_manager.get_user_prefs(chat_id)
+            if prefs.get("trade_notifications_enabled", True):
+                await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+                logger.info(f"✅ [{chat_id}] Notified trade close: {pos.get('symbol')}")
+            else:
+                logger.info(f"🔇 [{chat_id}] Trade closed (notifications disabled): {pos.get('symbol')}")
+        except Exception as e:
+            logger.error(f"Error sending trade close notification: {e}")
+            pass
 
     def add_manual_position(self, chat_id: str, mint: str, symbol: str, price: float, amount_usd: float, tp_percent: float = 50.0, sl_percent: float = None, token_age_hours: float = None) -> bool:
         """Add a manually purchased position.

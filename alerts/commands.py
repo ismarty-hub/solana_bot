@@ -1069,7 +1069,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         "alpha_", "setalerts_", "tp_", "predict_", "help_", "myalerts_", "history_", 
         "performance_", "resetcapital_", "enable_", "set_reserve:", "set_mintrade:", 
         "set_default_sl:", "set_trade_size_mode_select:", "trade_", "set_trade_", 
-        "grade_", "set_prob_", "mode_"
+        "grade_", "set_prob_", "mode_", "toggle_"
     ]
     menu_exact = [
         "watchlist_direct", "portfolio_direct", "pnl_direct", "grades_done", 

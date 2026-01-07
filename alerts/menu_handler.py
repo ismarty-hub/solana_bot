@@ -410,6 +410,17 @@ async def handle_menu_callback(
         await show_trading_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
         return
     
+    elif data == "toggle_trade_notifications":
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        current_state = user_prefs.get("trade_notifications_enabled", True)
+        new_state = not current_state
+        user_manager.update_user_prefs(chat_id, {"trade_notifications_enabled": new_state})
+        
+        status_text = "ENABLED ✅" if new_state else "DISABLED ❌"
+        await query.answer(f"🔔 Trade Alerts {status_text}", show_alert=True)
+        await show_trading_settings_menu(query.message, user_manager, portfolio_manager, chat_id, edit=True)
+        return
+    
     elif data == "toggle_auto_trade":
         user_prefs = user_manager.get_user_prefs(chat_id)
         current_state = user_prefs.get("auto_trade_enabled", True)

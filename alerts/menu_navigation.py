@@ -435,9 +435,12 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
         tp_pref = user_prefs.get("tp_preference", "median")
         tp_display = f"🎯 {tp_pref.capitalize()}" if tp_pref in ["median", "mean", "mode", "smart"] else f"🎯 {tp_pref}%"
         
-        # Get Auto-Trade status
+        # Get Auto-Trade and Notifications status
         auto_trade = user_prefs.get("auto_trade_enabled", True)
         auto_trade_text = "🤖 Auto-Trade: ✅ ON" if auto_trade else "🤖 Auto-Trade: ❌ OFF"
+        
+        trade_notify = user_prefs.get("trade_notifications_enabled", True)
+        trade_notify_text = "🔔 Trade Alerts: ✅ ON" if trade_notify else "🔔 Trade Alerts: ❌ OFF"
 
         keyboard = [
             [InlineKeyboardButton("💰 Reset Capital", callback_data="resetcapital_menu")],
@@ -445,6 +448,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             [InlineKeyboardButton("📏 Min Trade Size", callback_data="set_mintrade_menu")],
             [InlineKeyboardButton("📊 Trade Size", callback_data="settings_trade_size_menu")],
             [InlineKeyboardButton(auto_trade_text, callback_data="toggle_auto_trade")],
+            [InlineKeyboardButton(trade_notify_text, callback_data="toggle_trade_notifications")],
             [InlineKeyboardButton("🚜 Auto-Trade Filters", callback_data="settings_trade_filters")],
             [InlineKeyboardButton("🎯 Take Profit (TP)", callback_data="settings_tp")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
@@ -464,7 +468,8 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             f"• Trade Size Mode: {trade_size_display}\n"
             f"• Take Profit: {tp_display}\n"
             f"• Stop Loss: {sl_display}\n"
-            f"• Auto-Trading: {'✅ Enabled' if auto_trade else '❌ Disabled'}\n\n"
+            f"• Auto-Trading: {'✅ Enabled' if auto_trade else '❌ Disabled'}\n"
+            f"• Trade Alerts: {'✅ Enabled' if trade_notify else '❌ Disabled'}\n\n"
             f"<b>Adjust settings below:</b>"
         )
     
