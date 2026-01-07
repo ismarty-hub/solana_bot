@@ -97,6 +97,10 @@ async def handle_menu_callback(
     # ========================================================================
     # MAIN MENU
     # ========================================================================
+    if data == "noop":
+        await query.answer()
+        return
+
     if data == "menu_main":
         await query.answer()
         await show_main_menu(query.message, user_manager, chat_id, edit=True)

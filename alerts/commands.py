@@ -1069,13 +1069,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         "alpha_", "setalerts_", "tp_", "predict_", "help_", "myalerts_", "history_", 
         "performance_", "resetcapital_", "enable_", "set_reserve:", "set_mintrade:", 
         "set_default_sl:", "set_trade_size_mode_select:", "trade_", "set_trade_", 
-        "grade_", "set_prob_", "mode_", "toggle_"
+        "grade_", "set_prob_", "auto_prob_", "mode_", "toggle_"
     ]
     menu_exact = [
         "watchlist_direct", "portfolio_direct", "pnl_direct", "grades_done", 
         "mysettings_direct", "set_reserve_menu", "set_mintrade_menu", 
         "set_reserve_custom", "set_mintrade_custom", "set_default_sl_custom", 
-        "min_prob_menu", "settings_mode"
+        "min_prob_menu", "auto_min_prob_menu", "settings_mode", "noop"
     ]
 
     is_menu = any(data.startswith(p) for p in menu_prefixes) or data in menu_exact
