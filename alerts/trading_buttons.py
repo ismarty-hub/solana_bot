@@ -104,8 +104,9 @@ async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEF
         # Execute sell
         await portfolio_manager.exit_position(
             chat_id, full_key,
-            "Button Close 🔴",
+            "Button Close \U0001F534",
             context.application,
+            user_manager,
             exit_roi=current_roi
         )
         
@@ -427,8 +428,9 @@ async def handle_sell_execute_callback(update: Update, context: ContextTypes.DEF
         # Execute sell
         await portfolio_manager.exit_position(
             chat_id, full_key,
-            "Button Close 🔴",
+            "Button Close \U0001F534",
             context.application,
+            user_manager,
             exit_roi=current_roi
         )
         
@@ -523,8 +525,9 @@ async def handle_sell_all_execute_callback(update: Update, context: ContextTypes
             try:
                 await portfolio_manager.exit_position(
                     chat_id, position_key,
-                    "Button Close All 💥",
+                    "Button Close All \U0001F4A5",
                     context.application,
+                    user_manager,
                     exit_roi=current_roi
                 )
                 closed_count += 1

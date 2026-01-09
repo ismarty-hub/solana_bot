@@ -68,9 +68,9 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Check subscription status
     if not user_manager.is_subscribed(chat_id):
         if user_manager.is_subscription_expired(chat_id):
-            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+            await update.message.reply_text("\u26D4 Your subscription has expired. Please contact the admin to renew.")
         else:
-            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
+            await update.message.reply_text("\u26D4 You are not subscribed. Please contact the admin.")
         return
     
     # Get current preferences to check current state
@@ -90,7 +90,7 @@ async def alpha_subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     if success:
         await update.message.reply_html(
-            "ðŸš€ <b>Alpha Alerts Activated!</b>\n\n"
+            "\U0001F680 <b>Alpha Alerts Activated!</b>\n\n"
             "\u2705 You will now receive high-priority Alpha Alerts.\n"
             "<i>Use /myalerts to confirm your settings</i>"
         )
@@ -107,9 +107,9 @@ async def alpha_unsubscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     
     if not user_manager.is_subscribed(chat_id):
         if user_manager.is_subscription_expired(chat_id):
-            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+            await update.message.reply_text("\u26D4 Your subscription has expired. Please contact the admin to renew.")
         else:
-            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
+            await update.message.reply_text("\u26D4 You are not subscribed. Please contact the admin.")
         return
     
     # Get current preferences to check current state
@@ -147,9 +147,9 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     
     if not user_manager.is_subscribed(chat_id):
         if user_manager.is_subscription_expired(chat_id):
-            await update.message.reply_text("â›” Your subscription has expired. Please contact the admin to renew.")
+            await update.message.reply_text("\u26D4 Your subscription has expired. Please contact the admin to renew.")
         else:
-            await update.message.reply_text("â›” You are not subscribed. Please contact the admin.")
+            await update.message.reply_text("\u26D4 You are not subscribed. Please contact the admin.")
         return
     
     args = context.args or []
@@ -159,9 +159,9 @@ async def setalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     if not chosen:
         # Show interactive buttons AND usage instructions
         keyboard = [
-            [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("ðŸ❌Š All Grades", callback_data="preset_all")]
+            [InlineKeyboardButton("\U0001F534 CRITICAL", callback_data="preset_critical"),
+             InlineKeyboardButton("\U0001F525 CRITICAL + HIGH", callback_data="preset_critical_high")],
+            [InlineKeyboardButton("\U0001F4E2 All Grades", callback_data="preset_all")]
         ]
         
         current_grades = user_manager.get_user_prefs(chat_id).get('grades', [])
@@ -1127,9 +1127,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             return
         await query.answer()
         keyboard = [
-            [InlineKeyboardButton("ðŸ”´ CRITICAL", callback_data="preset_critical"),
-             InlineKeyboardButton("ðŸ”¥ CRITICAL + HIGH", callback_data="preset_critical_high")],
-            [InlineKeyboardButton("ðŸ❌Š All Grades", callback_data="preset_all")]
+            [InlineKeyboardButton("\U0001F534 CRITICAL", callback_data="preset_critical"),
+             InlineKeyboardButton("\U0001F525 CRITICAL + HIGH", callback_data="preset_critical_high")],
+            [InlineKeyboardButton("\U0001F4E2 All Grades", callback_data="preset_all")]
         ]
         await query.edit_message_text(
             "Please select a preset for your <b>alert grades</b> or use <code>/setalerts</code> for a custom list.", 
@@ -1754,6 +1754,7 @@ async def closeposition_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         chat_id, position_key, 
         "Manual Close \U0001F464", 
         context.application,  
+        user_manager,
         exit_roi=current_roi
     )
 
@@ -1819,6 +1820,7 @@ async def confirmcloseall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
             chat_id, key, 
             "Manual Close All \U0001F464", 
             context.application, 
+            user_manager,
             exit_roi=current_roi
         )
         closed_count += 1

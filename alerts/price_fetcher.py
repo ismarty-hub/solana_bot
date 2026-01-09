@@ -21,9 +21,9 @@ class PriceFetcher:
     RUGCHECK_API_URL = "https://api.rugcheck.xyz/v1/tokens/{mint}/report"
     
     @classmethod
-    async def get_token_info(cls, mint: str) -> Optional[Dict[str, Any]]:
+    async def get_token_info(cls, mint: str, max_retries: int = 3) -> Optional[Dict[str, Any]]:
         """
-        Fetch token info (price, symbol, name) for a given mint address.
+        Fetch token info (price, symbol, name) for a given mint address with retry backoff.
         
         Returns:
             dict: {
@@ -32,24 +32,30 @@ class PriceFetcher:
                 "name": str,
                 "source": str ("jupiter" or "dexscreener")
             }
-            or None if not found.
+            or None if not found after retries.
         """
-        async with aiohttp.ClientSession() as session:
-            # 1. Try Jupiter API first (Fastest)
-            try:
-                jup_data = await cls._fetch_jupiter(session, mint)
-                if jup_data:
-                    return jup_data
-            except Exception as e:
-                logger.warning(f"Jupiter API failed for {mint}: {e}")
+        for attempt in range(max_retries):
+            async with aiohttp.ClientSession() as session:
+                # 1. Try Jupiter API first (Fastest)
+                try:
+                    jup_data = await cls._fetch_jupiter(session, mint)
+                    if jup_data:
+                        return jup_data
+                except Exception as e:
+                    logger.warning(f"Jupiter API failed for {mint} (attempt {attempt+1}): {e}")
+                
+                # 2. Fallback to DexScreener (More comprehensive)
+                try:
+                    dex_data = await cls._fetch_dexscreener(session, mint)
+                    if dex_data:
+                        return dex_data
+                except Exception as e:
+                    logger.warning(f"DexScreener API failed for {mint} (attempt {attempt+1}): {e}")
             
-            # 2. Fallback to DexScreener (More comprehensive)
-            try:
-                dex_data = await cls._fetch_dexscreener(session, mint)
-                if dex_data:
-                    return dex_data
-            except Exception as e:
-                logger.warning(f"DexScreener API failed for {mint}: {e}")
+            if attempt < max_retries - 1:
+                backoff = 2 ** (attempt + 1)
+                logger.info(f"Retrying price fetch for {mint} in {backoff}s (attempt {attempt+1} failed)...")
+                await asyncio.sleep(backoff)
                 
         return None
 

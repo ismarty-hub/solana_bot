@@ -482,7 +482,7 @@ class PortfolioManager:
             # Use ATH ROI from tracking data (more accurate than current price)
             # This accounts for the 5-minute upload delay where ATH could have been hit
             other_roi = other_pos.get("ath_roi", 0.0)
-            await self.exit_position(chat_id, other_key, "Signal Type Swap 🔄", app, exit_roi=other_roi)
+            await self.exit_position(chat_id, other_key, "Signal Type Swap 🔄", app, user_manager, exit_roi=other_roi)
 
         # Validate capital with reserve and min trade size
         capital = portfolio["capital_usd"]
@@ -676,7 +676,7 @@ class PortfolioManager:
     # --- EXIT LOGIC ---
 
     async def exit_position(self, chat_id: str, position_key: str, reason: str, app: Application, 
-                           exit_roi: float = 0.0):
+                           user_manager, exit_roi: float = 0.0):
         """Execute exit, update stats, remove position."""
         portfolio = self.get_portfolio(chat_id)
         pos = portfolio["positions"].get(position_key)
@@ -943,7 +943,7 @@ class PortfolioManager:
             # TP Check
             if ath_roi >= user_tp:
                 # Exit at the actual peak recorded
-                await self.exit_position(chat_id, key, "TP Hit 🎯", app, exit_roi=ath_roi)
+                await self.exit_position(chat_id, key, "TP Hit 🎯", app, user_manager, exit_roi=ath_roi)
                 continue
                 
             # SL Check - apply position SL if set (either explicit or from user default)
@@ -951,7 +951,7 @@ class PortfolioManager:
                 sl_threshold = float(position_sl)
                 if current_roi <= sl_threshold:
                     # Exit at current ROI
-                    await self.exit_position(chat_id, key, "SL Hit 🛑", app, exit_roi=current_roi)
+                    await self.exit_position(chat_id, key, "SL Hit 🛑", app, user_manager, exit_roi=current_roi)
                     continue
             
             # --- 3. EXPIRY CHECK ---
@@ -985,6 +985,6 @@ class PortfolioManager:
                             
                         # Priority 4: Default 0.0 (Already set)
                 
-                await self.exit_position(chat_id, key, "Tracking Ended ⏱️", app, exit_roi=current_roi)
+                await self.exit_position(chat_id, key, "Tracking Ended ⏱️", app, user_manager, exit_roi=current_roi)
 
         self.save()
