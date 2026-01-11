@@ -159,7 +159,7 @@ async def send_pnl_page(message, chat_id: str, portfolio: dict, pnl_data: dict, 
         f"<b>💰 Portfolio Value:</b>\n"
         f"• Available Capital: <b>${capital:,.2f}</b>\n"
         f"• Invested (Cost Basis): <b>${total_cost_basis:,.2f}</b>\n"
-        f"• Total Value: <b>${total_value:,.2f}</b>\n\n"
+        f"• Total Equity: <b>${total_value:,.2f}</b>\n\n"
         f"<b>{pnl_emoji} Unrealized P/L:</b>\n"
         f"• USD: <b>${total_unrealized_usd:+,.2f}</b>\n"
         f"• Percentage: <b>{total_unrealized_pct:+.2f}%</b>\n\n"
