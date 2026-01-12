@@ -8,7 +8,7 @@ async def check_storage():
     async with aiohttp.ClientSession() as session:
         supa = SupabaseManager(config, session)
         
-        folders = ["datasets", "analytics", "analytics/discovery", "analytics/alpha", "analytics/snapshots"]
+        folders = [".", "datasets", "analytics", "analytics/discovery", "analytics/alpha", "analytics/snapshots", "paper_trade"]
         
         for folder in folders:
             print(f"\n--- Listing {folder} ---")

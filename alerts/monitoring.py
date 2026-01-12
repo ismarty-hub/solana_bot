@@ -662,6 +662,14 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 logger.info(f"💾 Saving alert state: {alerts_sent_this_cycle} alerts sent, {state_updated_this_cycle} state updates")
                 safe_save(ALERTS_STATE_FILE, alerts_state)
 
+                # ✅ IMMEDIATE SYNC to Supabase
+                if USE_SUPABASE and upload_file:
+                    try:
+                        upload_file(str(ALERTS_STATE_FILE), bucket=BUCKET_NAME)
+                        logger.info(f"☁️ Immediate sync complete: {ALERTS_STATE_FILE.name}")
+                    except Exception as e:
+                        logger.error(f"❌ Immediate sync failed for {ALERTS_STATE_FILE.name}: {e}")
+
             await asyncio.sleep(POLL_INTERVAL_SECS)
 
         except Exception as e:

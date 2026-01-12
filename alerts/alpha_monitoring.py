@@ -367,17 +367,13 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
     except Exception as e:
         logger.exception(f"❌ Error checking initial subscribers: {e}")
 
-    # ---
-    # ✅ FIX: Load the local state file ONCE.
-    # We trust that bot.py's on_startup has already populated this
-    # file with the latest data from Supabase, preventing re-alerts.
-    # ---
-    alerted_tokens = safe_load(ALPHA_ALERTS_STATE_FILE, {})
-    logger.info(f"📂 Loaded alpha alert state: {len(alerted_tokens)} tokens tracked")
     logger.info(f"📂 State file location: {ALPHA_ALERTS_STATE_FILE}")
 
     while True:
         try:
+            # ✅ RE-LOAD state each cycle to pick up changes from background syncs
+            alerted_tokens = safe_load(ALPHA_ALERTS_STATE_FILE, {})
+            
             # Download latest *token data* (not state)
             if USE_SUPABASE and download_alpha_overlap_results:
                 try:
@@ -411,6 +407,12 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 latest_data = entry[-1] if isinstance(entry, list) else entry
                 current_grade = latest_data.get("result", {}).get("grade", "N/A")
                 ml_passed = latest_data.get("ML_PASSED", False)
+
+                # --- 🛑 GRADE FILTERING ---
+                # Skip invalid grades - do NOT alert on N/A or NONE
+                if current_grade in ["N/A", "NONE", "UNKNOWN", None]:
+                    logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - Invalid Grade: {current_grade}")
+                    continue
 
                 # ML Filtering: Only send alerts if ML check passed in overlap file
                 if not ml_passed:
@@ -476,6 +478,14 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
             if state_changed_this_cycle:
                 logger.info(f"💾 Saving alpha alerts state: {len(alerted_tokens)} tokens, {alerts_sent_this_cycle} sent this cycle")
                 safe_save(ALPHA_ALERTS_STATE_FILE, alerted_tokens)
+                
+                # ✅ IMMEDIATE SYNC to Supabase (Prevents re-alerts on Render restart)
+                if USE_SUPABASE and upload_file:
+                    try:
+                        upload_file(str(ALPHA_ALERTS_STATE_FILE), bucket=BUCKET_NAME)
+                        logger.info(f"☁️ Immediate sync complete: {ALPHA_ALERTS_STATE_FILE.name}")
+                    except Exception as e:
+                        logger.error(f"❌ Immediate sync failed for {ALPHA_ALERTS_STATE_FILE.name}: {e}")
                 
             else:
                 logger.debug("No new alpha tokens or grade changes this cycle")

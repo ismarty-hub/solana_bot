@@ -432,7 +432,14 @@ async def main():
     
     finally:
         # --- New: Graceful Shutdown ---
-        logger.info("🛑 Shutting down bot...")
+        logger.info("🛑 Shutting down bot... Performing final data sync.")
+        try:
+            from alerts.monitoring import upload_all_bot_data_to_supabase
+            upload_all_bot_data_to_supabase()
+            logger.info("✅ Final data sync to Supabase complete.")
+        except Exception as e:
+            logger.error(f"❌ Final sync failed: {e}")
+            
         await _close_http_session() # Close the aiohttp session
         if app.updater and app.updater.running:
             await app.updater.stop()
