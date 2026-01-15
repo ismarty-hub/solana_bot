@@ -778,7 +778,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\u2022 /help - Show this help message\n"
 
 
-        "\u2022 /stats - View your usage statistics"
+        "\u2022 /stats - View your usage statistics\n\n💬 <b>Support:</b> Contact @smartymetrics for assistance."
 
 
     )

@@ -866,6 +866,7 @@ async def show_help_menu(message, edit=False):
         [InlineKeyboardButton("🔔 About Alerts", callback_data="help_alerts")],
         [InlineKeyboardButton("📈 About Trading", callback_data="help_trading")],
         [InlineKeyboardButton("🤖 About ML", callback_data="help_ml")],
+        [InlineKeyboardButton("💬 Contact Support", url="https://t.me/smartymetrics")],
         [InlineKeyboardButton("◀️ Back", callback_data="menu_main")]
     ]
     
