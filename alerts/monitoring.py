@@ -23,6 +23,7 @@ from config import (
 from pathlib import Path
 from shared.file_io import safe_load, safe_save
 from shared.utils import fetch_marketcap_and_fdv, truncate_address
+from shared.tracking_utils import calculate_dedup_expiry, is_dedup_expired
 from alerts.formatters import format_alert_html
 
 logger = logging.getLogger(__name__)
@@ -493,6 +494,13 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     continue
 
                 current_state = alerts_state.get(token_id)
+                
+                # Check if deduplication has expired (token can be re-alerted)
+                if current_state and is_dedup_expired(current_state.get("dedup_expires_at")):
+                    logger.info(f"⏰ [{token_id[:8]}...] Dedup expired, treating as new token")
+                    del alerts_state[token_id]
+                    current_state = None
+                
                 last_grade = current_state.get("last_grade") if isinstance(current_state, dict) else None
 
                 is_new_token = (last_grade is None)
@@ -532,7 +540,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         "broadcasted": False,
                         "data_complete": data_complete, 
                         "last_market_data_retry_at": None if data_complete else datetime.now(timezone.utc).isoformat(),
-                        "market_data_retry_count": 0 if data_complete else 1
+                        "market_data_retry_count": 0 if data_complete else 1,
+                        "dedup_expires_at": calculate_dedup_expiry(dex_data)
                     }
                     
                     logger.info(f"🆕 New token detected: {token_id[:8]}... | Grade: {grade} | Data Complete: {data_complete}")

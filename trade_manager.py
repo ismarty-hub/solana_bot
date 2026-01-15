@@ -472,17 +472,96 @@ class PortfolioManager:
         if position_key in portfolio["positions"]:
             return
 
-        # Signal type swap logic
+        # Signal confluence logic - add to position instead of swapping
         other_type = "alpha" if signal_type == "discovery" else "discovery"
         other_key = f"{mint}_{other_type}"
         
         if other_key in portfolio["positions"]:
-            logger.info(f"🔄 [{chat_id}] Swapping {other_type} -> {signal_type} for {mint}")
+            # Check if confluence adding is enabled
+            confluence_enabled = prefs.get("confluence_enabled", True)
+            if not confluence_enabled:
+                logger.info(f"🔀 [{chat_id}] Confluence adding disabled, skipping {signal_type} for {mint}")
+                return
+            
             other_pos = portfolio["positions"][other_key]
-            # Use ATH ROI from tracking data (more accurate than current price)
-            # This accounts for the 5-minute upload delay where ATH could have been hit
-            other_roi = other_pos.get("ath_roi", 0.0)
-            await self.exit_position(chat_id, other_key, "Signal Type Swap 🔄", app, user_manager, exit_roi=other_roi)
+            
+            # Calculate add-on size (percentage of original trade)
+            confluence_add_pct = prefs.get("confluence_add_percent", 50.0) / 100.0
+            original_investment = other_pos.get("investment_usd", 0)
+            add_on_size = original_investment * confluence_add_pct
+            
+            # Check max token exposure cap
+            max_exposure_pct = prefs.get("max_token_exposure", 20.0) / 100.0
+            total_capital = portfolio.get("capital_usd", 0) + sum(
+                p.get("investment_usd", 0) for p in portfolio["positions"].values() if p.get("status") == "active"
+            )
+            current_exposure = other_pos.get("investment_usd", 0)
+            max_allowed = total_capital * max_exposure_pct
+            
+            if current_exposure + add_on_size > max_allowed:
+                # Cap or skip adding
+                if current_exposure >= max_allowed:
+                    logger.info(f"⚠️ [{chat_id}] Max exposure reached for {mint}, skipping add")
+                    return
+                add_on_size = max_allowed - current_exposure
+                logger.info(f"📊 [{chat_id}] Capping add-on to ${add_on_size:.2f} due to exposure limit")
+            
+            # Check if we have enough capital
+            capital = portfolio["capital_usd"]
+            reserve = prefs.get("reserve_balance", 0.0)
+            min_trade = prefs.get("min_trade_size", 10.0)
+            available = capital - reserve
+            
+            if add_on_size > available or add_on_size < min_trade:
+                logger.info(f"⏭️ [{chat_id}] Insufficient capital for confluence add: ${add_on_size:.2f}")
+                return
+            
+            # Add to position
+            add_on_tokens = add_on_size / entry_price
+            
+            # Calculate new weighted average entry price
+            old_tokens = other_pos.get("token_amount", 0)
+            old_cost = old_tokens * other_pos.get("avg_buy_price", other_pos.get("entry_price", 0))
+            new_total_tokens = old_tokens + add_on_tokens
+            new_avg_price = (old_cost + add_on_size) / new_total_tokens if new_total_tokens > 0 else entry_price
+            
+            # Update position
+            other_pos["token_amount"] = new_total_tokens
+            other_pos["avg_buy_price"] = new_avg_price
+            other_pos["investment_usd"] = other_pos.get("investment_usd", 0) + add_on_size
+            other_pos["last_updated"] = datetime.now(timezone.utc).isoformat() + "Z"
+            
+            # Track signal types for analytics
+            signal_types = other_pos.get("signal_types", [other_pos.get("signal_type", "unknown")])
+            if signal_type not in signal_types:
+                signal_types.append(signal_type)
+            other_pos["signal_types"] = signal_types
+            
+            # Deduct capital
+            portfolio["capital_usd"] -= add_on_size
+            self.save()
+            
+            # Notify user
+            msg = (
+                f"🔀 <b>CONFLUENCE ADD</b>\n\n"
+                f"<b>Token:</b> {other_pos.get('symbol', 'UNKNOWN')}\n"
+                f"<b>New Signal:</b> {signal_type.upper()}\n"
+                f"<b>Added:</b> ${add_on_size:.2f}\n"
+                f"<b>New Avg Entry:</b> ${new_avg_price:.8f}\n"
+                f"<b>Total Position:</b> ${other_pos['investment_usd']:.2f}\n"
+                f"<b>Signals:</b> {', '.join(signal_types)}"
+            )
+            
+            try:
+                if prefs.get("trade_notifications_enabled", True):
+                    await app.bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+                    logger.info(f"✅ [{chat_id}] Added ${add_on_size:.2f} to {mint} on {signal_type} confluence")
+                else:
+                    logger.info(f"🔇 [{chat_id}] Confluence add (notifications disabled): {mint}")
+            except Exception:
+                pass
+            
+            return  # Don't create a new position
 
         # Validate capital with reserve and min trade size
         capital = portfolio["capital_usd"]

@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 from shared.file_io import safe_load, safe_save
 from alerts.user_manager import UserManager
 from alerts.formatters import _format_alpha_alert_async
+from shared.tracking_utils import calculate_dedup_expiry, is_dedup_expired
 
 try:
     from supabase_utils import download_alpha_overlap_results, download_file
@@ -317,13 +318,18 @@ async def send_alpha_alert(
         alert_record = alerted_tokens.get(mint, {})
 
         # Update tracking fields
+        # Get dex_data for expiry calculation
+        latest_data_for_expiry = entry[-1] if isinstance(entry, list) else entry
+        dex_data_for_expiry = latest_data_for_expiry.get("dexscreener", {})
+        
         alert_record.update({
             "ts": datetime.now().isoformat(),
             "sent": success_count > 0,
             "subscriber_count": len(alpha_subscribers),
             "success_count": success_count,
             "fail_count": fail_count,
-            "last_grade": current_grade  # <-- ALWAYS update the last_grade
+            "last_grade": current_grade,  # <-- ALWAYS update the last_grade
+            "dedup_expires_at": calculate_dedup_expiry(dex_data_for_expiry)
         })
         
         # ONLY add the metadata (initial_state) on the VERY FIRST alert
@@ -427,6 +433,12 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 
                 # Check if token exists in state
                 existing_state = alerted_tokens.get(mint)
+                
+                # Check if deduplication has expired (token can be re-alerted)
+                if existing_state and is_dedup_expired(existing_state.get("dedup_expires_at")):
+                    logger.info(f"⏰ [{mint[:8]}...] Dedup expired, treating as new alpha token")
+                    del alerted_tokens[mint]
+                    existing_state = None
 
                 if not existing_state:
                     # --- 1. NEW TOKEN ---

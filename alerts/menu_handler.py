@@ -19,7 +19,7 @@ from alerts.menu_navigation import (
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
     show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu,
-    show_min_prob_menu, show_auto_min_prob_menu
+    show_min_prob_menu, show_auto_min_prob_menu, show_confluence_settings_menu
 )
 
 
@@ -463,6 +463,53 @@ async def handle_menu_callback(
             "Or send <code>none</code> for no default SL."
         )
         context.user_data['awaiting_default_sl'] = True
+        return
+    
+    # ========================================================================
+    # CONFLUENCE SETTINGS MENU (New)
+    # ========================================================================
+    elif data == "settings_confluence":
+        await query.answer()
+        await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data == "toggle_confluence":
+        user_prefs = user_manager.get_user_prefs(chat_id)
+        current_state = user_prefs.get("confluence_enabled", True)
+        new_state = not current_state
+        user_manager.update_user_prefs(chat_id, {"confluence_enabled": new_state})
+        
+        status_text = "ENABLED ✅" if new_state else "DISABLED ❌"
+        await query.answer(f"🔀 Confluence {status_text}", show_alert=True)
+        await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data.startswith("set_confluence_add:"):
+        _, value = data.split(":")
+        add_pct = float(value)
+        user_manager.update_user_prefs(chat_id, {"confluence_add_percent": add_pct})
+        await query.answer(f"Add-On Size set to {add_pct:.0f}%")
+        await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data.startswith("set_max_exposure:"):
+        _, value = data.split(":")
+        exposure_pct = float(value)
+        user_manager.update_user_prefs(chat_id, {"max_token_exposure": exposure_pct})
+        await query.answer(f"Max Exposure set to {exposure_pct:.0f}%")
+        await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
+        return
+    
+    elif data == "confluence_custom":
+        await query.message.reply_html(
+            "📝 <b>Custom Confluence Settings</b>\n\n"
+            "Send values in format:\n"
+            "<code>add:XX exp:YY</code>\n\n"
+            "<b>Example:</b> <code>add:60 exp:25</code>\n"
+            "• Add-On: 60% of original trade\n"
+            "• Max Exposure: 25% of total capital"
+        )
+        context.user_data['awaiting_confluence_custom'] = True
         return
     
     # ========================================================================

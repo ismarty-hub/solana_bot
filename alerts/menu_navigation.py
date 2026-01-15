@@ -493,6 +493,7 @@ async def show_trading_settings_menu(message, user_manager: UserManager, portfol
             [InlineKeyboardButton("🚜 Auto-Trade Filters", callback_data="settings_trade_filters")],
             [InlineKeyboardButton("🎯 Take Profit (TP)", callback_data="settings_tp")],
             [InlineKeyboardButton("🛑 Stop Loss (SL)", callback_data="settings_sl_menu")],
+            [InlineKeyboardButton("🔀 Confluence Settings", callback_data="settings_confluence")],
             [InlineKeyboardButton("◀️ Back", callback_data="menu_settings")]
         ]
         
@@ -557,6 +558,59 @@ async def show_sl_settings_menu(message, user_manager: UserManager, chat_id: str
         f"• 20% SL = Exit if trade drops -20%\n"
         f"• No SL = Never auto-exit (manual only)\n\n"
         f"<b>Tip:</b> You can still manually set SL on individual trades."
+    )
+    
+    if edit:
+        await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode="HTML")
+    else:
+        await message.reply_html(menu_text, reply_markup=reply_markup)
+
+
+# ============================================================================
+# CONFLUENCE PYRAMIDING SETTINGS MENU (NEW)
+# ============================================================================
+
+async def show_confluence_settings_menu(message, user_manager: UserManager, chat_id: str, edit=False):
+    """Display confluence pyramiding settings menu."""
+    user_prefs = user_manager.get_user_prefs(chat_id)
+    
+    confluence_enabled = user_prefs.get("confluence_enabled", True)
+    add_percent = user_prefs.get("confluence_add_percent", 50.0)
+    max_exposure = user_prefs.get("max_token_exposure", 20.0)
+    
+    enabled_text = "✅ Enabled" if confluence_enabled else "❌ Disabled"
+    toggle_text = "🔀 Confluence: " + ("✅ ON" if confluence_enabled else "❌ OFF")
+    
+    keyboard = [
+        [InlineKeyboardButton(toggle_text, callback_data="toggle_confluence")],
+        [InlineKeyboardButton(f"Add-On Size: {add_percent:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("25%", callback_data="set_confluence_add:25"),
+            InlineKeyboardButton("50%", callback_data="set_confluence_add:50"),
+            InlineKeyboardButton("75%", callback_data="set_confluence_add:75")
+        ],
+        [InlineKeyboardButton(f"Max Exposure: {max_exposure:.0f}%", callback_data="noop")],
+        [
+            InlineKeyboardButton("10%", callback_data="set_max_exposure:10"),
+            InlineKeyboardButton("20%", callback_data="set_max_exposure:20"),
+            InlineKeyboardButton("30%", callback_data="set_max_exposure:30")
+        ],
+        [InlineKeyboardButton("📝 Custom Values", callback_data="confluence_custom")],
+        [InlineKeyboardButton("◀️ Back", callback_data="settings_trading")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    menu_text = (
+        f"🔀 <b>Confluence Pyramiding Settings</b>\n\n"
+        f"<b>Status:</b> {enabled_text}\n"
+        f"<b>Add-On Size:</b> {add_percent:.0f}% of original trade\n"
+        f"<b>Max Exposure:</b> {max_exposure:.0f}% of total capital\n\n"
+        f"<b>What is Confluence?</b>\n"
+        f"When both Discovery and Alpha signals fire on the same token, "
+        f"instead of closing and reopening, the bot adds to your position.\n\n"
+        f"<b>Add-On Size:</b> How much to add (% of original trade)\n"
+        f"<b>Max Exposure:</b> Cap on total position size per token"
     )
     
     if edit:

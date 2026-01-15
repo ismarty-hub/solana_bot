@@ -183,6 +183,19 @@ class UserManager:
             user["min_prob_alpha"] = 0.0
             modified = True
 
+        # --- NEW: Confluence Pyramiding Settings ---
+        if "confluence_enabled" not in user:
+            user["confluence_enabled"] = True  # Enable by default
+            modified = True
+            
+        if "confluence_add_percent" not in user:
+            user["confluence_add_percent"] = 50.0  # 50% of original trade
+            modified = True
+            
+        if "max_token_exposure" not in user:
+            user["max_token_exposure"] = 20.0  # 20% of total capital
+            modified = True
+
         if modified:
             prefs[chat_id] = user
             self._persist_prefs(prefs)
@@ -229,6 +242,10 @@ class UserManager:
             "min_prob_alpha": 0.0,
             "auto_min_prob_discovery": 0.0,  # New: Min win chance for auto-trading (discovery)
             "auto_min_prob_alpha": 0.0,      # New: Min win chance for auto-trading (alpha)
+            # Confluence Pyramiding Settings
+            "confluence_enabled": True,       # Enable adding to position on second signal
+            "confluence_add_percent": 50.0,   # 50% of original trade size
+            "max_token_exposure": 20.0,       # Max 20% of capital in one token
         }
         self._persist_prefs(prefs)
         return prefs[chat_id]
