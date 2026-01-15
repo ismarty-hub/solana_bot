@@ -3259,7 +3259,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         "set_default_sl:", "set_trade_size_mode_select:", "trade_", "set_trade_", 
 
 
-        "grade_", "set_prob_", "auto_prob_", "mode_", "toggle_", "confluence_", "set_confluence_add:", "set_max_exposure:"
+        "grade_", "set_prob_", "auto_prob_", "mode_", "toggle_", "confluence_", "set_confluence_add:", "set_max_exposure:", "sc:", "sx:", "pnl_page:", "portfolio_page:", "sell_confirm:", "sell_execute:"
 
 
     ]
@@ -3277,7 +3277,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         "set_reserve_custom", "set_mintrade_custom", "set_default_sl_custom", 
 
 
-        "min_prob_menu", "auto_min_prob_menu", "settings_mode", "noop"
+        "min_prob_menu", "auto_min_prob_menu", "settings_mode", "noop", "sell_all_confirm", "sell_all_execute", "sell_cancel"
 
 
     ]
