@@ -261,6 +261,65 @@ async def handle_text_message(
             except ValueError:
                 await update.message.reply_text("❌ Invalid amount. Please send a number.")
             return
+
+        # ====================================================================
+        # CONFLUENCE SETTINGS - CUSTOM VALUES
+        # ====================================================================
+        if context.user_data.get("awaiting_confluence_custom"):
+            context.user_data["awaiting_confluence_custom"] = False
+            
+            try:
+                # Expected format: "add:XX exp:YY"
+                # But let's be flexible: allow just numbers if we ask one at a time,
+                # or parse the specific format requested in the menu handler.
+                # The menu prompt is: "Send values in format: add:XX exp:YY"
+                
+                parts = text.lower().split()
+                add_val = None
+                exp_val = None
+                
+                for part in parts:
+                    if part.startswith("add:"):
+                        add_val = float(part.split(":")[1])
+                    elif part.startswith("exp:"):
+                        exp_val = float(part.split(":")[1])
+                
+                updates = {}
+                msg_parts = []
+                
+                if add_val is not None:
+                    if 0 < add_val:
+                        updates["confluence_add_percent"] = add_val
+                        msg_parts.append(f"<b>Add-On Size:</b> {add_val:.1f}%")
+                    else:
+                        await update.message.reply_text("❌ Add-on percentage must be positive.")
+                        return
+
+                if exp_val is not None:
+                    if 0 < exp_val <= 100:
+                        updates["max_token_exposure"] = exp_val
+                        msg_parts.append(f"<b>Max Exposure:</b> {exp_val:.1f}%")
+                    else:
+                        await update.message.reply_text("❌ Max exposure must be between 1 and 100%.")
+                        return
+
+                if updates:
+                    user_manager.update_user_prefs(chat_id, updates)
+                    await update.message.reply_html(
+                        f"✅ <b>Confluence Settings Updated!</b>\n\n" + "\n".join(msg_parts)
+                    )
+                else:
+                    await update.message.reply_text(
+                        "❌ Invalid format. Please use:\n"
+                        "<code>add:50 exp:20</code>"
+                    )
+                
+            except Exception:
+                await update.message.reply_text(
+                    "❌ Error parsing input. Please use format:\n"
+                    "<code>add:50 exp:20</code>"
+                )
+            return
         
         # ====================================================================
         # TRADE SIZE SETTINGS - CUSTOM VALUE

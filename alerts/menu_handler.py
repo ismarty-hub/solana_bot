@@ -503,11 +503,13 @@ async def handle_menu_callback(
     elif data == "confluence_custom":
         await query.message.reply_html(
             "📝 <b>Custom Confluence Settings</b>\n\n"
-            "Send values in format:\n"
-            "<code>add:XX exp:YY</code>\n\n"
-            "<b>Example:</b> <code>add:60 exp:25</code>\n"
-            "• Add-On: 60% of original trade\n"
-            "• Max Exposure: 25% of total capital"
+            "Send one or both values:\n"
+            "<code>add:XX</code> (Add-on %)\n"
+            "<code>exp:YY</code> (Max Exposure %)\n\n"
+            "<b>Examples:</b>\n"
+            "• <code>add:60 exp:25</code> (Set both)\n"
+            "• <code>add:100</code> (Set only add-on)\n"
+            "• <code>exp:15</code> (Set only exposure)"
         )
         context.user_data['awaiting_confluence_custom'] = True
         return
