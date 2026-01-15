@@ -17,7 +17,6 @@ from alerts.menu_navigation import (
     show_ml_menu, show_settings_menu, show_mode_selection_menu,
     show_help_menu, show_help_topic, show_reserve_balance_menu, show_min_trade_size_menu,
     show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
-    show_dashboard_menu, show_trading_settings_menu, show_alert_settings_menu, show_sl_settings_menu,
     show_trade_size_mode_menu, show_trade_filters_menu, show_trade_grades_menu, show_trade_alpha_menu,
     show_min_prob_menu, show_auto_min_prob_menu, show_confluence_settings_menu
 )
@@ -46,6 +45,11 @@ async def handle_menu_callback(
     chat_id = str(query.from_user.id)
     
     logger.info(f"Processing menu callback: '{data}' from user {chat_id}")
+
+    # Handle "noop" callbacks (labels that look like buttons)
+    if data == "noop":
+        await query.answer()
+        return
     
     # query.answer() removed from here to avoid double-answering
     # It will be called within each handler block as needed.
@@ -485,18 +489,26 @@ async def handle_menu_callback(
         return
     
     elif data.startswith("set_confluence_add:"):
-        _, value = data.split(":")
-        add_pct = float(value)
-        user_manager.update_user_prefs(chat_id, {"confluence_add_percent": add_pct})
-        await query.answer(f"Add-On Size set to {add_pct:.0f}%")
+        try:
+            _, value = data.split(":")
+            add_pct = float(value)
+            user_manager.update_user_prefs(chat_id, {"confluence_add_percent": add_pct})
+            await query.answer(f"Add-On Size set to {add_pct:.0f}%")
+        except Exception:
+            await query.answer("❌ Error setting value", show_alert=True)
+            
         await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
         return
     
     elif data.startswith("set_max_exposure:"):
-        _, value = data.split(":")
-        exposure_pct = float(value)
-        user_manager.update_user_prefs(chat_id, {"max_token_exposure": exposure_pct})
-        await query.answer(f"Max Exposure set to {exposure_pct:.0f}%")
+        try:
+            _, value = data.split(":")
+            exposure_pct = float(value)
+            user_manager.update_user_prefs(chat_id, {"max_token_exposure": exposure_pct})
+            await query.answer(f"Max Exposure set to {exposure_pct:.0f}%")
+        except Exception:
+            await query.answer("❌ Error setting value", show_alert=True)
+            
         await show_confluence_settings_menu(query.message, user_manager, chat_id, edit=True)
         return
     
