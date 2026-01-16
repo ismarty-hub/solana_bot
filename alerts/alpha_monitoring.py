@@ -27,7 +27,7 @@ from telegram.error import BadRequest
 from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE)
 
 # --- Constants ---
-ALPHA_POLL_INTERVAL_SECS = 30
+ALPHA_POLL_INTERVAL_SECS = 15  # Faster alpha alerts
 ALPHA_OVERLAP_FILE = Path(DATA_DIR) / "overlap_results_alpha.pkl"
 
 
@@ -41,12 +41,13 @@ from alerts.formatters import _format_alpha_alert_async
 from shared.tracking_utils import calculate_dedup_expiry, is_dedup_expired
 
 try:
-    from supabase_utils import download_alpha_overlap_results, download_file
-    logger.info("✅ Successfully imported download_alpha_overlap_results")
+    from supabase_utils import download_alpha_overlap_results, download_file, upload_file
+    logger.info("✅ Successfully imported download_alpha_overlap_results and helpers")
 except Exception:
     logger.exception("❌ FAILED to import required functions from supabase_utils!")
     download_alpha_overlap_results = None
     download_file = None
+    upload_file = None
 
 # Path to active_tracking.json for ML_PASSED crosscheck
 ACTIVE_TRACKING_FILE = Path(DATA_DIR) / "active_tracking.json"
@@ -422,69 +423,56 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
 
                 # ML Filtering: Only send alerts if ML check passed in overlap file
                 if not ml_passed:
-                    logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False")
-                    continue
-                
-                # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
-                # This prevents alerts for tokens that initially failed ML but later passed
-                if not check_initial_ml_passed(mint, active_tracking):
-                    logger.info(f"⛔ BLOCKED alpha alert for {mint[:8]}... - initial ML_PASSED was False")
+                    logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False (will retry next cycle)")
                     continue
                 
                 # Check if token exists in state
-                existing_state = alerted_tokens.get(mint)
+                existing_state = alerted_tokens.get(mint, {})
                 
                 # Check if deduplication has expired (token can be re-alerted)
                 if existing_state and is_dedup_expired(existing_state.get("dedup_expires_at")):
                     logger.info(f"⏰ [{mint[:8]}...] Dedup expired, treating as new alpha token")
                     del alerted_tokens[mint]
-                    existing_state = None
+                    existing_state = {}
 
-                if not existing_state:
-                    # --- 1. NEW TOKEN ---
-                    logger.info(f"🆕 NEW Alpha Token Detected: {mint}")
+                # --- Alert Decision Logic ---
+                # Alert if:
+                # 1. New token (not in existing_state)
+                # 2. Previous alert for this token failed (sent=False)
+                # 3. Grade change (current_grade != last_alerted_grade)
+                last_alerted_grade = existing_state.get("last_alerted_grade", "N/A")
+                is_grade_change = (last_alerted_grade != current_grade)
+                was_sent = existing_state.get("sent", False)
+                
+                should_alert = not existing_state or not was_sent or is_grade_change
+
+                if should_alert:
+                    if not existing_state:
+                        logger.info(f"🆕 NEW Alpha Token Detected: {mint}")
+                    elif not was_sent:
+                        logger.info(f"🔄 RETRY Alpha Alert (previous failed): {mint}")
+                    else:
+                        logger.info(f"🔔 GRADE CHANGE for Alpha Token: {mint} | {last_alerted_grade} -> {current_grade}")
+
+                    # Attempt to send the alert
+                    success = await send_alpha_alert(
+                        app, 
+                        user_manager, 
+                        mint, 
+                        entry, 
+                        alerted_tokens,
+                        previous_grade=last_alerted_grade if is_grade_change else None
+                    )
                     
-                    # Send the first alert
-                    logger.info(f"📢 Attempting to send first alert for {mint} (Grade: {current_grade})...")
-                    success = await send_alpha_alert(app, user_manager, mint, entry, alerted_tokens)
                     if success:
                         alerts_sent_this_cycle += 1
+                        # Update the state with the grade we JUST alerted for
+                        if mint in alerted_tokens:
+                            alerted_tokens[mint]["last_alerted_grade"] = current_grade
                     
-                    state_changed_this_cycle = True # We save the state regardless of success
-                
+                    state_changed_this_cycle = True
                 else:
-                    # --- 2. EXISTING TOKEN ---
-                    was_sent = existing_state.get("sent", False)
-                    last_grade = existing_state.get("last_grade", "N/A")
-                    
-                    if not was_sent:
-                        # --- 2a. RETRY FAILED ALERT ---
-                        logger.info(f"🔄 RETRY Alpha Alert (previous attempt failed): {mint} (Grade: {current_grade})")
-                        success = await send_alpha_alert(app, user_manager, mint, entry, alerted_tokens)
-                        if success:
-                            alerts_sent_this_cycle += 1
-                        state_changed_this_cycle = True # Save the new state (e.g., sent=True)
-                    
-                    elif current_grade != last_grade:
-                        # --- 2b. GRADE CHANGE DETECTED ---
-                        logger.info(f"🔔 GRADE CHANGE for Alpha Token: {mint} | {last_grade} -> {current_grade}")
-                        
-                        success = await send_alpha_alert(
-                            app, 
-                            user_manager, 
-                            mint, 
-                            entry, 
-                            alerted_tokens, 
-                            previous_grade=last_grade # <-- Pass previous_grade
-                        )
-                        
-                        if success:
-                            alerts_sent_this_cycle += 1
-                        state_changed_this_cycle = True # Save the new grade
-                    
-                    else:
-                        # --- 2c. ALREADY SENT, NO CHANGE ---
-                        logger.debug(f"⏭️ SKIP {mint[:8]}... (alert sent, grade {last_grade} unchanged)")
+                    logger.debug(f"⏭️ SKIP {mint[:8]}... (already alerted for grade {current_grade})")
 
             # Save state if any changes occurred
             if state_changed_this_cycle:

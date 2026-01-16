@@ -604,16 +604,8 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 if should_broadcast:
                     # ML Filtering: Only broadcast if ML check passed
                     ml_passed = token_info.get("ml_passed")
-                    logger.debug(f"🔍 Broadcast check for {token_id[:8]}... - ML_PASSED: {ml_passed}")
                     
-                    if not ml_passed:
-                        logger.debug(f"⏭️ Skipping broadcast for {token_id[:8]}... - ML_PASSED is False")
-                        alerts_state[token_id]["broadcasted"] = True
-                    # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
-                    elif not check_initial_ml_passed(token_id, active_tracking):
-                        logger.info(f"⛔ BLOCKED broadcast for {token_id[:8]}... - initial ML_PASSED was False")
-                        alerts_state[token_id]["broadcasted"] = True
-                    else:
+                    if ml_passed:
                         mint_address = token_info.get("token_metadata", {}).get("mint", token_id)
                         try:
                             await broadcast_mint_to_groups(app, mint_address)
@@ -622,37 +614,32 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                             state_updated_this_cycle += 1
                         except Exception as e:
                             logger.error(f"❌ Broadcast failed for {mint_address[:8]}...: {e}")
+                    else:
+                        logger.debug(f"🔍 Broadcast check for {token_id[:8]}... - ML_PASSED: False (will retry next cycle)")
                 
                 # --- Alert Logic ---
-                # Send alert on:
-                # 1. Grade change (existing token)
-                # 2. New token with complete data
-                # 3. Gated token whose data just became complete
+                # Send alert if:
+                # 1. We haven't alerted for this grade yet
+                # 2. Market data is complete
                 is_alert_required = (
-                    is_grade_change or 
-                    (is_new_token and state.get("data_complete")) or
-                    should_send_gated_alert
+                    grade != state.get("last_alerted_grade") and
+                    state.get("data_complete")
                 )
 
                 if is_alert_required:
                     # ML Filtering: Only send alerts if ML check passed
                     if not token_info.get("ml_passed"):
-                        logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False")
+                        logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False (will retry next cycle)")
                         continue
                     
-                    # CRITICAL: Crosscheck with active_tracking.json for INITIAL ML_PASSED status
-                    if not check_initial_ml_passed(token_id, active_tracking):
-                        logger.info(f"⛔ BLOCKED alert for {token_id[:8]}... - initial ML_PASSED was False")
-                        continue
-
                     if is_grade_change:
                         logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
                         alerts_state[token_id]["last_grade"] = grade
                         state_updated_this_cycle += 1
                     elif is_new_token:
-                        logger.info(f"🔔 Sending alert for new token: {token_id[:8]}... | Grade: {grade}")
-                    else:  # should_send_gated_alert
-                        logger.info(f"🔔 Sending gated alert (data now complete): {token_id[:8]}... | Grade: {grade}")
+                        logger.info(f"🔔 New token alert: {token_id[:8]}... | Grade: {grade}")
+                    else:
+                        logger.info(f"🔔 Delayed alert (ML now passed): {token_id[:8]}... | Grade: {grade}")
 
                     state = alerts_state.get(token_id, {})
                     
@@ -664,6 +651,7 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         first_alert_at=state.get("first_alert_at")
                     )
                     
+                    alerts_state[token_id]["last_alerted_grade"] = grade
                     alerts_sent_this_cycle += 1
 
             # Save state if changes occurred

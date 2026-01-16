@@ -33,9 +33,9 @@ load_dotenv()
 # --- Configuration Variables ---
 
 # Polling & Tracking
-SIGNAL_DOWNLOAD_INTERVAL = 30  # Download signals every 30 seconds
+SIGNAL_DOWNLOAD_INTERVAL = 10  # Faster signal download
 PRICE_CHECK_INTERVAL_NEW = 5    # 5 seconds for tokens <= 12 hours old
-PRICE_CHECK_INTERVAL_OLD = 240  # 4 minutes for tokens > 12 hours old
+PRICE_CHECK_INTERVAL_OLD = 120  # 2 minutes for tokens > 12 hours old
 TRACKING_DURATION_NEW = 24      # Track new tokens for 24 hours
 TRACKING_DURATION_OLD = 168     # Track old tokens for 7 days
 
@@ -70,7 +70,7 @@ TEMP_DIR = "/tmp/analytics_tracker"
 
 # Analytics
 STATS_UPDATE_INTERVAL = 3600    # Update summary stats every 1 hour (failsafe)
-ACTIVE_UPLOAD_INTERVAL = 30    # Upload active_tracking.json every 30 seconds
+ACTIVE_UPLOAD_INTERVAL = 10     # Faster upload for trading speed
 WIN_ROI_THRESHOLD = 45.0        # ROI percentage to mark as a "win"
 
 # API Timeouts

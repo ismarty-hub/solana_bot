@@ -23,11 +23,11 @@ IS_LOCAL = not IS_RENDER
 if IS_RENDER:
     # Render persistent disk mount point
     DATA_DIR = Path("/opt/render/project/data")
-    POLL_INTERVAL_SECS = 60  # 1 minute for Render
+    POLL_INTERVAL_SECS = 15  # Reduction for faster detection
 else:
     # Local development
     DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
-    POLL_INTERVAL_SECS = 60  # 1 minute local too
+    POLL_INTERVAL_SECS = 15  # Reduction for faster detection
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -47,7 +47,7 @@ ACTIVATION_CODES_FILE = DATA_DIR / "activation_codes.json"
 # Analytics Tracking Configuration
 # ----------------------
 ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
-ANALYTICS_POLL_INTERVAL = 300  # 5 minutes
+ANALYTICS_POLL_INTERVAL = 15  # High-frequency trading check
 SIGNAL_FRESHNESS_WINDOW = 420  # 7 minutes - only execute signals this fresh
 
 # ----------------------

@@ -80,44 +80,46 @@ def parse_iso_to_dt(s: str) -> Optional[datetime]:
 
 async def download_active_tracking_with_retry(max_retries: int = 3) -> Dict[str, Any]:
     """
-    Attempt to download active_tracking.json from Supabase with retry.
-    If Supabase not available or download fails, fall back to local file.
-    Returns a dict mapping composite_key -> token_data, or {} on failure.
+    Load active_tracking.json. 
+    PRIORITY: Local file (checked first for speed)
+    FALLBACK: Supabase download
     """
-    if USE_SUPABASE and download_file:
+    # 1. Try local file first (Zero Latency)
+    if ACTIVE_TRACKING_FILE.exists():
+        try:
+            # Check file age
+            mtime = Path(ACTIVE_TRACKING_FILE).stat().st_mtime
+            age = time.time() - mtime
+            if age < 60: # If local file is fresh (< 60s), use it immediately
+                data = safe_load(ACTIVE_TRACKING_FILE, {})
+                if data:
+                    logger.debug(f"✅ Using FRESH local active_tracking.json (age: {age:.1f}s)")
+                    return data
+        except Exception as e:
+            logger.warning(f"Failed to load fresh local file: {e}")
+
+    # 2. If no local or local is stale, try Supabase (only if not skipping)
+    skip_supabase = os.getenv("SKIP_SUPABASE_DOWNLOAD", "False").lower() == "true"
+    if USE_SUPABASE and download_file and not skip_supabase:
         remote_path = "analytics/active_tracking.json"
         attempt = 0
         while attempt < max_retries:
             attempt += 1
             try:
-                logger.debug(f"Attempting download of active_tracking.json (attempt {attempt})...")
                 ok = download_file(str(ACTIVE_TRACKING_FILE), remote_path, bucket=BUCKET_NAME)
                 if ok and ACTIVE_TRACKING_FILE.exists():
-                    import json
-
-                    with open(ACTIVE_TRACKING_FILE, "r") as f:
-                        data = json.load(f)
+                    data = safe_load(ACTIVE_TRACKING_FILE, {})
+                    if data:
                         logger.info("✅ Downloaded active_tracking.json from Supabase")
                         return data
-                else:
-                    logger.warning(f"Download returned falsy (attempt {attempt})")
             except Exception as e:
                 logger.warning(f"Download attempt {attempt} failed: {e}")
-            await asyncio.sleep(2)
-        logger.warning("All Supabase download attempts failed; trying local fallback...")
-    else:
-        logger.debug("Supabase download skipped (USE_SUPABASE disabled or download_file missing).")
+            await asyncio.sleep(1)
 
-    # Fallback: try to load local file
-    try:
-        data = safe_load(ACTIVE_TRACKING_FILE, {})
-        if isinstance(data, dict) and data:
-            logger.info("✅ Loaded active_tracking.json from local disk (fallback)")
-            return data
-    except Exception as e:
-        logger.warning(f"Failed to load local active_tracking.json: {e}")
-
-    logger.warning("Active tracking data unavailable (returning empty dict).")
+    # 3. Last resort: Load whatever the local file has, regardless of age
+    if ACTIVE_TRACKING_FILE.exists():
+        return safe_load(ACTIVE_TRACKING_FILE, {})
+    
     return {}
 
 
@@ -223,13 +225,13 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
             active_tracking = await download_active_tracking_with_retry()
             if not active_tracking:
                 logger.debug("No active tracking data; sleeping and retrying.")
-                await asyncio.sleep(POLL_INTERVAL)
+                await asyncio.sleep(ANALYTICS_POLL_INTERVAL)
                 continue
 
             trading_users = user_manager.get_trading_users()
             if not trading_users:
                 logger.debug("No trading users found; sleeping.")
-                await asyncio.sleep(POLL_INTERVAL)
+                await asyncio.sleep(ANALYTICS_POLL_INTERVAL)
                 continue
 
             new_signals_found = 0

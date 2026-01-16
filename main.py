@@ -34,6 +34,19 @@ from supabase import create_client, Client
 # Import the pipeline function (same as api.py)
 from alpha import run_pipeline
 
+# Import managers
+from alerts.user_manager import UserManager
+from trade_manager import PortfolioManager
+
+# Import engine loops
+from alerts.monitoring import (
+    background_loop, monthly_expiry_notifier, 
+    periodic_supabase_sync, tp_metrics_update_loop
+)
+from alerts.alpha_monitoring import alpha_monitoring_loop
+from alerts.analytics_monitoring import active_tracking_signal_loop
+from alerts.trade_monitor import trade_monitoring_loop
+
 # Import the bot module
 import bot
 
@@ -73,20 +86,28 @@ JOB_STATUS_DIR.mkdir(exist_ok=True)
 # In-memory map of job futures
 JOB_FUTURES: Dict[str, Any] = {}
 
+# Global variables for Managers
+user_manager = None
+portfolio_manager = None
+
 # Global variables to store background tasks
 bot_task = None
 analytics_task = None
 collector_task = None
+alert_task = None
+trade_task = None
+alpha_task = None
+tp_metrics_task = None
+sync_task = None
+expiry_task = None
+
 collector_session = None # For collector's aiohttp session
 collector_log = None # To store the collector's logger instance
 
-# Standalone processes
-alert_process = None
-trade_process = None
-
-# Configuration for Isolated Engines
-USE_ISOLATED_ENGINES = os.getenv("USE_ISOLATED_ENGINES", "False").lower() == "true"
-ENGINE_IS_ISOLATED = False # Will be set to True if subprocesses start successfully
+# ----------------------
+# Orchestration Configuration
+# ----------------------
+# All services are orchestrated as internal tasks by default.
 
 # ----------------------
 # Collector Service Runner
@@ -146,6 +167,8 @@ async def run_collector_service():
 async def lifespan(app: FastAPI):
     """Manage bot, analytics, and collector lifecycles with proper startup and shutdown."""
     global bot_task, analytics_task, collector_task, alert_process, trade_process
+    global user_manager, portfolio_manager
+    global alert_task, trade_task, alpha_task, tp_metrics_task, sync_task, expiry_task
 
     # 1. Critical Startup: Prepare Data
     logger.info("🔧 Preparing data directory and downloading from Supabase...")
@@ -163,37 +186,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"❌ Failed to download initial data: {e}")
 
-    # 2. Start Isolated Engines (if enabled)
-    logger.info(f"🚀 Initializing services (Isolated Engines: {USE_ISOLATED_ENGINES})...")
-
-    if USE_ISOLATED_ENGINES:
-        try:
-            # Use absolute paths for robust subprocess execution
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            alert_script = os.path.join(current_dir, "alert_engine.py")
-            trade_script = os.path.join(current_dir, "trade_engine.py")
-            
-            logger.info(f"📡 Starting Alert Engine as subprocess: {alert_script}")
-            alert_process = await asyncio.create_subprocess_exec(
-                sys.executable, alert_script,
-                stdout=None, stderr=None
-            )
-            
-            logger.info(f"📡 Starting Trade Engine as subprocess: {trade_script}")
-            trade_process = await asyncio.create_subprocess_exec(
-                sys.executable, trade_script,
-                stdout=None, stderr=None
-            )
-            ENGINE_IS_ISOLATED = True
-            logger.info("✅ Isolated engines started successfully.")
-        except Exception as startup_e:
-            ENGINE_IS_ISOLATED = False
-            logger.error(f"❌ Failed to start isolated engine subprocesses: {startup_e}", exc_info=True)
-            logger.warning("⚠️ Falling back to internal tasks for this session...")
-            # We don't disable USE_ISOLATED_ENGINES globally because bot.py
-            # logic depends on the env var. We strictly notify and move on.
+    # 2. Initialize Shared Managers
+    from config import USER_PREFS_FILE, USER_STATS_FILE, PORTFOLIOS_FILE
+    user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
+    portfolio_manager = PortfolioManager(PORTFOLIOS_FILE)
     
-    logger.info("🚀 Starting Telegram bot task...")
+    # Inject managers into bot module
+    bot.initialize_managers(user_manager, portfolio_manager)
+
+    # 3. Create Telegram App instance for background loops
+    from shared.engine_utils import get_standalone_app
+    standalone_app = get_standalone_app()
+
+    # 4. Start Signaling and Monitoring Tasks
+    # 4. Start Signaling and Monitoring Tasks
+    logger.info("🔄 Starting engine loops as internal orchestrated tasks...")
+    alert_task = asyncio.create_task(background_loop(standalone_app, user_manager, portfolio_manager))
+    alpha_task = asyncio.create_task(alpha_monitoring_loop(standalone_app, user_manager))
+    expiry_task = asyncio.create_task(monthly_expiry_notifier(standalone_app, user_manager))
+    
+    trade_task = asyncio.create_task(active_tracking_signal_loop(standalone_app, user_manager, portfolio_manager))
+    tp_metrics_task = asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
+        
+    # 5. Start Interface and Tracking tasks
+    # 5. Start Interface and Tracking tasks
+    logger.info("🚀 Starting Interface and Tracking tasks...")
     bot_task = asyncio.create_task(bot.main())
     
     def bot_done_callback(t):
@@ -203,77 +220,40 @@ async def lifespan(app: FastAPI):
             logger.error(f"❌ Bot task failed critically: {e}", exc_info=True)
     bot_task.add_done_callback(bot_done_callback)
     
-    logger.info("🚀 Starting Analytics Tracker task...")
     analytics_task = asyncio.create_task(analytics_tracker.main_loop())
-
-    # --- Start Collector Service ---
+    sync_task = asyncio.create_task(periodic_supabase_sync())
+    
     if collector:
-        logger.info("🚀 Starting Snapshot Collector Service...")
         collector_task = asyncio.create_task(run_collector_service())
-    else:
-        logger.warning("Collector module not loaded, skipping collector service startup.")
-    # ------------------------------------
 
     yield  # FastAPI runs here
 
-    # Shutdown isolated processes
-    if alert_process:
-        logger.info("🛑 Terminating Alert Engine subprocess...")
-        try:
-            alert_process.terminate()
-            await alert_process.wait()
-            logger.info("✅ Alert Engine process terminated")
-        except Exception as e:
-            logger.error(f"Error terminating Alert Engine: {e}")
+    # --- Shutdown Sequence ---
+    logger.info("🛑 Shutting down orchestrated services...")
 
-    if trade_process:
-        logger.info("🛑 Terminating Trade Engine subprocess...")
-        try:
-            trade_process.terminate()
-            await trade_process.wait()
-            logger.info("✅ Trade Engine process terminated")
-        except Exception as e:
-            logger.error(f"Error terminating Trade Engine: {e}")
-
-    # Shutdown bot
-    if bot_task and not bot_task.done():
-        logger.info("🛑 Shutting down bot...")
-        bot_task.cancel()
-        try:
-            await bot_task
-        except asyncio.CancelledError:
-            logger.info("✅ Bot task cancelled successfully")
-        except Exception as e:
-            logger.error(f"Error during bot shutdown: {e}")
+    # Cancel all internal tasks
+    tasks = {
+        "bot": bot_task, "analytics": analytics_task, "collector": collector_task,
+        "alert": alert_task, "trade": trade_task, "alpha": alpha_task, 
+        "tp_metrics": tp_metrics_task, "sync": sync_task, "expiry": expiry_task
+    }
+    for name, task in tasks.items():
+        if task and not task.done():
+            logger.info(f"Cancelling {name} task...")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"Error cancelling {name} task: {e}")
     
-    # Shutdown analytics tracker
-    if analytics_task and not analytics_task.done():
-        logger.info("🛑 Shutting down analytics tracker...")
-        analytics_task.cancel()
-        try:
-            await analytics_task
-        except asyncio.CancelledError:
-            logger.info("✅ Analytics tracker cancelled successfully")
-        except Exception as e:
-            logger.error(f"Error during analytics tracker shutdown: {e}")
-
-    # --- NEW: Shutdown Collector Service ---
-    if collector_task and not collector_task.done():
-        logger.info("🛑 Shutting down collector service...")
-        collector_task.cancel()
-        try:
-            await collector_task
-        except asyncio.CancelledError:
-            logger.info("✅ Collector task cancelled successfully")
-        except Exception as e:
-            logger.error(f"Error during collector shutdown: {e}")
-    # Session cleanup is handled in run_collector_service's finally block
-    # ---------------------------------------
-    
-    # Cleanup HTTP session from analytics tracker
+    # Session cleanup for analytics tracker
     if analytics_tracker.http_session and not analytics_tracker.http_session.closed:
         await analytics_tracker.http_session.close()
         logger.info("✅ Analytics tracker HTTP session closed")
+
+    logger.info("👋 Orchestration shutdown complete.")
 
 
 # ----------------------
@@ -294,33 +274,47 @@ async def root():
     return {"message": "Solana Bot Service with Analytics & Collector is running!"}
 
 
-@app.head("/health")
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    """Endpoint for uptime monitoring tools like RobotPinger or UptimeRobot."""
-    bot_status = "running" if bot_task and not bot_task.done() else "stopped"
-    analytics_status = "running" if analytics_task and not analytics_task.done() else "stopped"
+    """Unified health check for all orchestrated bot services."""
+    # List of critical tasks to monitor
+    tasks = {
+        "bot": bot_task,
+        "analytics": analytics_task,
+        "collector": collector_task,
+        "alert": alert_task,
+        "trade": trade_task,
+        "alpha": alpha_task
+    }
     
-    collector_status = "not_loaded" # Default if collector is None
-    if collector:
-         collector_status = "running" if collector_task and not collector_task.done() else "stopped"
+    # Check if all active tasks are healthy (running and no exceptions)
+    task_statuses = {}
+    all_healthy = True
     
-    # Basic job stats
-    running_jobs = sum(1 for f in JOB_FUTURES.values() if not f.done()) if JOB_FUTURES else 0
-    
-    # Analytics tracker stats
+    for name, t in tasks.items():
+        if t is None:
+            if name == "collector": continue # collector is optional
+            task_statuses[name] = "not_started"
+            all_healthy = False
+            continue
+            
+        if t.done():
+            status = "failed" if t.exception() else "stopped"
+            task_statuses[name] = status
+            all_healthy = False
+        else:
+            task_statuses[name] = "running"
+            
+    # Analytics tracker specific stats
     active_tokens = len(analytics_tracker.active_tracking) if hasattr(analytics_tracker, 'active_tracking') else 0
     
     return {
-        "status": "ok",
-        "engine_mode": "ISOLATED" if ENGINE_IS_ISOLATED else ("INTERNAL (Fallback)" if USE_ISOLATED_ENGINES else "INTERNAL (Standard)"),
-        "service": "Solana Bot + Trader ROI API + Analytics + Collector",
-        "bot_status": bot_status,
-        "analytics_status": analytics_status,
-        "collector_status": collector_status,
-        "running_jobs": running_jobs,
+        "status": "ok" if all_healthy else "degraded",
+        "engine_mode": "INTERNAL (Unified Orchestrator)",
+        "service": "Solana Bot Unified Orchestrator",
+        "tasks": task_statuses,
         "active_tracking_tokens": active_tokens,
-        "details": "All services running smoothly"
+        "details": "All managed tasks are running" if all_healthy else "One or more tasks are stopped or failed"
     }
 
 

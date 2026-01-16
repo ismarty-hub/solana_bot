@@ -76,9 +76,8 @@ logger = logging.getLogger(__name__)
 # ----------------------
 # Initialize Managers
 # ----------------------
-# UserManager is initialized after data download
+# These will be set by the orchestrator (main.py)
 user_manager = None
-# PortfolioManager is initialized after data download
 portfolio_manager = None
 
 
@@ -313,42 +312,18 @@ async def on_startup(app: Application):
             logger.info(f"🆕 Creating new default file: {file_path.name}")
             safe_save(file_path, default_content)
 
-    # --- Initialize managers AFTER data has been potentially downloaded ---
-    logger.info("🔧 Initializing managers...")
-    user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
-    portfolio_manager = PortfolioManager(PORTFOLIOS_FILE)
-    logger.info("✅ Managers initialized.")
-    # Start background loops optionally (useful when running standalone engines)
-    logger.info("🔄 Starting background tasks...")
-    
-    # Parse environment variables for engine isolation
-    USE_ISOLATED_ENGINES = os.getenv("USE_ISOLATED_ENGINES", "False").lower() == "true"
-    EXTERNAL_ALERT_ENGINE = os.getenv("EXTERNAL_ALERT_ENGINE", "False").lower() == "true"
-    EXTERNAL_TRADE_ENGINE = os.getenv("EXTERNAL_TRADE_ENGINE", "False").lower() == "true"
-
-    # Discovery alert loop
-    if not EXTERNAL_ALERT_ENGINE and not USE_ISOLATED_ENGINES:
-        logger.info("   [INTERNAL] Starting background alert loop...")
-        asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
-        asyncio.create_task(alpha_monitoring_loop(app, user_manager))
-        asyncio.create_task(monthly_expiry_notifier(app, user_manager))
-    else:
-        logger.info("   [EXTERNAL] Alert loops running in separate process.")
-
-    # Trade detection and monitoring loop
-    if not EXTERNAL_TRADE_ENGINE and not USE_ISOLATED_ENGINES:
-        logger.info("   [INTERNAL] Starting trade monitoring loops...")
-        asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
-        asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
-        asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
-    else:
-        logger.info("   [EXTERNAL] Trade loops running in separate process.")
-
     # Periodic Supabase sync (always run in main bot process for general data)
-    if USE_SUPABASE:
-        asyncio.create_task(periodic_supabase_sync())
+    # This is now managed by main.py in the new orchestration model.
+    pass
 
     logger.info("🚀 Bot startup complete.")
+
+def initialize_managers(um, pm):
+    """Callback for main.py to inject initialized managers."""
+    global user_manager, portfolio_manager
+    user_manager = um
+    portfolio_manager = pm
+    logger.info("✅ Managers injected into bot module.")
 
 async def main():
     """Main entry point for the bot."""

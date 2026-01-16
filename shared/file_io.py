@@ -8,6 +8,8 @@ Supports both JSON (.json) and pickle (.pkl) files.
 import json
 import joblib
 import logging
+import os
+import tempfile
 from pathlib import Path
 from threading import Lock
 from typing import Any
