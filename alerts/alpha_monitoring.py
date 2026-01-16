@@ -443,12 +443,18 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                 last_alerted_grade = existing_state.get("last_alerted_grade")
                 was_sent = existing_state.get("sent", False)
                 
-                # 10-Minute Freshness Cross-Check (Active Tracking)
-                # If token is in active_tracking, it MUST be < 10 mins old.
-                # If not in active_tracking, we allow it (new discovery).
+                # 10-Minute Freshness & ML Status Cross-Check (Active Tracking)
+                # If token is in active_tracking, it MUST be < 10 mins old AND ML_PASSED must be True.
                 active_key = f"{mint}_alpha"
                 if active_tracking and active_key in active_tracking:
                     active_entry = active_tracking[active_key]
+                    
+                    # ML Status Cross-Check: Respect master tracker status
+                    if not active_entry.get("ML_PASSED", True):
+                        logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False in active_tracking.json")
+                        continue
+                    
+                    # Freshness Cross-Check: 10-minute window
                     entry_time_str = active_entry.get("entry_time")
                     if entry_time_str:
                         try:

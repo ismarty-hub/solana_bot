@@ -633,12 +633,18 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False (will retry next cycle)")
                         continue
                     
-                    # 10-Minute Freshness Cross-Check (Active Tracking)
-                    # If token is in active_tracking, it MUST be < 10 mins old.
-                    # If not in active_tracking, we allow it (new discovery).
+                    # 10-Minute Freshness & ML Status Cross-Check (Active Tracking)
+                    # If token is in active_tracking, it MUST be < 10 mins old AND ML_PASSED must be True.
                     active_key = f"{token_id}_discovery"
                     if active_tracking and active_key in active_tracking:
                         active_entry = active_tracking[active_key]
+                        
+                        # ML Status Cross-Check: Respect master tracker status
+                        if not active_entry.get("ML_PASSED", True):
+                            logger.debug(f"⏭️ Skipping discovery alert for {token_id[:8]}... - ML_PASSED is False in active_tracking.json")
+                            continue
+
+                        # Freshness Cross-Check: 10-minute window
                         entry_time_str = active_entry.get("entry_time")
                         if entry_time_str:
                             try:
