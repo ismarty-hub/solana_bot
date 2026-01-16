@@ -313,23 +313,30 @@ async def on_startup(app: Application):
     user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
     portfolio_manager = PortfolioManager(PORTFOLIOS_FILE)
     logger.info("✅ Managers initialized.")
-    # Start ALL background loops
+    # Start background loops optionally (useful when running standalone engines)
     logger.info("🔄 Starting background tasks...")
-    # 1. Original alert monitoring loop - ONLY sends alerts
-    asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
-    # 2. Monthly expiry notifier
-    asyncio.create_task(monthly_expiry_notifier(app, user_manager))
-    # 3. Periodic Supabase sync
+    
+    # Discovery alert loop
+    if not os.getenv("EXTERNAL_ALERT_ENGINE") and not os.getenv("USE_ISOLATED_ENGINES"):
+        logger.info("   [INTERNAL] Starting background alert loop...")
+        asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
+        asyncio.create_task(alpha_monitoring_loop(app, user_manager))
+        asyncio.create_task(monthly_expiry_notifier(app, user_manager))
+    else:
+        logger.info("   [EXTERNAL] Alert loops running in separate process.")
+
+    # Trade detection and monitoring loop
+    if not os.getenv("EXTERNAL_TRADE_ENGINE") and not os.getenv("USE_ISOLATED_ENGINES"):
+        logger.info("   [INTERNAL] Starting trade monitoring loops...")
+        asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
+        asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
+        asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
+    else:
+        logger.info("   [EXTERNAL] Trade loops running in separate process.")
+
+    # Periodic Supabase sync (always run in main bot process for general data)
     if USE_SUPABASE:
         asyncio.create_task(periodic_supabase_sync())
-    # 4. 🆕 ANALYTICS-DRIVEN SIGNAL DETECTION (replaces old signal_detection_loop)
-    asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
-    # 5. 📊 Paper trading position monitoring (checks exits, TP, stop loss)
-    asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))
-    # 6. Alpha alerts monitoring
-    asyncio.create_task(alpha_monitoring_loop(app, user_manager))
-    # 7. 📈 TP Metrics calculation (from past 3 days of analytics)
-    asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
 
     logger.info("🚀 Bot startup complete.")
 

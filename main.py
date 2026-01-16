@@ -79,6 +79,13 @@ collector_task = None
 collector_session = None # For collector's aiohttp session
 collector_log = None # To store the collector's logger instance
 
+# Standalone processes
+alert_process = None
+trade_process = None
+
+# Configuration for Isolated Engines
+USE_ISOLATED_ENGINES = os.getenv("USE_ISOLATED_ENGINES", "False").lower() == "true"
+
 # ----------------------
 # Collector Service Runner
 # ----------------------
@@ -136,16 +143,31 @@ async def run_collector_service():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage bot, analytics, and collector lifecycles with proper startup and shutdown."""
-    global bot_task, analytics_task, collector_task
+    global bot_task, analytics_task, collector_task, alert_process, trade_process
 
     # Startup
-    logger.info("🚀 Starting Telegram bot...")
+    logger.info(f"🚀 Initializing services (Isolated Engines: {USE_ISOLATED_ENGINES})...")
+
+    if USE_ISOLATED_ENGINES:
+        logger.info("📡 Starting Alert Engine as subprocess...")
+        alert_process = await asyncio.create_subprocess_exec(
+            "python", "alert_engine.py",
+            stdout=None, stderr=None  # Inherit output to see logs in console
+        )
+        
+        logger.info("📡 Starting Trade Engine as subprocess...")
+        trade_process = await asyncio.create_subprocess_exec(
+            "python", "trade_engine.py",
+            stdout=None, stderr=None
+        )
+    
+    logger.info("🚀 Starting Telegram bot task...")
     bot_task = asyncio.create_task(bot.main())
     
-    logger.info("🚀 Starting Analytics Tracker...")
+    logger.info("🚀 Starting Analytics Tracker task...")
     analytics_task = asyncio.create_task(analytics_tracker.main_loop())
 
-    # --- NEW: Start Collector Service ---
+    # --- Start Collector Service ---
     if collector:
         logger.info("🚀 Starting Snapshot Collector Service...")
         collector_task = asyncio.create_task(run_collector_service())
@@ -155,9 +177,25 @@ async def lifespan(app: FastAPI):
 
     yield  # FastAPI runs here
 
-    # Shutdown
-    logger.info("🛑 Shutting down services...")
-    
+    # Shutdown isolated processes
+    if alert_process:
+        logger.info("🛑 Terminating Alert Engine subprocess...")
+        try:
+            alert_process.terminate()
+            await alert_process.wait()
+            logger.info("✅ Alert Engine process terminated")
+        except Exception as e:
+            logger.error(f"Error terminating Alert Engine: {e}")
+
+    if trade_process:
+        logger.info("🛑 Terminating Trade Engine subprocess...")
+        try:
+            trade_process.terminate()
+            await trade_process.wait()
+            logger.info("✅ Trade Engine process terminated")
+        except Exception as e:
+            logger.error(f"Error terminating Trade Engine: {e}")
+
     # Shutdown bot
     if bot_task and not bot_task.done():
         logger.info("🛑 Shutting down bot...")

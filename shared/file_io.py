@@ -49,7 +49,8 @@ def safe_load(path: Path, default: Any) -> Any:
 
 def safe_save(path: Path, data: Any) -> bool:
     """
-    Thread-safe save to file.
+    Process-safe and Thread-safe save to file.
+    Uses atomic rename (os.replace) to prevent file corruption.
     Automatically detects JSON vs pickle based on file extension.
     
     Args:
@@ -59,20 +60,41 @@ def safe_save(path: Path, data: Any) -> bool:
     Returns:
         True if save was successful, False otherwise
     """
+    
     with file_lock:
+        temp_fd = None
+        temp_path = None
         try:
-            path = Path(path)  # Ensure it's a Path object
+            path = Path(path)
             path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Detect file type by extension
-            if path.suffix.lower() == '.json':
-                with open(path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, default=str)
-            else:
-                # Default to joblib for .pkl and other files
-                joblib.dump(data, path)
+            # Create a temporary file in the same directory as the target
+            # This ensures they are on the same filesystem for os.replace to be atomic
+            temp_dir = path.parent
+            fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=".tmp")
+            temp_fd = os.fdopen(fd, 'w' if path.suffix.lower() == '.json' else 'wb', encoding='utf-8' if path.suffix.lower() == '.json' else None)
             
+            if path.suffix.lower() == '.json':
+                json.dump(data, temp_fd, indent=2, default=str)
+            else:
+                joblib.dump(data, temp_fd)
+            
+            temp_fd.flush()
+            os.fsync(temp_fd.fileno())
+            temp_fd.close()
+            temp_fd = None
+            
+            # Atomic swap
+            os.replace(temp_path, path)
             return True
+            
         except Exception as e:
-            logging.exception(f"Failed saving {path}: {e}")
+            logging.exception(f"Failed atomic save to {path}: {e}")
+            if temp_fd:
+                temp_fd.close()
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
             return False
