@@ -5,6 +5,7 @@ bot.py - Main entry point for the modular Telegram bot
 
 import logging
 import asyncio
+import os
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Defaults, MessageHandler, filters
 from telegram import Update
 from telegram.ext import ContextTypes

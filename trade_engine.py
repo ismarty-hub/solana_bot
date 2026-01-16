@@ -12,12 +12,10 @@ from alerts.analytics_monitoring import active_tracking_signal_loop
 from alerts.trade_monitor import trade_monitoring_loop
 from alerts.monitoring import tp_metrics_update_loop
 from alerts.user_manager import UserManager
-from alerts.portfolio_manager import PortfolioManager
+from trade_manager import PortfolioManager
 from config import USER_PREFS_FILE, USER_STATS_FILE, PORTFOLIOS_FILE
 
-# Set tag for isolation logging
-os.environ["IS_ISOLATED_ENGINE"] = "TRADE"
-
+# Logger initialized with specific name
 logger = initialize_logging("TradeEngine")
 
 async def main():

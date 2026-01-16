@@ -11,12 +11,10 @@ from shared.engine_utils import get_standalone_app, initialize_logging
 from alerts.monitoring import background_loop, monthly_expiry_notifier
 from alerts.alpha_monitoring import alpha_monitoring_loop
 from alerts.user_manager import UserManager
-from alerts.portfolio_manager import PortfolioManager
+from trade_manager import PortfolioManager
 from config import USER_PREFS_FILE, USER_STATS_FILE, PORTFOLIOS_FILE
 
-# Set tag for isolation logging
-os.environ["IS_ISOLATED_ENGINE"] = "ALERT"
-
+# Logger initialized with specific name
 logger = initialize_logging("AlertEngine")
 
 async def main():
