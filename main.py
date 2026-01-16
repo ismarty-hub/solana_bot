@@ -86,6 +86,7 @@ trade_process = None
 
 # Configuration for Isolated Engines
 USE_ISOLATED_ENGINES = os.getenv("USE_ISOLATED_ENGINES", "False").lower() == "true"
+ENGINE_IS_ISOLATED = False # Will be set to True if subprocesses start successfully
 
 # ----------------------
 # Collector Service Runner
@@ -178,7 +179,10 @@ async def lifespan(app: FastAPI):
                 sys.executable, "trade_engine.py",
                 stdout=None, stderr=None
             )
+            ENGINE_IS_ISOLATED = True
+            logger.info("✅ Isolated engines started successfully.")
         except Exception as startup_e:
+            ENGINE_IS_ISOLATED = False
             logger.error(f"❌ Failed to start isolated engine subprocesses: {startup_e}")
             logger.warning("⚠️ Falling back to internal tasks for this session...")
             # We don't disable USE_ISOLATED_ENGINES globally because bot.py
@@ -304,6 +308,7 @@ async def health_check():
     
     return {
         "status": "ok",
+        "engine_mode": "ISOLATED" if ENGINE_IS_ISOLATED else ("INTERNAL (Fallback)" if USE_ISOLATED_ENGINES else "INTERNAL (Standard)"),
         "service": "Solana Bot + Trader ROI API + Analytics + Collector",
         "bot_status": bot_status,
         "analytics_status": analytics_status,
