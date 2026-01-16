@@ -25,6 +25,8 @@ Behavioral summary:
 """
 import asyncio
 import logging
+import os
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -32,7 +34,7 @@ from typing import Dict, Any, Optional
 from telegram.ext import Application
 
 # Config imports
-from config import DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALL_GRADES, SIGNAL_FRESHNESS_WINDOW
+from config import DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALL_GRADES, SIGNAL_FRESHNESS_WINDOW, ANALYTICS_POLL_INTERVAL
 
 # File IO helpers
 from shared.file_io import safe_load, safe_save
@@ -53,6 +55,7 @@ SNAPSHOT_FILE = DATA_DIR / "last_processed_tracking.json"
 OVERLAP_FILE = DATA_DIR / "overlap_results.pkl"
 ALPHA_OVERLAP_FILE = DATA_DIR / "overlap_results_alpha.pkl"
 POLL_INTERVAL = 30  # 30 seconds
+
 
 
 def parse_iso_to_dt(s: str) -> Optional[datetime]:

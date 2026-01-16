@@ -284,7 +284,10 @@ async def health_check():
         "collector": collector_task,
         "alert": alert_task,
         "trade": trade_task,
-        "alpha": alpha_task
+        "alpha": alpha_task,
+        "sync": sync_task,
+        "tp_metrics": tp_metrics_task,
+        "expiry": expiry_task
     }
     
     # Check if all active tasks are healthy (running and no exceptions)
