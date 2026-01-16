@@ -168,22 +168,27 @@ async def lifespan(app: FastAPI):
 
     if USE_ISOLATED_ENGINES:
         try:
-            logger.info("📡 Starting Alert Engine as subprocess...")
+            # Use absolute paths for robust subprocess execution
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            alert_script = os.path.join(current_dir, "alert_engine.py")
+            trade_script = os.path.join(current_dir, "trade_engine.py")
+            
+            logger.info(f"📡 Starting Alert Engine as subprocess: {alert_script}")
             alert_process = await asyncio.create_subprocess_exec(
-                sys.executable, "alert_engine.py",
+                sys.executable, alert_script,
                 stdout=None, stderr=None
             )
             
-            logger.info("📡 Starting Trade Engine as subprocess...")
+            logger.info(f"📡 Starting Trade Engine as subprocess: {trade_script}")
             trade_process = await asyncio.create_subprocess_exec(
-                sys.executable, "trade_engine.py",
+                sys.executable, trade_script,
                 stdout=None, stderr=None
             )
             ENGINE_IS_ISOLATED = True
             logger.info("✅ Isolated engines started successfully.")
         except Exception as startup_e:
             ENGINE_IS_ISOLATED = False
-            logger.error(f"❌ Failed to start isolated engine subprocesses: {startup_e}")
+            logger.error(f"❌ Failed to start isolated engine subprocesses: {startup_e}", exc_info=True)
             logger.warning("⚠️ Falling back to internal tasks for this session...")
             # We don't disable USE_ISOLATED_ENGINES globally because bot.py
             # logic depends on the env var. We strictly notify and move on.
