@@ -48,7 +48,7 @@ ACTIVATION_CODES_FILE = DATA_DIR / "activation_codes.json"
 # ----------------------
 ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
 ANALYTICS_POLL_INTERVAL = 15  # High-frequency trading check
-SIGNAL_FRESHNESS_WINDOW = 420  # 7 minutes - only execute signals this fresh
+SIGNAL_FRESHNESS_WINDOW = 600  # 10 minutes - increased for better cold-start coverage
 
 # ----------------------
 # Bot Configuration

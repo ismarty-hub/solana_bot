@@ -208,10 +208,9 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
     """
     logger.info("🔍 Analytics signal loop started.")
 
-    # Record the bot start time — only tokens registered after this timestamp
-    # should be considered new.
+    # Record start time for logging purposes
     startup_time = datetime.now(timezone.utc)
-    logger.info(f"Analytics loop startup_time={startup_time.isoformat()}")
+    logger.info(f"Analytics loop started at {startup_time.isoformat()}")
 
     # Load snapshot on startup
     snapshot = safe_load(SNAPSHOT_FILE, {})
@@ -269,12 +268,6 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         logger.debug(f"Skipping {mint} - could not parse entry_time: {current_entry_time}")
                         continue
 
-                    # Skip tokens that were registered before the bot started
-                    if entry_dt <= startup_time:
-                        logger.debug(
-                            f"Skipping {mint} (entry_time {entry_dt.isoformat()}) - registered before startup {startup_time.isoformat()}"
-                        )
-                        continue
 
                     # CRITICAL: Signal Freshness Check
                     # Skip signals that are older than the configured window (e.g. 5 mins)

@@ -621,8 +621,9 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                 # Send alert if:
                 # 1. We haven't alerted for this grade yet
                 # 2. Market data is complete
+                last_alerted_grade = state.get("last_alerted_grade")
                 is_alert_required = (
-                    grade != state.get("last_alerted_grade") and
+                    grade != last_alerted_grade and
                     state.get("data_complete")
                 )
 
@@ -632,20 +633,39 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                         logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False (will retry next cycle)")
                         continue
                     
-                    if is_grade_change:
-                        logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_grade} → {grade}")
-                        alerts_state[token_id]["last_grade"] = grade
-                        state_updated_this_cycle += 1
-                    elif is_new_token:
+                    # 10-Minute Freshness Cross-Check (Active Tracking)
+                    # If token is in active_tracking, it MUST be < 10 mins old.
+                    # If not in active_tracking, we allow it (new discovery).
+                    active_key = f"{token_id}_discovery"
+                    if active_tracking and active_key in active_tracking:
+                        active_entry = active_tracking[active_key]
+                        entry_time_str = active_entry.get("entry_time")
+                        if entry_time_str:
+                            try:
+                                entry_dt = datetime.fromisoformat(entry_time_str.replace("Z", "+00:00"))
+                                age_seconds = (datetime.now(timezone.utc) - entry_dt).total_seconds()
+                                if age_seconds > SIGNAL_FRESHNESS_WINDOW: # 600s
+                                    logger.info(f"⏭️ Skipping discovery alert for {token_id[:8]}... - already in active_tracking and stale ({age_seconds:.0f}s old)")
+                                    continue
+                            except Exception as e:
+                                logger.warning(f"⚠️ Error parsing active_tracking entry_time for {token_id[:8]}: {e}")
+                    
+                    # Differentiate New vs Change for the UI
+                    is_actual_grade_change = (last_alerted_grade is not None and last_alerted_grade != grade)
+                    
+                    if is_actual_grade_change:
+                        logger.info(f"🔔 Grade change detected: {token_id[:8]}... | {last_alerted_grade} → {grade}")
+                    elif last_alerted_grade is None:
                         logger.info(f"🔔 New token alert: {token_id[:8]}... | Grade: {grade}")
                     else:
-                        logger.info(f"🔔 Delayed alert (ML now passed): {token_id[:8]}... | Grade: {grade}")
+                        # This case handles retries when data was incomplete but ML passed
+                        logger.debug(f"🔔 Retrying alert for {token_id[:8]}... | Grade: {grade}")
 
                     state = alerts_state.get(token_id, {})
                     
                     await send_alert_to_subscribers(
                         app, token_info, grade, user_manager,
-                        previous_grade=last_grade if is_grade_change else None,
+                        previous_grade=last_alerted_grade if is_actual_grade_change else None,
                         initial_mc=state.get("initial_marketcap"),
                         initial_fdv=state.get("initial_fdv"), 
                         first_alert_at=state.get("first_alert_at")

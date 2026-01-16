@@ -437,18 +437,37 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
 
                 # --- Alert Decision Logic ---
                 # Alert if:
-                # 1. New token (not in existing_state)
-                # 2. Previous alert for this token failed (sent=False)
-                # 3. Grade change (current_grade != last_alerted_grade)
-                last_alerted_grade = existing_state.get("last_alerted_grade", "N/A")
-                is_grade_change = (last_alerted_grade != current_grade)
+                # 1. We haven't successfully alerted for this token yet (last_alerted_grade is None)
+                # 2. Previous alert attempt failed (sent=False)
+                # 3. Valid grade change (current_grade != last_alerted_grade)
+                last_alerted_grade = existing_state.get("last_alerted_grade")
                 was_sent = existing_state.get("sent", False)
                 
-                should_alert = not existing_state or not was_sent or is_grade_change
+                # 10-Minute Freshness Cross-Check (Active Tracking)
+                # If token is in active_tracking, it MUST be < 10 mins old.
+                # If not in active_tracking, we allow it (new discovery).
+                active_key = f"{mint}_alpha"
+                if active_tracking and active_key in active_tracking:
+                    active_entry = active_tracking[active_key]
+                    entry_time_str = active_entry.get("entry_time")
+                    if entry_time_str:
+                        try:
+                            entry_dt = datetime.fromisoformat(entry_time_str.replace("Z", "+00:00"))
+                            age_seconds = (datetime.now(timezone.utc) - entry_dt).total_seconds()
+                            if age_seconds > SIGNAL_FRESHNESS_WINDOW: # 600s
+                                logger.info(f"⏭️ Skipping alpha alert for {mint[:8]}... - already in active_tracking and stale ({age_seconds:.0f}s old)")
+                                continue
+                        except Exception as e:
+                            logger.warning(f"⚠️ Error parsing active_tracking entry_time for {mint[:8]}: {e}")
+                
+                is_first_alert = (last_alerted_grade is None)
+                is_actual_grade_change = (not is_first_alert and last_alerted_grade != current_grade)
+                
+                should_alert = is_first_alert or not was_sent or is_actual_grade_change
 
                 if should_alert:
-                    if not existing_state:
-                        logger.info(f"🆕 NEW Alpha Token Detected: {mint}")
+                    if is_first_alert:
+                        logger.info(f"🆕 NEW Alpha Token Alert: {mint} (Grade: {current_grade})")
                     elif not was_sent:
                         logger.info(f"🔄 RETRY Alpha Alert (previous failed): {mint}")
                     else:
@@ -461,7 +480,7 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                         mint, 
                         entry, 
                         alerted_tokens,
-                        previous_grade=last_alerted_grade if is_grade_change else None
+                        previous_grade=last_alerted_grade if is_actual_grade_change else None
                     )
                     
                     if success:
