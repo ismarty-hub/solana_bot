@@ -25,7 +25,7 @@ from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 
-from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE)
+from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE, SIGNAL_FRESHNESS_WINDOW)
 
 # --- Constants ---
 ALPHA_POLL_INTERVAL_SECS = 15  # Faster alpha alerts
