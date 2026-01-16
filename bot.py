@@ -274,9 +274,13 @@ async def on_startup(app: Application):
     logger.info(f"✅ Data directory initialized: {DATA_DIR}")
 
     if USE_SUPABASE:
-        logger.info("☁️ Supabase enabled - downloading all bot data...")
-        # This function now handles ALL bot files, including portfolios AND alpha state
-        download_bot_data_from_supabase() 
+        if os.getenv("SKIP_SUPABASE_DOWNLOAD") == "True":
+            logger.info("ℹ️ Skipping Supabase download (already done by orchestrator)")
+        else:
+            logger.info("☁️ Supabase enabled - downloading all bot data...")
+            # This function now handles ALL bot files, including portfolios AND alpha state
+            download_bot_data_from_supabase() 
+        
         try:
             # Import all required downloaders
             from supabase_utils import download_overlap_results, download_alpha_overlap_results
@@ -316,8 +320,13 @@ async def on_startup(app: Application):
     # Start background loops optionally (useful when running standalone engines)
     logger.info("🔄 Starting background tasks...")
     
+    # Parse environment variables for engine isolation
+    USE_ISOLATED_ENGINES = os.getenv("USE_ISOLATED_ENGINES", "False").lower() == "true"
+    EXTERNAL_ALERT_ENGINE = os.getenv("EXTERNAL_ALERT_ENGINE", "False").lower() == "true"
+    EXTERNAL_TRADE_ENGINE = os.getenv("EXTERNAL_TRADE_ENGINE", "False").lower() == "true"
+
     # Discovery alert loop
-    if not os.getenv("EXTERNAL_ALERT_ENGINE") and not os.getenv("USE_ISOLATED_ENGINES"):
+    if not EXTERNAL_ALERT_ENGINE and not USE_ISOLATED_ENGINES:
         logger.info("   [INTERNAL] Starting background alert loop...")
         asyncio.create_task(background_loop(app, user_manager, portfolio_manager))
         asyncio.create_task(alpha_monitoring_loop(app, user_manager))
@@ -326,7 +335,7 @@ async def on_startup(app: Application):
         logger.info("   [EXTERNAL] Alert loops running in separate process.")
 
     # Trade detection and monitoring loop
-    if not os.getenv("EXTERNAL_TRADE_ENGINE") and not os.getenv("USE_ISOLATED_ENGINES"):
+    if not EXTERNAL_TRADE_ENGINE and not USE_ISOLATED_ENGINES:
         logger.info("   [INTERNAL] Starting trade monitoring loops...")
         asyncio.create_task(active_tracking_signal_loop(app, user_manager, portfolio_manager))
         asyncio.create_task(trade_monitoring_loop(app, user_manager, portfolio_manager))

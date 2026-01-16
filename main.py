@@ -15,6 +15,7 @@ It also exposes HTTP endpoints for uptime pings and additional integrations
 import logging
 import asyncio
 import aiohttp
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 import uvicorn
@@ -145,24 +146,53 @@ async def lifespan(app: FastAPI):
     """Manage bot, analytics, and collector lifecycles with proper startup and shutdown."""
     global bot_task, analytics_task, collector_task, alert_process, trade_process
 
-    # Startup
+    # 1. Critical Startup: Prepare Data
+    logger.info("🔧 Preparing data directory and downloading from Supabase...")
+    from config import DATA_DIR, USE_SUPABASE
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    
+    if USE_SUPABASE:
+        try:
+            from alerts.monitoring import download_bot_data_from_supabase
+            # This is a sync call, but it's essential to complete before anything else starts
+            download_bot_data_from_supabase()
+            logger.info("✅ Initial data download complete.")
+            # Set flag to skip redundant downloads in child processes/tasks
+            os.environ["SKIP_SUPABASE_DOWNLOAD"] = "True"
+        except Exception as e:
+            logger.error(f"❌ Failed to download initial data: {e}")
+
+    # 2. Start Isolated Engines (if enabled)
     logger.info(f"🚀 Initializing services (Isolated Engines: {USE_ISOLATED_ENGINES})...")
 
     if USE_ISOLATED_ENGINES:
-        logger.info("📡 Starting Alert Engine as subprocess...")
-        alert_process = await asyncio.create_subprocess_exec(
-            "python", "alert_engine.py",
-            stdout=None, stderr=None  # Inherit output to see logs in console
-        )
-        
-        logger.info("📡 Starting Trade Engine as subprocess...")
-        trade_process = await asyncio.create_subprocess_exec(
-            "python", "trade_engine.py",
-            stdout=None, stderr=None
-        )
+        try:
+            logger.info("📡 Starting Alert Engine as subprocess...")
+            alert_process = await asyncio.create_subprocess_exec(
+                sys.executable, "alert_engine.py",
+                stdout=None, stderr=None
+            )
+            
+            logger.info("📡 Starting Trade Engine as subprocess...")
+            trade_process = await asyncio.create_subprocess_exec(
+                sys.executable, "trade_engine.py",
+                stdout=None, stderr=None
+            )
+        except Exception as startup_e:
+            logger.error(f"❌ Failed to start isolated engine subprocesses: {startup_e}")
+            logger.warning("⚠️ Falling back to internal tasks for this session...")
+            # We don't disable USE_ISOLATED_ENGINES globally because bot.py
+            # logic depends on the env var. We strictly notify and move on.
     
     logger.info("🚀 Starting Telegram bot task...")
     bot_task = asyncio.create_task(bot.main())
+    
+    def bot_done_callback(t):
+        try:
+            t.result()
+        except Exception as e:
+            logger.error(f"❌ Bot task failed critically: {e}", exc_info=True)
+    bot_task.add_done_callback(bot_done_callback)
     
     logger.info("🚀 Starting Analytics Tracker task...")
     analytics_task = asyncio.create_task(analytics_tracker.main_loop())
