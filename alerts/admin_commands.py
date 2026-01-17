@@ -123,18 +123,17 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
         await update.message.reply_text(f"❌ Invalid target '{target}'.\nValid targets: {', '.join(valid_targets)}")
         return
 
-    # 2. Get Message Content & Media
-    msg_text = " ".join(args[1:])
+    # 2. Get Message Content & Media (Preserving Formatting)
+    full_text = update.message.text or update.message.caption or ""
+    # Split by whitespace, max 2 splits to get [/command, target, message_body]
+    parts = full_text.split(None, 2)
+    msg_text = parts[2] if len(parts) >= 3 else ""
+    
     photo_file_id = None
     
     # Check for direct photo attachment
     if update.message.photo:
         photo_file_id = update.message.photo[-1].file_id
-        # If no message provided in args, check caption, but remember args included command
-        if not msg_text:
-            # If command was in caption, context.args parsed it. 
-            # If command was /broadcast target, msg_text is empty.
-            pass
 
     # Check for reply to photo
     elif update.message.reply_to_message and update.message.reply_to_message.photo:
@@ -143,6 +142,10 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
     if not msg_text and not photo_file_id:
         await update.message.reply_text("❌ Please provide a message or image.")
         return
+
+    # Handle HTML breaks
+    if msg_text:
+        msg_text = msg_text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
 
     # 3. Get Recipients
     recipients = user_manager.get_users_by_segment(target)
@@ -176,8 +179,8 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, user
                 )
             sent += 1
         except Exception as e:
-            # Don't log every failure to console to avoid spam, maybe debug
-            logging.debug(f"Failed broadcast to {chat_id}: {e}")
+            # Log failure at error level so it shows up in production logs
+            logging.error(f"❌ Failed broadcast to {chat_id}: {e}")
             failed += 1
         
         await asyncio.sleep(0.05) # Rate limit protection
