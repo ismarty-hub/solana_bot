@@ -96,6 +96,7 @@ analytics_task = None
 collector_task = None
 alert_task = None
 trade_task = None
+trade_monitor_task = None
 alpha_task = None
 tp_metrics_task = None
 sync_task = None
@@ -168,7 +169,7 @@ async def lifespan(app: FastAPI):
     """Manage bot, analytics, and collector lifecycles with proper startup and shutdown."""
     global bot_task, analytics_task, collector_task, alert_process, trade_process
     global user_manager, portfolio_manager
-    global alert_task, trade_task, alpha_task, tp_metrics_task, sync_task, expiry_task
+    global alert_task, trade_task, trade_monitor_task, alpha_task, tp_metrics_task, sync_task, expiry_task
 
     # 1. Critical Startup: Prepare Data
     logger.info("🔧 Preparing data directory and downloading from Supabase...")
@@ -206,6 +207,7 @@ async def lifespan(app: FastAPI):
     expiry_task = asyncio.create_task(monthly_expiry_notifier(standalone_app, user_manager))
     
     trade_task = asyncio.create_task(active_tracking_signal_loop(standalone_app, user_manager, portfolio_manager))
+    trade_monitor_task = asyncio.create_task(trade_monitoring_loop(standalone_app, user_manager, portfolio_manager))
     tp_metrics_task = asyncio.create_task(tp_metrics_update_loop(portfolio_manager))
         
     # 5. Start Interface and Tracking tasks
@@ -234,8 +236,8 @@ async def lifespan(app: FastAPI):
     # Cancel all internal tasks
     tasks = {
         "bot": bot_task, "analytics": analytics_task, "collector": collector_task,
-        "alert": alert_task, "trade": trade_task, "alpha": alpha_task, 
-        "tp_metrics": tp_metrics_task, "sync": sync_task, "expiry": expiry_task
+        "alert": alert_task, "trade": trade_task, "trade_monitor": trade_monitor_task,
+        "alpha": alpha_task, "tp_metrics": tp_metrics_task, "sync": sync_task, "expiry": expiry_task
     }
     for name, task in tasks.items():
         if task and not task.done():
@@ -284,6 +286,7 @@ async def health_check():
         "collector": collector_task,
         "alert": alert_task,
         "trade": trade_task,
+        "trade_monitor": trade_monitor_task,
         "alpha": alpha_task,
         "sync": sync_task,
         "tp_metrics": tp_metrics_task,
