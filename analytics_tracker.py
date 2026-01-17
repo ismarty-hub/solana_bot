@@ -44,17 +44,22 @@ MCAP_LIQUIDITY_RATIO_THRESHOLD = 10.0 # If Mcap / Liquidity > 10, verify
 MIN_VOLUME_5M_USD = 500.0             # Minimum 5m volume to accept a suspicious pump
 
 # Maximum realistic price increases
-MAX_REALISTIC_PRICE_MULTIPLE = 100.0  # Price can't be >100x entry price
-MAX_REALISTIC_ROI = 10000.0           # 10,000% (100x) maximum
-EXTREME_PUMP_THRESHOLD = 1000.0       # 1000% ROI triggers extreme validation
+MAX_REALISTIC_PRICE_MULTIPLE = 5000.0 # Price can't be >5000x entry price (Moonshot protection)
+MAX_REALISTIC_ROI = 500000.0          # 500,000% (5000x) maximum
+EXTREME_PUMP_THRESHOLD = 1000.0      # 1000% ROI (10x) triggers multi-tier validation
 
 # Minimum liquidity requirements
-MIN_ABSOLUTE_LIQUIDITY_USD = 5000.0   # $5K minimum liquidity
-MIN_LIQUIDITY_FOR_HIGH_ROI = 20000.0  # $20K minimum if ROI > 500%
-MIN_LIQUIDITY_FOR_EXTREME_ROI = 50000.0  # $50K for ROIs > 1000%
+MIN_ABSOLUTE_LIQUIDITY_USD = 5000.0   # $5K minimum absolute liquidity
+MIN_LIQUIDITY_FOR_HIGH_ROI = 20000.0  # $20K minimum if ROI > 500% (5x)
+
+# Dynamic Liquidity Floors for Pump Validation
+MIN_LIQUIDITY_FOR_EXTREME_ROI = 50000.0   # $50K for 10x - 50x ROI
+MIN_LIQUIDITY_50X_ROI = 150000.0          # $150K for 50x - 100x ROI
+MIN_LIQUIDITY_100X_ROI = 300000.0         # $300K for 100x - 200x ROI
+MIN_LIQUIDITY_200X_ROI = 500000.0         # $500K for >200x ROI
 
 # Liquidity manipulation detection
-LIQUIDITY_DROP_THRESHOLD = 0.5        # Flag if liquidity drops below 50% of entry
+LIQUIDITY_DROP_THRESHOLD = 0.5            # Flag if liquidity drops below 50% of entry
 
 # Consensus validation
 SUSPICIOUS_PRICE_MULTIPLE = 5.0       # Trigger consensus check if price >5x entry
@@ -504,10 +509,20 @@ async def validate_price_with_multi_source(mint: str, token_data: dict, jupiter_
             logger.error(f"REJECTED {mint}: Liquidity manipulation detected")
             return None
         
-        if dex_liquidity < MIN_LIQUIDITY_FOR_EXTREME_ROI:
+        # Dynamic Liquidity Floor Selection
+        if potential_roi >= 20000:   # 200x
+            required_liq = MIN_LIQUIDITY_200X_ROI
+        elif potential_roi >= 10000: # 100x
+            required_liq = MIN_LIQUIDITY_100X_ROI
+        elif potential_roi >= 5000:  # 50x
+            required_liq = MIN_LIQUIDITY_50X_ROI
+        else:
+            required_liq = MIN_LIQUIDITY_FOR_EXTREME_ROI
+
+        if dex_liquidity < required_liq:
             logger.error(
-                f"REJECTED {mint}: Extreme ROI needs ${MIN_LIQUIDITY_FOR_EXTREME_ROI} liq, "
-                f"got ${dex_liquidity:.0f}"
+                f"REJECTED {mint}: ROI {potential_roi/100:.0f}x needs ${required_liq:,.0f} liq, "
+                f"got ${dex_liquidity:,.0f}"
             )
             return None
         
