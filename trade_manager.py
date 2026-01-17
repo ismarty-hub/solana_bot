@@ -9,6 +9,7 @@ import asyncio
 import statistics
 import aiohttp
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -398,9 +399,29 @@ class PortfolioManager:
     # --- ENTRY LOGIC ---
 
     async def download_active_tracking(self) -> Dict[str, Any]:
-        """Download active_tracking.json from Supabase."""
+        """
+        Load active_tracking.json.
+        PRIORITY: Local file (checked first for speed)
+        FALLBACK: Supabase download
+        """
+        # 1. Try local file first (Zero Latency)
+        if ACTIVE_TRACKING_FILE.exists():
+            try:
+                # Check file age
+                mtime = ACTIVE_TRACKING_FILE.stat().st_mtime
+                age = time.time() - mtime
+                if age < 30: # If local file is fresh (< 30s), use it immediately
+                    data = safe_load(ACTIVE_TRACKING_FILE, {})
+                    if data:
+                        logger.debug(f"✅ [TradeMgr] Using FRESH local active_tracking.json (age: {age:.1f}s)")
+                        return data
+            except Exception as e:
+                logger.warning(f"Failed to load fresh local file in TradeMgr: {e}")
+
+        # 2. If no local or local is stale, try Supabase
         if not USE_SUPABASE or not download_file:
-            return {}
+            # Fallback to local even if stale if Supabase is disabled
+            return safe_load(ACTIVE_TRACKING_FILE, {}) if ACTIVE_TRACKING_FILE.exists() else {}
         
         remote_path = "analytics/active_tracking.json"
         try:
@@ -408,8 +429,10 @@ class PortfolioManager:
                 with open(ACTIVE_TRACKING_FILE, 'r') as f:
                     return json.load(f)
         except Exception as e:
-            logger.error(f"Failed to download active_tracking.json: {e}")
-        return {}
+            logger.error(f"Failed to download active_tracking.json in TradeMgr: {e}")
+        
+        # 3. Final fallback
+        return safe_load(ACTIVE_TRACKING_FILE, {}) if ACTIVE_TRACKING_FILE.exists() else {}
 
     async def process_new_signal(self, chat_id: str, token_data: dict, user_manager, app: Application):
         """

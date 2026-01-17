@@ -9,6 +9,7 @@ import os
 import asyncio
 import logging
 import joblib
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from telegram.ext import Application
@@ -43,9 +44,25 @@ ACTIVE_TRACKING_FILE = Path(DATA_DIR) / "active_tracking.json"
 
 def download_active_tracking() -> Dict[str, Any]:
     """
-    Download active_tracking.json from Supabase to check initial ML_PASSED status.
-    Returns empty dict if download fails or file doesn't exist.
+    Load active_tracking.json.
+    PRIORITY: Local file (checked first for speed)
+    FALLBACK: Supabase download
     """
+    # 1. Try local file first (Zero Latency)
+    if ACTIVE_TRACKING_FILE.exists():
+        try:
+            # Check file age
+            mtime = ACTIVE_TRACKING_FILE.stat().st_mtime
+            age = time.time() - mtime
+            if age < 30: # If local file is fresh (< 30s), use it immediately
+                data = safe_load(ACTIVE_TRACKING_FILE, {})
+                if data:
+                    logger.debug(f"✅ Using FRESH local active_tracking.json (age: {age:.1f}s)")
+                    return data
+        except Exception as e:
+            logger.warning(f"Failed to load fresh local file: {e}")
+
+    # 2. If no local or local is stale, try Supabase (only if helper missing or disabled, skip)
     if USE_SUPABASE and download_file:
         try:
             remote_path = "analytics/active_tracking.json"
@@ -57,7 +74,7 @@ def download_active_tracking() -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Failed to download active_tracking.json: {e}")
     
-    # Fallback to local file
+    # Fallback to local file regardless of age
     if ACTIVE_TRACKING_FILE.exists():
         return safe_load(ACTIVE_TRACKING_FILE, {})
     
@@ -146,13 +163,22 @@ def download_bot_data_from_supabase():
         USER_STATS_FILE, 
         ALERTS_STATE_FILE, 
         GROUPS_FILE,
-        ALPHA_ALERTS_STATE_FILE
+        ALPHA_ALERTS_STATE_FILE,
+        ACTIVE_TRACKING_FILE,
+        OVERLAP_FILE,
+        DATA_DIR / "overlap_results_alpha.pkl"
     ]
 
     for file in files_to_download:
         try:
             remote_file_name = os.path.basename(file)
-            download_file(str(file), remote_file_name, bucket=BUCKET_NAME)
+            # Handle files with paths like analytics/active_tracking.json
+            if remote_file_name == "active_tracking.json":
+                remote_path = "analytics/active_tracking.json"
+            else:
+                remote_path = remote_file_name
+                
+            download_file(str(file), remote_path, bucket=BUCKET_NAME)
         except Exception as e:
             logger.debug(f"Could not download {file} from Supabase: {e}")
 

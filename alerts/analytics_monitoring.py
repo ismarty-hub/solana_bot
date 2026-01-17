@@ -29,7 +29,7 @@ import os
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from telegram.ext import Application
 
@@ -54,7 +54,7 @@ ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
 SNAPSHOT_FILE = DATA_DIR / "last_processed_tracking.json"
 OVERLAP_FILE = DATA_DIR / "overlap_results.pkl"
 ALPHA_OVERLAP_FILE = DATA_DIR / "overlap_results_alpha.pkl"
-POLL_INTERVAL = 30  # 30 seconds
+POLL_INTERVAL = 10  # Reduced to 10 seconds for faster execution
 
 
 
@@ -131,24 +131,19 @@ def get_composite_key(mint: str, signal_type: str) -> str:
     return f"{mint}_{signal_type}"
 
 
-def get_token_data_from_overlap(mint: str) -> Dict[str, Any]:
+def get_token_data_from_overlap(mint: str, overlap_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Attempt to read token metadata (grade and ml_prediction) from overlap files.
-    Checks discovery first, then alpha.
+    Identify token metadata from pre-loaded overlap datasets.
+    Checks list of overlap dicts provided.
     """
-    files_to_check = [OVERLAP_FILE, ALPHA_OVERLAP_FILE]
-    
-    for overlap_file in files_to_check:
+    for overlap in overlap_data:
         try:
-            if not overlap_file.exists():
-                continue
-
-            overlap = joblib.load(overlap_file)
             if not isinstance(overlap, dict):
                 continue
 
             history = overlap.get(mint)
             if not history:
+                # Fallback for keys that might contain the mint
                 for k, v in overlap.items():
                     if isinstance(k, str) and k.endswith(mint):
                         history = v
@@ -160,9 +155,12 @@ def get_token_data_from_overlap(mint: str) -> Dict[str, Any]:
             last_entry = history[-1]
             result = last_entry.get("result", {}) if isinstance(last_entry, dict) else {}
             if result:
+                # Add ML_PASSED status from the history entry level if it exists
+                if isinstance(last_entry, dict) and "ML_PASSED" in last_entry:
+                    result["ML_PASSED"] = last_entry["ML_PASSED"]
                 return result
         except Exception as e:
-            logger.debug(f"Error checking {overlap_file.name} for {mint}: {e}")
+            logger.debug(f"Error checking pre-loaded overlap data for {mint}: {e}")
             continue
 
     return {}
@@ -227,13 +225,24 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
             active_tracking = await download_active_tracking_with_retry()
             if not active_tracking:
                 logger.debug("No active tracking data; sleeping and retrying.")
-                await asyncio.sleep(ANALYTICS_POLL_INTERVAL)
+                await asyncio.sleep(POLL_INTERVAL)
                 continue
+
+            # Pre-load overlap data ONCE per loop to avoid massive disk IO
+            overlap_datasets = []
+            for f in [OVERLAP_FILE, ALPHA_OVERLAP_FILE]:
+                if f.exists():
+                    try:
+                        data = joblib.load(f)
+                        if isinstance(data, dict):
+                            overlap_datasets.append(data)
+                    except Exception as e:
+                        logger.error(f"Failed to pre-load {f.name}: {e}")
 
             trading_users = user_manager.get_trading_users()
             if not trading_users:
                 logger.debug("No trading users found; sleeping.")
-                await asyncio.sleep(ANALYTICS_POLL_INTERVAL)
+                await asyncio.sleep(POLL_INTERVAL)
                 continue
 
             new_signals_found = 0
@@ -290,8 +299,8 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         logger.debug(f"Skipping {key} - already processed (duplicate entry_time)")
                         continue
 
-                    # Grade and Enriched Metadata assignment
-                    enriched_data = get_token_data_from_overlap(mint)
+                    # Grade and Enriched Metadata assignment using PRE-LOADED data
+                    enriched_data = get_token_data_from_overlap(mint, overlap_datasets)
                     grade = enriched_data.get("grade")
                     
                     if not grade:
