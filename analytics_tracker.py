@@ -893,14 +893,19 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
 
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
-    # Get ML_PASSED from signal data, default to True (permit alerts/trading by default)
+    # Get ML_PASSED, Grade, and Prediction from signal data
     ml_passed = signal_data.get("ML_PASSED", True)
+    result_block = signal_data.get("result", {})
+    grade = result_block.get("grade", "MEDIUM")
+    ml_prediction = result_block.get("ml_prediction", {})
     
     token_data = {
         "mint": mint,
         "signal_type": signal_type,
         "symbol": symbol,
         "name": name,
+        "grade": grade,
+        "ml_prediction": ml_prediction,
         "entry_price": entry_price,
         "entry_mcap": entry_mcap,          
         "entry_liquidity": entry_liquidity,

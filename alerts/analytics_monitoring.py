@@ -39,8 +39,6 @@ from config import DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALL_GRADES, SIGNAL_FRESH
 # File IO helpers
 from shared.file_io import safe_load, safe_save
 
-import joblib
-
 # Try import download_file from supabase utils (optional)
 try:
     from supabase_utils import download_file
@@ -52,8 +50,6 @@ logger = logging.getLogger(__name__)
 # Constants
 ACTIVE_TRACKING_FILE = DATA_DIR / "active_tracking.json"
 SNAPSHOT_FILE = DATA_DIR / "last_processed_tracking.json"
-OVERLAP_FILE = DATA_DIR / "overlap_results.pkl"
-ALPHA_OVERLAP_FILE = DATA_DIR / "overlap_results_alpha.pkl"
 POLL_INTERVAL = 10  # Reduced to 10 seconds for faster execution
 
 
@@ -131,39 +127,6 @@ def get_composite_key(mint: str, signal_type: str) -> str:
     return f"{mint}_{signal_type}"
 
 
-def get_token_data_from_overlap(mint: str, overlap_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Identify token metadata from pre-loaded overlap datasets.
-    Checks list of overlap dicts provided.
-    """
-    for overlap in overlap_data:
-        try:
-            if not isinstance(overlap, dict):
-                continue
-
-            history = overlap.get(mint)
-            if not history:
-                # Fallback for keys that might contain the mint
-                for k, v in overlap.items():
-                    if isinstance(k, str) and k.endswith(mint):
-                        history = v
-                        break
-
-            if not history or not isinstance(history, list) or not history[-1]:
-                continue
-
-            last_entry = history[-1]
-            result = last_entry.get("result", {}) if isinstance(last_entry, dict) else {}
-            if result:
-                # Add ML_PASSED status from the history entry level if it exists
-                if isinstance(last_entry, dict) and "ML_PASSED" in last_entry:
-                    result["ML_PASSED"] = last_entry["ML_PASSED"]
-                return result
-        except Exception as e:
-            logger.debug(f"Error checking pre-loaded overlap data for {mint}: {e}")
-            continue
-
-    return {}
 
 
 def get_user_activation_time(user_prefs: Dict[str, Any]) -> Optional[datetime]:
@@ -228,17 +191,6 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                 await asyncio.sleep(POLL_INTERVAL)
                 continue
 
-            # Pre-load overlap data ONCE per loop to avoid massive disk IO
-            overlap_datasets = []
-            for f in [OVERLAP_FILE, ALPHA_OVERLAP_FILE]:
-                if f.exists():
-                    try:
-                        data = joblib.load(f)
-                        if isinstance(data, dict):
-                            overlap_datasets.append(data)
-                    except Exception as e:
-                        logger.error(f"Failed to pre-load {f.name}: {e}")
-
             trading_users = user_manager.get_trading_users()
             if not trading_users:
                 logger.debug("No trading users found; sleeping.")
@@ -299,9 +251,8 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         logger.debug(f"Skipping {key} - already processed (duplicate entry_time)")
                         continue
 
-                    # Grade and Enriched Metadata assignment using PRE-LOADED data
-                    enriched_data = get_token_data_from_overlap(mint, overlap_datasets)
-                    grade = enriched_data.get("grade")
+                    # Grade and ML Status directly from active_tracking (Source of Truth)
+                    grade = data.get("grade")
                     
                     if not grade:
                         ml_action = (data.get("ml_prediction") or {}).get("action", "UNKNOWN")
@@ -314,13 +265,11 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                         else:
                             grade = "MEDIUM"
                     
-                    # Merge enriched ML prediction with data from active_tracking
+                    # Metadata from active_tracking
                     ml_prediction = data.get("ml_prediction") or {}
-                    if enriched_data.get("ml_prediction"):
-                        ml_prediction.update(enriched_data["ml_prediction"])
                     
-                    # Merge ML Passed status (permissive - if either says passed)
-                    ml_passed = data.get("ML_PASSED", False) or enriched_data.get("ML_PASSED", False)
+                    # CRITICAL: Strict ML Status Check (Must be True in active_tracking)
+                    ml_passed = data.get("ML_PASSED", False)
 
                     # Process for each trading user
                     for chat_id in trading_users:
