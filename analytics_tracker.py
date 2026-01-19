@@ -1374,33 +1374,81 @@ async def upload_active_tracking():
     local_path = save_json(active_tracking, remote_path)
     if local_path: await upload_file_to_supabase(local_path, remote_path)
 
-async def main_loop():
-    await initialize()
-    last_signal = datetime.min.replace(tzinfo=timezone.utc)
-    last_stats = datetime.min.replace(tzinfo=timezone.utc)
-    last_upload = datetime.min.replace(tzinfo=timezone.utc)
-    
+async def signal_ingestion_loop():
+    """
+    Loop 1: Downloads and processes new signals (10s).
+    Pushes to SignalBus instantly.
+    """
+    logger.info("📡 Signal ingestion loop started.")
     while True:
         try:
-            now = get_now()
-            if (now - last_signal).total_seconds() >= SIGNAL_DOWNLOAD_INTERVAL:
-                await download_and_process_signals()
-                last_signal = now
-            
-            await update_active_token_prices()
-            
-            if (now - last_upload).total_seconds() >= ACTIVE_UPLOAD_INTERVAL:
-                await upload_active_tracking()
-                last_upload = now
-                
-            if (now - last_stats).total_seconds() >= STATS_UPDATE_INTERVAL:
-                await update_all_summary_stats()
-                last_stats = now
-
-            await asyncio.sleep(1)
+            await download_and_process_signals()
+            await asyncio.sleep(SIGNAL_DOWNLOAD_INTERVAL)
         except Exception as e:
-            logger.exception(f"Main loop error: {e}")
-            await asyncio.sleep(10)
+            logger.exception(f"Signal ingestion error: {e}")
+            await asyncio.sleep(SIGNAL_DOWNLOAD_INTERVAL)
+
+async def price_tracking_loop():
+    """
+    Loop 2: Updates prices for active tokens (Continuous).
+    Sleeps 1s to allow context switch, but internal logic handles per-token intervals.
+    """
+    logger.info("💸 Price tracking loop started.")
+    while True:
+        try:
+            await update_active_token_prices()
+            await asyncio.sleep(1) # Yield to other tasks
+        except Exception as e:
+            logger.exception(f"Price tracking error: {e}")
+            await asyncio.sleep(5)
+
+async def upload_loop():
+    """
+    Loop 3: Uploads active tracking file (Syncs state).
+    """
+    logger.info("☁️ Upload loop started.")
+    while True:
+        try:
+            await asyncio.sleep(ACTIVE_UPLOAD_INTERVAL)
+            await upload_active_tracking()
+        except Exception as e:
+            logger.exception(f"Upload loop error: {e}")
+            await asyncio.sleep(ACTIVE_UPLOAD_INTERVAL)
+
+async def stats_loop():
+    """
+    Loop 4: Generates summary stats (Infrequent).
+    """
+    logger.info("📊 Stats loop started.")
+    while True:
+        try:
+            await asyncio.sleep(STATS_UPDATE_INTERVAL)
+            await update_all_summary_stats()
+        except Exception as e:
+            logger.exception(f"Stats loop error: {e}")
+            await asyncio.sleep(STATS_UPDATE_INTERVAL)
+
+async def main_loop():
+    """
+    Main orchestrator that launches all concurrent loops.
+    """
+    await initialize()
+    
+    # Launch all tasks concurrently
+    tasks = [
+        asyncio.create_task(signal_ingestion_loop()),
+        asyncio.create_task(price_tracking_loop()),
+        asyncio.create_task(upload_loop()),
+        asyncio.create_task(stats_loop())
+    ]
+    
+    # Keep alive
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        logger.info("Main loop cancelled")
+    except Exception as e:
+        logger.critical(f"Critical main loop failure: {e}")
 
 if __name__ == "__main__":
     try:

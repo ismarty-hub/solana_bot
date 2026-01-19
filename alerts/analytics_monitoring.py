@@ -220,8 +220,11 @@ async def process_signal_batch(
             age_seconds = (now - entry_dt).total_seconds()
             
             if age_seconds > SIGNAL_FRESHNESS_WINDOW:
-                # Only log debug if it's way past (to avoid noise for bus signals that are just seconds old)
-                if age_seconds > SIGNAL_FRESHNESS_WINDOW + 60:
+                # Log INFO if it just missed the window (within 60s of cutoff) to explain "why didn't it open?"
+                if age_seconds < SIGNAL_FRESHNESS_WINDOW + 60:
+                     logger.info(f"⏳ Skipping {mint} - signal expired ({age_seconds:.0f}s > {SIGNAL_FRESHNESS_WINDOW}s limit)")
+                # Log DEBUG if it's very old (to avoid noise)
+                else:
                        logger.debug(f"Skipping {mint} - signal stale used {age_seconds:.0f}s > {SIGNAL_FRESHNESS_WINDOW}s limit")
                 continue
 
@@ -230,7 +233,9 @@ async def process_signal_batch(
 
             # Duplicate prevention
             if current_entry_time == last_entry_time:
-                # Silent skip for duplicates
+                # Only log if it's fresh (likely user watching it)
+                if age_seconds < 300: # 5 mins
+                    logger.debug(f"Skipping {mint} - fresh but already processed (snapshot match)")
                 continue
 
             # Grade and ML Status directly from active_tracking (Source of Truth)
@@ -257,24 +262,33 @@ async def process_signal_batch(
             for chat_id in trading_users:
                 try:
                     user_prefs = user_manager.get_user_prefs(chat_id) or {}
+                    user_desc = f"User {chat_id}"
 
                     # Respect auto-trade enabled
                     if user_prefs.get("auto_trade_enabled") is False:
+                        # Log only if this is a 'fresh' signal (first time seeing it in this loop iteration)
+                        # to avoid spamming for every poll.
+                        # But loop iterates every poll. Hard to avoid spam without state.
+                        # We rely on debug level for this.
+                        # logger.debug(f"Skipping {mint} for {user_desc}: Auto-trade disabled.")
                         continue
 
                     # Optional user-level activation timestamp
                     user_activation = get_user_activation_time(user_prefs)
                     if user_activation and entry_dt <= user_activation:
+                        # logger.debug(f"Skipping {mint} for {user_desc}: Entry time {entry_dt} <= Activation {user_activation}")
                         continue
 
                     # Alpha trading filtering (Decoupled)
                     if signal_type == "alpha" and not user_prefs.get("trade_alpha_alerts", False):
+                        logger.info(f"🚫 Filtering {mint} (Alpha) for {user_desc}: trade_alpha_alerts is OFF")
                         continue
 
                     # Discovery grade trading filtering (Decoupled)
                     if signal_type == "discovery":
                         allowed_trade_grades = user_prefs.get("trade_grades", ALL_GRADES)
                         if grade not in allowed_trade_grades:
+                            logger.info(f"🚫 Filtering {mint} ({grade}) for {user_desc}: Grade not in {allowed_trade_grades}")
                             continue
 
                     # Build token info
