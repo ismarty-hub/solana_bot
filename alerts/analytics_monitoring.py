@@ -318,6 +318,8 @@ async def process_signal_batch(
     return new_signals_found
 
 
+
+async def active_tracking_signal_loop(app: Application, user_manager, portfolio_manager):
     """
     Main analytics-driven loop.
 
