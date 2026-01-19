@@ -319,20 +319,93 @@ async def process_signal_batch(
 
 
 
+async def bus_consumer_loop(
+    app: Application, 
+    user_manager, 
+    portfolio_manager, 
+    snapshot: Dict[str, Any]
+):
+    """
+    Fast loop: only processes SignalBus events (0.1s interval).
+    This ensures zero-latency even if file download is slow.
+    """
+    logger.info("⚡ Bus consumer loop started.")
+    
+    while True:
+        try:
+            if SignalBus:
+                # 1. Peek first to avoid locking if empty
+                if SignalBus.peek_count() > 0:
+                    bus_signals = SignalBus.pop_all()
+                    if bus_signals:
+                        bus_items = []
+                        for data in bus_signals:
+                            if not data: continue
+                            mint = data.get("mint", "unknown")
+                            stype = data.get("signal_type", "unknown")
+                            k = get_composite_key(mint, stype)
+                            bus_items.append((k, data))
+                        
+                        if bus_items:
+                            count = await process_signal_batch(bus_items, user_manager, portfolio_manager, app, snapshot)
+                            if count > 0:
+                                safe_save(SNAPSHOT_FILE, snapshot)
+                                logger.info(f"⚡ Instant processed {count} signals from Bus")
+            
+            # Ultra-short sleep for responsiveness
+            await asyncio.sleep(0.1)
+            
+        except Exception as e:
+            logger.exception(f"Bus consumer loop error: {e}")
+            await asyncio.sleep(1.0)
+
+
+async def file_polling_loop(
+    app: Application, 
+    user_manager, 
+    portfolio_manager, 
+    snapshot: Dict[str, Any]
+):
+    """
+    Slow loop: polls active_tracking.json (10s interval).
+    Acts as backup/sync mechanism.
+    """
+    logger.info("📁 File polling loop started.")
+    
+    while True:
+        try:
+            active_tracking = await download_active_tracking_with_retry()
+            
+            if active_tracking:
+                trading_users = user_manager.get_trading_users()
+                if trading_users:
+                    file_items = list(active_tracking.items())
+                    new_signals_found = await process_signal_batch(
+                        file_items, user_manager, portfolio_manager, app, snapshot
+                    )
+
+                    if new_signals_found:
+                        try:
+                            safe_save(SNAPSHOT_FILE, snapshot)
+                            logger.info(f"Saved snapshot with {new_signals_found} new signals from file.")
+                        except Exception as e:
+                            logger.warning(f"Failed saving snapshot: {e}")
+
+            # Standard poll interval (10s)
+            await asyncio.sleep(POLL_INTERVAL)
+            
+        except Exception as e:
+            logger.exception(f"File polling loop error: {e}")
+            await asyncio.sleep(POLL_INTERVAL)
+
+
 async def active_tracking_signal_loop(app: Application, user_manager, portfolio_manager):
     """
-    Main analytics-driven loop.
-
-    Key differences from previous implementation:
-    - `startup_time` recorded at loop start; tokens with entry_time <= startup_time
-      are skipped (they existed before the bot started).
-    - For each user, if user_prefs includes an activation timestamp, tokens with
-      entry_time <= that activation timestamp are skipped for that user.
-    - Duplicate prevention via snapshot still applies.
+    Main entry point. Launches concurrent bus and file loops.
     """
-    logger.info("🔍 Analytics signal loop started.")
+    logger.info("🔍 Analytics signal loop started (Decoupled Mode).")
 
-    # Record start time for logging purposes
+    # Record start time
     startup_time = datetime.now(timezone.utc)
     logger.info(f"Analytics loop started at {startup_time.isoformat()}")
 
@@ -340,64 +413,12 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
     snapshot = safe_load(SNAPSHOT_FILE, {})
     logger.info(f"Loaded snapshot with {len(snapshot)} entries.")
 
-    # Slight initial delay to allow other systems to settle
+    # Slight initial delay
     await asyncio.sleep(2.0)
 
-    while True:
-        try:
-            # ----------------------------------------------------
-            # 1. PROCESS BUS SIGNALS (Zero Latency)
-            # ----------------------------------------------------
-            if SignalBus:
-                bus_signals = SignalBus.pop_all()
-                if bus_signals:
-                    bus_items = []
-                    for data in bus_signals:
-                        if not data: continue
-                        # construct key
-                        mint = data.get("mint", "unknown")
-                        stype = data.get("signal_type", "unknown")
-                        k = get_composite_key(mint, stype)
-                        bus_items.append((k, data))
-                    
-                    if bus_items:
-                        count = await process_signal_batch(bus_items, user_manager, portfolio_manager, app, snapshot)
-                        if count > 0:
-                            safe_save(SNAPSHOT_FILE, snapshot)
-                            logger.info(f"⚡ Instant processed {count} signals from Bus")
+    # Launch concurrent loops
+    task1 = asyncio.create_task(bus_consumer_loop(app, user_manager, portfolio_manager, snapshot))
+    task2 = asyncio.create_task(file_polling_loop(app, user_manager, portfolio_manager, snapshot))
 
-            # ----------------------------------------------------
-            # 2. POLL FILE (Backup / Sync)
-            # ----------------------------------------------------
-            active_tracking = await download_active_tracking_with_retry()
-            if not active_tracking:
-                logger.debug("No active tracking data; sleeping and retrying.")
-                await asyncio.sleep(POLL_INTERVAL)
-                continue
-
-            trading_users = user_manager.get_trading_users()
-            if not trading_users:
-                logger.debug("No trading users found; sleeping.")
-                await asyncio.sleep(POLL_INTERVAL)
-                continue
-
-            # Convert dict items to list for batch processing
-            file_items = list(active_tracking.items())
-            
-            new_signals_found = await process_signal_batch(
-                file_items, user_manager, portfolio_manager, app, snapshot
-            )
-
-            if new_signals_found:
-                try:
-                    safe_save(SNAPSHOT_FILE, snapshot)
-                    logger.info(f"Saved snapshot with {new_signals_found} new signals from file.")
-                except Exception as e:
-                    logger.warning(f"Failed saving snapshot: {e}")
-
-
-            await asyncio.sleep(POLL_INTERVAL)
-
-        except Exception as e:
-            logger.exception(f"Analytics signal loop failure: {e}")
-            await asyncio.sleep(POLL_INTERVAL)
+    # Keep main task alive
+    await asyncio.gather(task1, task2)
