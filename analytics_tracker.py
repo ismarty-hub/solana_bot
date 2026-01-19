@@ -30,6 +30,13 @@ from typing import Dict, Any, Optional, List
 
 load_dotenv()
 
+# Import SignalBus for zero-latency communication
+try:
+    from shared.signal_bus import SignalBus
+except ImportError:
+    SignalBus = None
+
+
 # --- Configuration Variables ---
 
 # Polling & Tracking
@@ -848,19 +855,54 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         logger.warning(f"Excluding {mint} ({signal_type}): No entry price found.")
         return
 
+    # Try to get token age from ml_prediction.key_metrics (most accurate for discovery)
+    # Discovery: ml_prediction at top level
+    # Alpha: ml_prediction inside result
+    ml_pred = signal_data.get("ml_prediction") or signal_data.get("result", {}).get("ml_prediction") or {}
+    ml_token_age = None
+    if isinstance(ml_pred, dict):
+        key_metrics = ml_pred.get("key_metrics", {})
+        if isinstance(key_metrics, dict):
+            ml_token_age = key_metrics.get("token_age_hours")
+
+    # Fallback: Calculate from detectedAt (alpha) or block_time (discovery)
     detected_at_str = signal_data.get("result", {}).get("security", {}).get("rugcheck_raw", {}).get("raw", {}).get("detectedAt")
+    block_time = signal_data.get("result", {}).get("block_time")
     entry_ts_str = safe_get_timestamp(signal_data)
     creation_ts_str = detected_at_str or entry_ts_str
     
-    if creation_ts_str is None:
+    if not creation_ts_str and block_time:
+        try:
+            creation_dt = datetime.fromtimestamp(block_time, tz=timezone.utc)
+            creation_ts_str = to_iso(creation_dt)
+        except Exception:
+            pass
+
+    if creation_ts_str is None and ml_token_age is None:
         logger.warning(f"Excluding {mint}: Could not determine creation timestamp.")
         return
 
-    creation_dt = parse_ts(creation_ts_str)
-    pair_created_at_seconds = int(creation_dt.timestamp())
-    age_seconds = (get_now() - creation_dt).total_seconds()
-    age_hours = age_seconds / 3600
-    if age_hours < 0: age_hours = 0
+    # Calculate age_hours - PREFER ML PREDICTION (DexScreener derived)
+    if ml_token_age is not None:
+        age_hours = ml_token_age
+        
+        # Determine pair_created_at_seconds for reference
+        if creation_ts_str:
+            creation_dt = parse_ts(creation_ts_str)
+            pair_created_at_seconds = int(creation_dt.timestamp())
+        elif block_time:
+            pair_created_at_seconds = block_time
+        else:
+            # Back-calculate from age
+            pair_created_at_seconds = int(get_now().timestamp()) - int(age_hours * 3600)
+            
+    else:
+        # Fallback to old calculation
+        creation_dt = parse_ts(creation_ts_str)
+        pair_created_at_seconds = int(creation_dt.timestamp())
+        age_seconds = (get_now() - creation_dt).total_seconds()
+        age_hours = age_seconds / 3600
+        if age_hours < 0: age_hours = 0
     
     is_new = age_hours <= 12
     interval_sec = PRICE_CHECK_INTERVAL_NEW if is_new else PRICE_CHECK_INTERVAL_OLD
@@ -909,10 +951,13 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     tracking_end_time = entry_time + timedelta(hours=duration_hours)
     
     # Get ML_PASSED, Grade, and Prediction from signal data
+    # Get ML_PASSED, Grade, and Prediction from signal data
     ml_passed = signal_data.get("ML_PASSED", True)
     result_block = signal_data.get("result", {})
     grade = result_block.get("grade", "MEDIUM")
-    ml_prediction = result_block.get("ml_prediction", {})
+    
+    # ml_prediction extraction fixed (Top level or Result level)
+    ml_prediction = signal_data.get("ml_prediction") or result_block.get("ml_prediction") or {}
     
     token_data = {
         "mint": mint,
@@ -961,7 +1006,23 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     composite_key = get_composite_key(mint, signal_type)
     active_tracking[composite_key] = token_data
     
-    logger.info(f"New token: {symbol} | Key: {composite_key} | Liq: ${entry_liquidity} | Mcap: ${entry_mcap}")
+    # ----------------------------------------------------
+    # 1. PUSH TO SIGNAL BUS (Zero Latency)
+    # ----------------------------------------------------
+    if SignalBus:
+        SignalBus.push_signal(token_data)
+        logger.info(f"⚡ Pushed {mint} to SignalBus (Zero Latency)")
+        
+    # ----------------------------------------------------
+    # 2. TRIGGER IMMEDIATE UPLOAD (Low Latency Persistence)
+    # ----------------------------------------------------
+    try:
+        await upload_active_tracking()
+        logger.info(f"📤 Triggered immediate upload for {mint}")
+    except Exception as e:
+        logger.warning(f"Immediate upload failed for {mint}: {e}")
+
+    logger.info(f"Started tracking new token: {name} ({mint}) - Type: {signal_type}, Grade: {grade}, Age: {age_hours:.2f}h")
 
 async def process_signals(signal_data: dict, signal_type: str):
     if not isinstance(signal_data, dict): return

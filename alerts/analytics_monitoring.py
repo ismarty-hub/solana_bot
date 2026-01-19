@@ -45,6 +45,13 @@ try:
 except Exception:
     download_file = None  # graceful fallback
 
+# Import SignalBus for zero-latency communication
+try:
+    from shared.signal_bus import SignalBus
+except ImportError:
+    SignalBus = None
+
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -159,7 +166,158 @@ def get_user_activation_time(user_prefs: Dict[str, Any]) -> Optional[datetime]:
     return None
 
 
-async def active_tracking_signal_loop(app: Application, user_manager, portfolio_manager):
+async def process_signal_batch(
+    items: List[Any], 
+    user_manager, 
+    portfolio_manager, 
+    app, 
+    snapshot: Dict[str, Any]
+) -> int:
+    """
+    Process a batch of signals (from File or SignalBus).
+    items: List of (composite_key, data_dict) tuples
+    """
+    new_signals_found = 0
+    trading_users = user_manager.get_trading_users()
+    if not trading_users:
+        return 0
+
+    for composite_key, data in items:
+        try:
+            # Defensive checks: skip None/malformed entries
+            if data is None or not isinstance(data, dict):
+                logger.warning(f"Skipping {composite_key} - active_tracking entry is None or invalid.")
+                continue
+
+            # expected composite_key format may be provided, but also support explicit fields
+            if "_" in composite_key:
+                mint_from_key, signal_type_from_key = composite_key.rsplit("_", 1)
+            else:
+                mint_from_key = data.get("mint")
+                signal_type_from_key = data.get("signal_type")
+
+            # prefer explicit fields if present
+            mint = data.get("mint") or mint_from_key
+            signal_type = data.get("signal_type") or signal_type_from_key
+
+            if not mint or not signal_type:
+                logger.debug(f"Skipping malformed entry: missing mint or signal_type for key={composite_key}")
+                continue
+
+            current_entry_time = data.get("entry_time")
+            if not current_entry_time:
+                logger.debug(f"Skipping {mint} - missing entry_time.")
+                continue
+
+            entry_dt = parse_iso_to_dt(current_entry_time)
+            if not entry_dt:
+                logger.debug(f"Skipping {mint} - could not parse entry_time: {current_entry_time}")
+                continue
+
+            # CRITICAL: Signal Freshness Check
+            # Skip signals that are older than the configured window (e.g. 5 mins)
+            now = datetime.now(timezone.utc)
+            age_seconds = (now - entry_dt).total_seconds()
+            
+            if age_seconds > SIGNAL_FRESHNESS_WINDOW:
+                # Only log debug if it's way past (to avoid noise for bus signals that are just seconds old)
+                if age_seconds > SIGNAL_FRESHNESS_WINDOW + 60:
+                       logger.debug(f"Skipping {mint} - signal stale used {age_seconds:.0f}s > {SIGNAL_FRESHNESS_WINDOW}s limit")
+                continue
+
+            key = get_composite_key(mint, signal_type)
+            last_entry_time = snapshot.get(key, {}).get("entry_time")
+
+            # Duplicate prevention
+            if current_entry_time == last_entry_time:
+                # Silent skip for duplicates
+                continue
+
+            # Grade and ML Status directly from active_tracking (Source of Truth)
+            grade = data.get("grade")
+            
+            if not grade:
+                ml_action = (data.get("ml_prediction") or {}).get("action", "UNKNOWN")
+                if signal_type == "alpha":
+                    grade = "HIGH"
+                elif ml_action == "BUY":
+                    grade = "HIGH"
+                elif ml_action == "CONSIDER":
+                    grade = "MEDIUM"
+                else:
+                    grade = "MEDIUM"
+            
+            # Metadata from active_tracking
+            ml_prediction = data.get("ml_prediction") or {}
+            
+            # CRITICAL: Strict ML Status Check (Must be True in active_tracking)
+            ml_passed = data.get("ML_PASSED", False)
+
+            # Process for each trading user
+            for chat_id in trading_users:
+                try:
+                    user_prefs = user_manager.get_user_prefs(chat_id) or {}
+
+                    # Respect auto-trade enabled
+                    if user_prefs.get("auto_trade_enabled") is False:
+                        continue
+
+                    # Optional user-level activation timestamp
+                    user_activation = get_user_activation_time(user_prefs)
+                    if user_activation and entry_dt <= user_activation:
+                        continue
+
+                    # Alpha trading filtering (Decoupled)
+                    if signal_type == "alpha" and not user_prefs.get("trade_alpha_alerts", False):
+                        continue
+
+                    # Discovery grade trading filtering (Decoupled)
+                    if signal_type == "discovery":
+                        allowed_trade_grades = user_prefs.get("trade_grades", ALL_GRADES)
+                        if grade not in allowed_trade_grades:
+                            continue
+
+                    # Build token info
+                    token_info = {
+                        "mint": mint,
+                        "signal_type": signal_type,
+                        "symbol": data.get("symbol", "Unknown"),
+                        "name": data.get("name", "Unknown"),
+                        "price": data.get("entry_price"),
+                        "grade": grade,
+                        "token_age_hours": data.get("token_age_hours"),
+                        "tracking_end_time": data.get("tracking_end_time"),
+                        "entry_time": data.get("entry_time"),
+                        "entry_mcap": data.get("entry_mcap"),
+                        "entry_liquidity": data.get("entry_liquidity"),
+                        "ml_prediction": ml_prediction,
+                        "ml_passed": ml_passed,
+                    }
+
+                    await portfolio_manager.process_new_signal(
+                        chat_id, token_info, user_manager, app
+                    )
+                    logger.info(f"🚀 Processed signal: {key} [{grade}] for user {chat_id}")
+                except Exception as e:
+                    logger.exception(f"Error processing signal for user {chat_id} token={key}: {e}")
+                    continue
+
+            # Update snapshot
+            snapshot[key] = {
+                "entry_time": current_entry_time,
+                "processed_at": datetime.now(timezone.utc).isoformat() + "Z",
+                "signal_type": signal_type,
+                "symbol": data.get("symbol", "Unknown"),
+            }
+            new_signals_found += 1
+
+        except Exception as e:
+            logger.exception(f"Error processing token {composite_key}: {e}")
+            continue
+
+    return new_signals_found
+
+
     """
     Main analytics-driven loop.
 
@@ -185,6 +343,30 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
 
     while True:
         try:
+            # ----------------------------------------------------
+            # 1. PROCESS BUS SIGNALS (Zero Latency)
+            # ----------------------------------------------------
+            if SignalBus:
+                bus_signals = SignalBus.pop_all()
+                if bus_signals:
+                    bus_items = []
+                    for data in bus_signals:
+                        if not data: continue
+                        # construct key
+                        mint = data.get("mint", "unknown")
+                        stype = data.get("signal_type", "unknown")
+                        k = get_composite_key(mint, stype)
+                        bus_items.append((k, data))
+                    
+                    if bus_items:
+                        count = await process_signal_batch(bus_items, user_manager, portfolio_manager, app, snapshot)
+                        if count > 0:
+                            safe_save(SNAPSHOT_FILE, snapshot)
+                            logger.info(f"⚡ Instant processed {count} signals from Bus")
+
+            # ----------------------------------------------------
+            # 2. POLL FILE (Backup / Sync)
+            # ----------------------------------------------------
             active_tracking = await download_active_tracking_with_retry()
             if not active_tracking:
                 logger.debug("No active tracking data; sleeping and retrying.")
@@ -197,154 +379,20 @@ async def active_tracking_signal_loop(app: Application, user_manager, portfolio_
                 await asyncio.sleep(POLL_INTERVAL)
                 continue
 
-            new_signals_found = 0
-
-            # iterate through items: keys are expected to be "{mint}_{signal_type}"
-            for composite_key, data in active_tracking.items():
-                try:
-                    # Defensive checks: skip None/malformed entries
-                    if data is None or not isinstance(data, dict):
-                        logger.warning(f"Skipping {composite_key} - active_tracking entry is None or invalid.")
-                        continue
-
-                    # expected composite_key format may be provided, but also support explicit fields
-                    if "_" in composite_key:
-                        mint_from_key, signal_type_from_key = composite_key.rsplit("_", 1)
-                    else:
-                        mint_from_key = data.get("mint")
-                        signal_type_from_key = data.get("signal_type")
-
-                    # prefer explicit fields if present
-                    mint = data.get("mint") or mint_from_key
-                    signal_type = data.get("signal_type") or signal_type_from_key
-
-                    if not mint or not signal_type:
-                        logger.debug(f"Skipping malformed entry: missing mint or signal_type for key={composite_key}")
-                        continue
-
-                    current_entry_time = data.get("entry_time")
-                    if not current_entry_time:
-                        logger.debug(f"Skipping {mint} - missing entry_time.")
-                        continue
-
-                    entry_dt = parse_iso_to_dt(current_entry_time)
-                    if not entry_dt:
-                        logger.debug(f"Skipping {mint} - could not parse entry_time: {current_entry_time}")
-                        continue
-
-
-                    # CRITICAL: Signal Freshness Check
-                    # Skip signals that are older than the configured window (e.g. 5 mins)
-                    # This prevents executing stale signals if the user adds capital later
-                    now = datetime.now(timezone.utc)
-                    age_seconds = (now - entry_dt).total_seconds()
-                    
-                    if age_seconds > SIGNAL_FRESHNESS_WINDOW:
-                        logger.debug(f"Skipping {mint} - signal stale used {age_seconds:.0f}s > {SIGNAL_FRESHNESS_WINDOW}s limit")
-                        continue
-
-                    key = get_composite_key(mint, signal_type)
-                    last_entry_time = snapshot.get(key, {}).get("entry_time")
-
-                    # Duplicate prevention
-                    if current_entry_time == last_entry_time:
-                        logger.debug(f"Skipping {key} - already processed (duplicate entry_time)")
-                        continue
-
-                    # Grade and ML Status directly from active_tracking (Source of Truth)
-                    grade = data.get("grade")
-                    
-                    if not grade:
-                        ml_action = (data.get("ml_prediction") or {}).get("action", "UNKNOWN")
-                        if signal_type == "alpha":
-                            grade = "HIGH"
-                        elif ml_action == "BUY":
-                            grade = "HIGH"
-                        elif ml_action == "CONSIDER":
-                            grade = "MEDIUM"
-                        else:
-                            grade = "MEDIUM"
-                    
-                    # Metadata from active_tracking
-                    ml_prediction = data.get("ml_prediction") or {}
-                    
-                    # CRITICAL: Strict ML Status Check (Must be True in active_tracking)
-                    ml_passed = data.get("ML_PASSED", False)
-
-                    # Process for each trading user
-                    for chat_id in trading_users:
-                        try:
-                            user_prefs = user_manager.get_user_prefs(chat_id) or {}
-
-                            # Respect auto-trade enabled
-                            if user_prefs.get("auto_trade_enabled") is False:
-                                logger.debug(f"User {chat_id} opted out of auto-trade; skipping {key}")
-                                continue
-
-                            # Optional user-level activation timestamp
-                            user_activation = get_user_activation_time(user_prefs)
-                            if user_activation and entry_dt <= user_activation:
-                                logger.debug(
-                                    f"Skipping {key} for user {chat_id}: entry_time {entry_dt.isoformat()} <= activation {user_activation.isoformat()}"
-                                )
-                                continue
-
-                            # Alpha trading filtering (Decoupled)
-                            if signal_type == "alpha" and not user_prefs.get("trade_alpha_alerts", False):
-                                logger.debug(f"User {chat_id} disabled alpha auto-trading; skipping {key}")
-                                continue
-
-                            # Discovery grade trading filtering (Decoupled)
-                            if signal_type == "discovery":
-                                allowed_trade_grades = user_prefs.get("trade_grades", ALL_GRADES)
-                                if grade not in allowed_trade_grades:
-                                    logger.debug(f"User {chat_id} trade grade filter prevents {key} ({grade})")
-                                    continue
-
-                            # Build token info
-                            token_info = {
-                                "mint": mint,
-                                "signal_type": signal_type,
-                                "symbol": data.get("symbol", "Unknown"),
-                                "name": data.get("name", "Unknown"),
-                                "price": data.get("entry_price"),
-                                "grade": grade,
-                                "token_age_hours": data.get("token_age_hours"),
-                                "tracking_end_time": data.get("tracking_end_time"),
-                                "entry_time": data.get("entry_time"),
-                                "entry_mcap": data.get("entry_mcap"),
-                                "entry_liquidity": data.get("entry_liquidity"),
-                                "ml_prediction": ml_prediction,
-                                "ml_passed": ml_passed,
-                            }
-
-                            await portfolio_manager.process_new_signal(
-                                chat_id, token_info, user_manager, app
-                            )
-                            logger.info(f"Processed new signal for user={chat_id} token={key} grade={grade}")
-                        except Exception as e:
-                            logger.exception(f"Error processing signal for user {chat_id} token={key}: {e}")
-                            continue
-
-                    # Update snapshot
-                    snapshot[key] = {
-                        "entry_time": current_entry_time,
-                        "processed_at": datetime.now(timezone.utc).isoformat() + "Z",
-                        "signal_type": signal_type,
-                        "symbol": data.get("symbol", "Unknown"),
-                    }
-                    new_signals_found += 1
-
-                except Exception as e:
-                    logger.exception(f"Error processing token {composite_key}: {e}")
-                    continue
+            # Convert dict items to list for batch processing
+            file_items = list(active_tracking.items())
+            
+            new_signals_found = await process_signal_batch(
+                file_items, user_manager, portfolio_manager, app, snapshot
+            )
 
             if new_signals_found:
                 try:
                     safe_save(SNAPSHOT_FILE, snapshot)
-                    logger.info(f"Saved snapshot with {new_signals_found} new signals.")
+                    logger.info(f"Saved snapshot with {new_signals_found} new signals from file.")
                 except Exception as e:
                     logger.warning(f"Failed saving snapshot: {e}")
+
 
             await asyncio.sleep(POLL_INTERVAL)
 
