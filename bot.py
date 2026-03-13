@@ -275,11 +275,12 @@ async def on_startup(app: Application):
 
     if USE_SUPABASE:
         if os.getenv("SKIP_SUPABASE_DOWNLOAD") == "True":
-            logger.info("ℹ️ Skipping Supabase download (already done by orchestrator)")
+            logger.info("ℹ️ Skipping Supabase download (already done by orchestrator or standalone startup)")
         else:
             logger.info("☁️ Supabase enabled - downloading all bot data...")
             # This function now handles ALL bot files, including portfolios AND alpha state
             download_bot_data_from_supabase() 
+
         
         try:
             # Import all required downloaders
@@ -329,15 +330,28 @@ async def main():
     """Main entry point for the bot."""
     logger.info("🤖 Initializing Telegram bot application...")
     
-    # Initialize managers if running standalone
+    # Initialize managers if running standalone (not via main.py orchestrator)
     global user_manager, portfolio_manager
     if user_manager is None or portfolio_manager is None:
         logger.info("Initializing managers for standalone bot run.")
-        from config import USER_PREFS_FILE, USER_STATS_FILE, PORTFOLIOS_FILE
+        from config import USE_SUPABASE, USER_PREFS_FILE, USER_STATS_FILE, PORTFOLIOS_FILE
+        
+        # CRITICAL FIX: Ensure we download live DB BEFORE creating managers
+        # so we don't load stale local files and later upload them.
+        if USE_SUPABASE:
+            from alerts.monitoring import download_bot_data_from_supabase
+            logger.info("☁️ Standalone Mode: Syncing live data from Supabase before initialization...")
+            try:
+                download_bot_data_from_supabase()
+                os.environ["SKIP_SUPABASE_DOWNLOAD"] = "True" # Prevent on_startup from doing it again
+            except Exception as e:
+                logger.error(f"❌ Failed to sync from Supabase: {e}")
+
         user_manager = UserManager(USER_PREFS_FILE, USER_STATS_FILE)
         portfolio_manager = PortfolioManager(PORTFOLIOS_FILE)
 
     defaults = Defaults(parse_mode="HTML")
+
     app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
 
     # Register core commands
