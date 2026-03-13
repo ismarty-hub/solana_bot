@@ -140,6 +140,60 @@ def format_ml_insight_for_alert(ml_data: Dict[str, Any]) -> str:
 
 
 # ============================================================================
+# SMART MONEY INSIGHT FORMATTING
+# ============================================================================
+
+def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
+    """Format Smart Money conviction data for alerts."""
+    if not sm_data or not sm_data.get("enabled"):
+        return ""
+    
+    boost_tier = sm_data.get("boost_tier", "NONE")
+    if boost_tier in ("NONE", "FILTERED"):
+        return ""
+
+    lines = ["", "--- 🧠 <b>Smart Money</b> ---"]
+    
+    # Conviction Score Bar
+    score = sm_data.get("smart_money_weighted_score", 0.0)
+    score_display = min(int(score), 100)
+    
+    # Progress bar mapping (1 block per 20 pts)
+    filled = min(5, max(1, int(score_display / 20)))
+    bar = "🟩" * filled + "⬜" * (5 - filled)
+    lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
+
+    # Cluster detection
+    if sm_data.get("has_cluster"):
+        cluster_len = len(sm_data.get("cluster_wallets", []))
+        lines.append(f"🔥 <b>Smart Cluster:</b> {cluster_len} Entities Active")
+    
+    # Institutional breakdown
+    pos_wallets = sm_data.get("positive_entity_wallets", [])
+    if pos_wallets:
+        profiles = sm_data.get("wallet_profiles", {})
+        institutions = []
+        for w in pos_wallets:
+            prof = profiles.get(w, {})
+            name = prof.get("entity_name") or prof.get("entity_category", "").title()
+            if name and name not in institutions:
+                institutions.append(name)
+        
+        if institutions:
+            top_inst = ", ".join(institutions[:3])
+            if len(institutions) > 3:
+                top_inst += f" (+{len(institutions)-3} more)"
+            lines.append(f"🏛️ <b>Institutions:</b> {html.escape(top_inst)}")
+    
+    # Insider activity
+    insiders = sm_data.get("insider_wallets", [])
+    if insiders:
+        lines.append(f"🎯 <b>Insider Buyers:</b> {len(insiders)} Active")
+
+    return "\n".join(lines)
+
+
+# ============================================================================
 # ALPHA ALERTS - High-priority overlap alerts with security analysis
 # ============================================================================
 
@@ -378,8 +432,15 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         ml_data = result.get("ml_prediction", {})
         ml_section = format_ml_insight_for_alert(ml_data)
 
+        # Get Smart Money data
+        sm_data = result.get("smart_money", {})
+        sm_section = format_smart_money_insight(sm_data)
+        
+        # Smart Alert Label
+        alert_label = sm_data.get("alert_label", "ALPHA 🚀") if sm_data.get("enabled") else "ALPHA 🚀"
+
         # Build the message
-        msg = f"""🚀 <b>Alpha Alert: ${esc_symbol}</b> 🚀
+        msg = f"""🔥 <b>{html.escape(alert_label)}: ${esc_symbol}</b> 🔥
 
 <b>{esc_name}</b>
 <code>{esc_mint}</code>
@@ -407,6 +468,7 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 --- ⚠️ <b>Top Risks</b> ---
 {risk_str}
 {ml_section}
+{sm_section}
 
 --- 🔗 <b>Links</b> ---
 <a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
@@ -558,9 +620,13 @@ def format_alert_html(
             mc_line = "💰 <b>Market Cap/FDV:</b> Unknown"
 
     # Build alert
+    sm_data = token_data.get("smart_money", {})
+    alert_label = sm_data.get("alert_label", "Grade Changed") if alert_type == "CHANGE" else sm_data.get("alert_label", "New Token Detected")
+    
     lines = [
-        "🚀 <b>New Token Detected</b>" if alert_type == "NEW" else "🔔 <b>Grade Changed</b>",
+        f"🔔 <b>{html.escape(alert_label)}</b>",
         f"<b>{name}</b> ({symbol})" if symbol else f"<b>{name}</b>",
+
         f"<b>Grade:</b> {grade}" + (f" (was {previous_grade})" if previous_grade and alert_type == "CHANGE" else ""),
         mc_line,
         f"💧 <b>Liquidity:</b> {format_marketcap_display(current_liquidity)}" if current_liquidity is not None else "💧 <b>Liquidity:</b> Unknown",
@@ -579,6 +645,10 @@ def format_alert_html(
         ml_section = format_ml_insight_for_alert(ml_data)
         if ml_section:
             lines.append(ml_section)
+        # Add Smart Money insight
+        sm_section = format_smart_money_insight(sm_data)
+        if sm_section:
+            lines.append(sm_section)
         
         lines.append("")
         lines.append(
