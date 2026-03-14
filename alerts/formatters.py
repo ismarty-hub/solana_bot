@@ -143,8 +143,19 @@ def format_ml_insight_for_alert(ml_data: Dict[str, Any]) -> str:
 # SMART MONEY INSIGHT FORMATTING
 # ============================================================================
 
-def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
-    """Format Smart Money conviction data for alerts."""
+def format_smart_money_insight(sm_data: Dict[str, Any], conviction: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Format Smart Money conviction data for alerts.
+    Prioritizes the new "Gold Standard" conviction summary if available.
+    """
+    # 1. Check for conviction summary first (new Gold Standard system)
+    if conviction and conviction.get("alpha_score") is not None:
+        return _format_gold_standard_conviction(conviction)
+    
+    # 2. Fallback to older raw sm_data / transitional conviction
+    if conviction and conviction.get("sm_weighted_score") is not None:
+        return _format_smart_money_from_conviction(conviction)
+    
     if not sm_data or not sm_data.get("enabled"):
         return ""
     
@@ -157,38 +168,92 @@ def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
     # Conviction Score Bar
     score = sm_data.get("smart_money_weighted_score", 0.0)
     score_display = min(int(score), 100)
-    
-    # Progress bar mapping (1 block per 20 pts)
     filled = min(5, max(1, int(score_display / 20)))
     bar = "🟩" * filled + "⬜" * (5 - filled)
     lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
 
-    # Cluster detection
     if sm_data.get("has_cluster"):
         cluster_len = len(sm_data.get("cluster_wallets", []))
         lines.append(f"🔥 <b>Smart Cluster:</b> {cluster_len} Entities Active")
     
-    # Institutional breakdown
-    pos_wallets = sm_data.get("positive_entity_wallets", [])
-    if pos_wallets:
-        profiles = sm_data.get("wallet_profiles", {})
-        institutions = []
-        for w in pos_wallets:
-            prof = profiles.get(w, {})
-            name = prof.get("entity_name") or prof.get("entity_category", "").title()
-            if name and name not in institutions:
-                institutions.append(name)
-        
-        if institutions:
-            top_inst = ", ".join(institutions[:3])
-            if len(institutions) > 3:
-                top_inst += f" (+{len(institutions)-3} more)"
-            lines.append(f"🏛️ <b>Institutions:</b> {html.escape(top_inst)}")
+    return "\n".join(lines)
+
+
+def _format_gold_standard_conviction(conv: Dict[str, Any]) -> str:
+    """Helper to format the new Gold Standard Smart Money section."""
+    sentiment = conv.get("trader_sentiment", "NEUTRAL 📊")
+    lines = ["", f"--- 🧠 <b>SENTIMENT: {sentiment}</b> ---"]
     
-    # Insider activity
-    insiders = sm_data.get("insider_wallets", [])
-    if insiders:
-        lines.append(f"🎯 <b>Insider Buyers:</b> {len(insiders)} Active")
+    # 1. Alpha Score Bar
+    score = conv.get("alpha_score", 0.0)
+    score_display = min(int(score), 100)
+    # 1 block per 10 points for more granularity on alpha score
+    filled = min(10, max(1, int(score_display / 10)))
+    bar = "🟩" * filled + "⬜" * (10 - filled)
+    lines.append(f"<b>Alpha Score:</b> {score_display}/100 {bar}")
+
+    # 2. Cluster Aggregates (The Gold Standard)
+    profit = conv.get("cluster_combined_profit_usd")
+    wr = conv.get("cluster_avg_win_rate_pct")
+    count = conv.get("cluster_qualified_wallets", 0)
+    
+    if profit is not None and profit > 0:
+        lines.append(f"💰 <b>Cluster Profit:</b> +${profit:,.0f} Realized")
+    
+    if wr is not None:
+        lines.append(f"🏆 <b>Avg Win Rate:</b> {wr:.0f}% across {count} wallets")
+
+    # 3. Support Tiers (GMGN Style)
+    support_label = conv.get("support_tier_label")
+    if support_label and support_label != "No Qualified Wallets":
+        lines.append(f"🏛️ <b>Support:</b> {support_label}")
+
+    # 4. Best Wallet (Proof of Competence)
+    best = conv.get("best_wallet")
+    if best:
+        best_p = best.get("profit_usd", 0)
+        best_wr = best.get("win_rate", 0)
+        lines.append(f"👑 <b>Best Wallet:</b> {best_wr:.0f}% WR (${best_p:,.0f} profit)")
+
+    # 5. Insider/Cluster Flags
+    flags = []
+    if conv.get("sm_has_cluster"):
+        flags.append(f"🔥 Cluster ({conv.get('sm_cluster_size', 0)})")
+    if conv.get("insider_count", 0) > 0:
+        flags.append(f"🎯 Insiders ({conv.get('insider_count')})")
+    
+    if flags:
+        lines.append(" | ".join(flags))
+
+    return "\n".join(lines)
+
+
+def _format_smart_money_from_conviction(conv: Dict[str, Any]) -> str:
+    """Fallback for transitional conviction summaries."""
+    lines = ["", "--- 🧠 <b>Smart Money (PnL)</b> ---"]
+    
+    score = conv.get("sm_weighted_score", 0.0)
+    score_display = min(int(score), 100)
+    filled = min(5, max(1, int(score_display / 20)))
+    bar = "🟩" * filled + "⬜" * (5 - filled)
+    lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
+
+    top_wallet = conv.get("top_pnl_wallet")
+    if top_wallet:
+        profit = top_wallet.get("profit_usd")
+        win_rate = top_wallet.get("win_rate")
+        tier = top_wallet.get("pnl_tier", "ACTIVE")
+        profit_str = f"${profit:,.0f}" if profit and profit >= 1 else "Checking..."
+        wr_str = f"{win_rate:.0f}%" if win_rate is not None else "N/A"
+        lines.append(f"💰 <b>Best Wallet:</b> {profit_str} Realized")
+        lines.append(f"🏆 <b>Win Rate:</b> {wr_str} | <b>Tier:</b> {tier}")
+
+    tiers = conv.get("pnl_tier_breakdown", {})
+    if tiers:
+        elite = tiers.get("ELITE", 0)
+        strong = tiers.get("STRONG", 0)
+        if elite > 0 or strong > 0:
+            lines.append(f"🏅 <b>Support:</b> {elite} ELITE | {strong} STRONG")
 
     return "\n".join(lines)
 
@@ -432,12 +497,15 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         ml_data = result.get("ml_prediction", {})
         ml_section = format_ml_insight_for_alert(ml_data)
 
-        # Get Smart Money data
+        # Get Smart Money & Conviction data
         sm_data = result.get("smart_money", {})
-        sm_section = format_smart_money_insight(sm_data)
+        conviction = entry.get("conviction_summary", {})
+        sm_section = format_smart_money_insight(sm_data, conviction=conviction)
         
         # Smart Alert Label
-        alert_label = sm_data.get("alert_label", "ALPHA 🚀") if sm_data.get("enabled") else "ALPHA 🚀"
+        # Priority: trader_sentiment > sm_alert_label > raw sm_data label > default
+        sentiment = conviction.get("trader_sentiment")
+        alert_label = sentiment or conviction.get("sm_alert_label") or sm_data.get("alert_label", "ALPHA 🚀")
 
         # Build the message
         msg = f"""🔥 <b>{html.escape(alert_label)}: ${esc_symbol}</b> 🔥
@@ -621,7 +689,12 @@ def format_alert_html(
 
     # Build alert
     sm_data = token_data.get("smart_money", {})
-    alert_label = sm_data.get("alert_label", "Grade Changed") if alert_type == "CHANGE" else sm_data.get("alert_label", "New Token Detected")
+    conviction = token_data.get("conviction_summary", {})
+    
+    # Alert Label Priority
+    default_label = "Grade Changed" if alert_type == "CHANGE" else "New Token Detected"
+    sentiment = conviction.get("trader_sentiment")
+    alert_label = sentiment or conviction.get("sm_alert_label") or sm_data.get("alert_label") or default_label
     
     lines = [
         f"🔔 <b>{html.escape(alert_label)}</b>",
@@ -646,7 +719,7 @@ def format_alert_html(
         if ml_section:
             lines.append(ml_section)
         # Add Smart Money insight
-        sm_section = format_smart_money_insight(sm_data)
+        sm_section = format_smart_money_insight(sm_data, conviction=conviction)
         if sm_section:
             lines.append(sm_section)
         
