@@ -959,6 +959,14 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
     # ml_prediction extraction fixed (Top level or Result level)
     ml_prediction = signal_data.get("ml_prediction") or result_block.get("ml_prediction") or {}
     
+    # --- NEW: Extract Alpha Score for Trading Gating ---
+    conviction = result_block.get("conviction_summary", {})
+    alpha_score = conviction.get("alpha_score", 0)
+    # If not in conviction, check top level (fallback for future changes)
+    if not alpha_score:
+        alpha_score = signal_data.get("alpha_score", 0)
+    # ----------------------------------------------------
+    
     token_data = {
         "mint": mint,
         "signal_type": signal_type,
@@ -1000,7 +1008,8 @@ async def add_new_token_to_tracking(mint: str, signal_type: str, signal_data: di
         "final_price": None,
         "final_roi": None,
         "tracking_completed_at": None,
-        "ML_PASSED": ml_passed
+        "ML_PASSED": ml_passed,
+        "alpha_score": alpha_score
     }
     
     composite_key = get_composite_key(mint, signal_type)

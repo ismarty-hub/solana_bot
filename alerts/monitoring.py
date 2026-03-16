@@ -19,7 +19,7 @@ from config import (
     OVERLAP_FILE, USER_PREFS_FILE, USER_STATS_FILE, ALERTS_STATE_FILE, 
     GROUPS_FILE, PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, 
     POLL_INTERVAL_SECS, VALID_GRADES, ALL_GRADES, ALPHA_ALERTS_STATE_FILE,
-    DATA_DIR, SIGNAL_FRESHNESS_WINDOW
+    DATA_DIR, SIGNAL_FRESHNESS_WINDOW, MIN_ALPHA_SCORE
 )
 from pathlib import Path
 from shared.file_io import safe_load, safe_save
@@ -277,6 +277,7 @@ def load_latest_tokens_from_overlap() -> Dict[str, Dict[str, Any]]:
                 "dexscreener": dexscreener_data,
                 "rugcheck": rugcheck_data,
                 "ml_prediction": ml_prediction_data,
+                "conviction_summary": last_entry.get("conviction_summary", {}),
                 "ml_passed": last_entry.get("ML_PASSED", False)
             }
         
@@ -657,6 +658,13 @@ async def background_loop(app: Application, user_manager, portfolio_manager=None
                     # ML Filtering: Only send alerts if ML check passed
                     if not token_info.get("ml_passed"):
                         logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - ML_PASSED is False (will retry next cycle)")
+                        continue
+                    
+                    # --- Phase 7: Alpha Score Gate ---
+                    conv = token_info.get("conviction_summary", {})
+                    alpha_score = conv.get("alpha_score", 0)
+                    if alpha_score < MIN_ALPHA_SCORE:
+                        logger.debug(f"⏭️ Skipping alert for {token_id[:8]}... - Alpha Score ({alpha_score}) below threshold ({MIN_ALPHA_SCORE})")
                         continue
                     
                     # 10-Minute Freshness & ML Status Cross-Check (Active Tracking)

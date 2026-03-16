@@ -107,5 +107,10 @@ logging.getLogger("bot").setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
+# ----------------------
+# Alpha Score Configuration
+# ----------------------
+MIN_ALPHA_SCORE = int(os.getenv("MIN_ALPHA_SCORE", "40"))
+
 print(f"✅ Config loaded: IS_RENDER={IS_RENDER}, DATA_DIR={DATA_DIR}, POLL={POLL_INTERVAL_SECS}s")
 print(f"🤖 ML API configured: {FASTAPI_ML_URL}")

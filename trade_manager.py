@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional, List
 from telegram.ext import Application
 from shared.file_io import safe_load, safe_save
 
-from config import PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, DATA_DIR, SIGNAL_FRESHNESS_WINDOW
+from config import PORTFOLIOS_FILE, BUCKET_NAME, USE_SUPABASE, DATA_DIR, SIGNAL_FRESHNESS_WINDOW, MIN_ALPHA_SCORE
 
 # Import download_file for daily fallback checks
 try:
@@ -444,6 +444,16 @@ class PortfolioManager:
             logger.debug(f"⏭️ Skipping position for {token_data.get('mint', '')[:8]}... - ML_PASSED is False")
             return
             
+        # --- NEW: Alpha Score Gating ---
+        signal_type = token_data.get("signal_type", "discovery")
+        alpha_score = token_data.get("alpha_score", 0)
+        
+        # Only enforce MIN_ALPHA_SCORE for alpha signals
+        if signal_type == "alpha" and alpha_score < MIN_ALPHA_SCORE:
+            logger.info(f"⏭️ [{chat_id}] Skipping trade for {token_data.get('mint', '')[:8]}... - Alpha Score {alpha_score} < Min {MIN_ALPHA_SCORE}")
+            return
+        # -------------------------------
+
         signal_type = token_data.get("signal_type", "discovery")
         prefs = user_manager.get_user_prefs(chat_id)
         

@@ -306,6 +306,7 @@ async def process_signal_batch(
                         "entry_liquidity": data.get("entry_liquidity"),
                         "ml_prediction": ml_prediction,
                         "ml_passed": ml_passed,
+                        "alpha_score": data.get("alpha_score", 0),  # Pass Alpha Score for gating
                     }
 
                     await portfolio_manager.process_new_signal(
