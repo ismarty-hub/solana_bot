@@ -70,8 +70,8 @@ ML_API_TIMEOUT = int(os.getenv("ML_API_TIMEOUT", "30"))  # seconds
 # ----------------------
 # Alert Grades
 # ----------------------
-ALL_GRADES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-VALID_GRADES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+ALL_GRADES = ["VERY_HIGH", "HIGH", "MEDIUM", "LOW"]
+VALID_GRADES = ["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]
 
 # ----------------------
 # Supabase Configuration

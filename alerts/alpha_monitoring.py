@@ -25,7 +25,7 @@ from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 
-from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE, SIGNAL_FRESHNESS_WINDOW)
+from config import (DATA_DIR, BUCKET_NAME, USE_SUPABASE, ALPHA_ALERTS_STATE_FILE, SIGNAL_FRESHNESS_WINDOW, MIN_ALPHA_SCORE)
 
 # --- Constants ---
 ALPHA_POLL_INTERVAL_SECS = 15  # Faster alpha alerts
@@ -427,6 +427,13 @@ async def alpha_monitoring_loop(app: Application, user_manager: UserManager):
                     logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - ML_PASSED is False (will retry next cycle)")
                     continue
                 
+                # --- 🛑 ALPHA SCORE FILTERING ---
+                # Skip if alpha score is below threshold
+                alpha_score = latest_data.get("result", {}).get("alpha_score", 0)
+                if alpha_score < MIN_ALPHA_SCORE:
+                    logger.debug(f"⏭️ Skipping alpha alert for {mint[:8]}... - Alpha Score {alpha_score} below threshold {MIN_ALPHA_SCORE}")
+                    continue
+
                 # Check if token exists in state
                 existing_state = alerted_tokens.get(mint, {})
                 

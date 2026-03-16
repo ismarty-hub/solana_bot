@@ -149,7 +149,8 @@ def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
         return ""
     
     boost_tier = sm_data.get("boost_tier", "NONE")
-    if boost_tier in ("NONE", "FILTERED"):
+    # Show Smart Money section for anything STANDARD or better
+    if boost_tier not in ("SUPER_ALPHA", "STRONG", "STANDARD"):
         return ""
 
     lines = ["", "--- 🧠 <b>Smart Money</b> ---"]
@@ -160,12 +161,13 @@ def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
     
     # Progress bar mapping (1 block per 20 pts)
     filled = min(5, max(1, int(score_display / 20)))
-    bar = "🟩" * filled + "⬜" * (5 - filled)
+    bar = "🟪" * filled + "⬜" * (5 - filled)
     lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
 
     # Cluster detection
     if sm_data.get("has_cluster"):
-        cluster_len = len(sm_data.get("cluster_wallets", []))
+        cluster_wallets = sm_data.get("cluster_wallets", [])
+        cluster_len = len(cluster_wallets)
         lines.append(f"🔥 <b>Smart Cluster:</b> {cluster_len} Entities Active")
     
     # Institutional breakdown
@@ -175,14 +177,13 @@ def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
         institutions = []
         for w in pos_wallets:
             prof = profiles.get(w, {})
-            name = prof.get("entity_name") or prof.get("entity_category", "").title()
-            if name and name not in institutions:
+            # Look for explicit entity_name or pnl_tier
+            name = prof.get("pnl_tier")
+            if name and name in ("ELITE", "STRONG", "ACTIVE") and name not in institutions:
                 institutions.append(name)
         
         if institutions:
             top_inst = ", ".join(institutions[:3])
-            if len(institutions) > 3:
-                top_inst += f" (+{len(institutions)-3} more)"
             lines.append(f"🏛️ <b>Institutions:</b> {html.escape(top_inst)}")
     
     # Insider activity
@@ -436,41 +437,42 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         sm_data = result.get("smart_money", {})
         sm_section = format_smart_money_insight(sm_data)
         
-        # Smart Alert Label
-        alert_label = sm_data.get("alert_label", "ALPHA 🚀") if sm_data.get("enabled") else "ALPHA 🚀"
+        # Build Alpha Score section
+        alpha_score = result.get("alpha_score", 0)
+        filled_alpha = min(5, max(1, int(alpha_score / 20)))
+        alpha_bar = "🟦" * filled_alpha + "⬜" * (5 - filled_alpha)
+        alpha_score_line = f"<b>Alpha Score:</b> {alpha_score}/100 {alpha_bar}"
+
+        # Liquidity gap % (spec: Gap % vs MC)
+        liq_gap = (liquidity_usd / market_cap * 100) if market_cap > 0 else 0
+        liq_gap_str = f"({liq_gap:.1f}% vs MC)" if liq_gap > 0 else ""
 
         # Build the message
         msg = f"""🔥 <b>{html.escape(alert_label)}: ${esc_symbol}</b> 🔥
-
 <b>{esc_name}</b>
-<code>{esc_mint}</code>
+<code>{esc_mint[:6]}...{esc_mint[-6:]}</code>
 
-<b>Status:</b> {html.escape(graduation_status)}
-<b>Overlap Grade:</b> <b>{html.escape(str(overlap_grade).upper())}</b>
-
---- 📈 Market Data ---
+{alpha_score_line}
+-------------------------
+{sm_section}
+-------------------------
+{ml_section}
+-------------------------
+<b>📈 Market Data</b>
 <b>💰 Price:</b> ${price_usd:.8f}
-<b>📊 Market Cap:</b> {_format_usd(market_cap)}
-<b>💧 Liquidity:</b> {_format_usd(liquidity_usd)}
-📉 LP/MC Ratio: {lp_mc_ratio:.2f}%
+<b>📊 MC:</b> {_format_usd(market_cap)}
+<b>💧 Liq:</b> {_format_usd(liquidity_usd)} {liq_gap_str}
 <b>⏰ Age:</b> {age_str}
-
---- 📊 Activity ---
-<b>Buy/Sell:</b> {buy_pct:.0f}% / {sell_pct:.0f}%
-<b>👥 Holders:</b> {int(holder_count):,}
-
---- 🛡️ Safety ---
+-------------------------
+<b>🛡️ Safety</b>
 <b>Score:</b> {score_text}
 <b>🔒 LP Locked:</b> {_format_pct(lp_locked_pct)}
 <b>Mint:</b> {'✅ Renounced' if not mint_authority else '❌ Active'}
 <b>Freeze:</b> {'✅ Renounced' if not freeze_authority else '❌ Active'}
-
---- ⚠️ Top Risks ---
-{risk_str}
-{ml_section}
-{sm_section}
-
---- 🔗 Links ---
+-------------------------
+<b>⚠️ Risks (Show ONLY Warn/Danger)</b>
+{risk_str if risk_str else "✅ No significant risks"}
+-------------------------
 <a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
 
         # Create initial state
