@@ -1017,8 +1017,167 @@ class FeatureComputer:
         
         return features
 
-    def compute_features(self, signal_type: str, history_entry: Dict, 
-                         dex_data: Optional[Dict], rug_data: Optional[Dict], 
+    def _extract_smart_money_features(self, history_entry: Dict) -> Dict[str, Any]:
+        """
+        Extract Smart Money conviction features from the signal's smart_money
+        and conviction_summary objects (both alpha-style result entries).
+
+        Data paths:
+            result["smart_money"]          — SmartMoneyTokenScore fields
+            result["conviction_summary"]   — pre-computed alpha score + tier breakdown
+            result["smart_money"]["wallet_profiles"] — per-wallet PnL tier counts
+
+        All fields are safe-defaulted so a missing Smart Money block never
+        blocks feature capture — it simply produces all-zero SM features.
+        """
+        features = {
+            # PnL Conviction
+            "sm_weighted_score":          0.0,   # sum(dune_freq × pnl_multiplier)
+
+            # Institutional Presence  (counts from wallet_profiles)
+            "sm_elite_wallets":           0,     # ELITE tier  — $50k+ profit, 55%+ WR
+            "sm_strong_wallets":          0,     # STRONG tier — $10k+, 50%+ WR
+            "sm_active_wallets":          0,     # ACTIVE tier — $1k+, ≥5 trades
+            "sm_negative_wallets":        0,     # NEGATIVE tier — excluded loss-makers
+            "sm_positive_wallets":        0,     # ELITE + STRONG + ACTIVE combined
+            "sm_noise_wallets":           0,     # NOISE — no PnL data yet
+
+            # Overlap counts
+            "sm_overlap_count":           0,     # raw overlap (all wallets)
+            "sm_effective_overlap":       0,     # overlap minus NEGATIVE wallets
+
+            # Cluster signal
+            "sm_has_cluster":             False, # 3+ positive wallets bought within 30m
+            "sm_cluster_size":            0,     # number of wallets in cluster
+
+            # Early-buyer heuristics
+            "sm_sniper_count":            0,     # wallets bought < SM_SNIPER_WINDOW_MINUTES
+            "sm_early_buyer_count":       0,     # wallets bought < SM_INSIDER_WINDOW_MINUTES
+            "sm_sniper_detected":         False,
+            "sm_early_buyer_detected":    False,
+
+            # Conviction tier (categorical — preserved for label encoding)
+            "sm_boost_tier":              "NONE",  # SUPER_ALPHA / STRONG / STANDARD / FILTERED / NONE
+            "sm_is_super_alpha":          False,
+
+            # Alpha score (0–100 composite from conviction_summary)
+            "sm_alpha_score":             0,
+
+            # Cluster PnL aggregates (from conviction_summary — may be None)
+            "sm_cluster_combined_profit_usd":  None,
+            "sm_cluster_avg_win_rate_pct":     None,
+            "sm_cluster_qualified_wallets":    0,
+
+            # Wallet conviction % (fraction of overlap that are positive-tier)
+            "sm_wallet_conviction_pct":   0.0,
+        }
+
+        # ── Locate smart_money block ──────────────────────────────────────────
+        result = history_entry.get("result") or {}
+        sm = result.get("smart_money") or {}
+
+        if not sm or not sm.get("enabled", False):
+            # Smart Money was disabled or not yet scored for this entry
+            return features
+
+        # ── SmartMoneyTokenScore fields ───────────────────────────────────────
+        features["sm_weighted_score"]    = safe_float(sm.get("smart_money_weighted_score"))
+        features["sm_overlap_count"]     = safe_int(
+            sm.get("effective_overlap_count",
+                   sm.get("raw_overlap_count", 0))
+        )
+        features["sm_effective_overlap"] = safe_int(sm.get("effective_overlap_count"))
+        features["sm_has_cluster"]       = safe_bool(sm.get("has_cluster"))
+        features["sm_cluster_size"]      = safe_int(
+            len(sm.get("cluster_wallets") or [])
+        )
+        features["sm_boost_tier"]        = sm.get("boost_tier") or "NONE"
+        features["sm_is_super_alpha"]    = safe_bool(sm.get("is_super_alpha"))
+
+        # ── PnL tier breakdown from wallet_profiles ───────────────────────────
+        # wallet_profiles is {wallet_address: {pnl_tier: str, ...}}
+        wallet_profiles = sm.get("wallet_profiles") or {}
+        tier_counts: Dict[str, int] = {
+            "ELITE": 0, "STRONG": 0, "ACTIVE": 0, "NOISE": 0, "NEGATIVE": 0,
+        }
+        for _addr, profile in wallet_profiles.items():
+            if not isinstance(profile, dict):
+                continue
+            tier = (profile.get("pnl_tier") or "NOISE").upper()
+            if tier in tier_counts:
+                tier_counts[tier] += 1
+
+        features["sm_elite_wallets"]    = tier_counts["ELITE"]
+        features["sm_strong_wallets"]   = tier_counts["STRONG"]
+        features["sm_active_wallets"]   = tier_counts["ACTIVE"]
+        features["sm_noise_wallets"]    = tier_counts["NOISE"]
+        features["sm_negative_wallets"] = tier_counts["NEGATIVE"]
+        features["sm_positive_wallets"] = (
+            tier_counts["ELITE"] + tier_counts["STRONG"] + tier_counts["ACTIVE"]
+        )
+
+        # Wallet conviction % — fraction of all profiled wallets that are positive
+        total_profiled = sum(tier_counts.values())
+        if total_profiled > 0:
+            features["sm_wallet_conviction_pct"] = (
+                features["sm_positive_wallets"] / total_profiled
+            )
+
+        # ── Insider / sniper counts from wallet_profiles ──────────────────────
+        sniper_count = 0
+        early_buyer_count = 0
+        for _addr, profile in wallet_profiles.items():
+            if not isinstance(profile, dict):
+                continue
+            insider_type = profile.get("insider_type")
+            if insider_type == "SNIPER":
+                sniper_count += 1
+            elif insider_type in ("EARLY_BUYER", "RUGCHECK"):
+                early_buyer_count += 1
+
+        features["sm_sniper_count"]         = sniper_count
+        features["sm_early_buyer_count"]    = early_buyer_count
+        features["sm_sniper_detected"]      = sniper_count >= 1
+        features["sm_early_buyer_detected"] = early_buyer_count >= 1
+
+        # ── conviction_summary (pre-computed, richer aggregates) ──────────────
+        conviction = result.get("conviction_summary") or {}
+        if conviction:
+            # Override sniper/early-buyer with conviction_summary counts if available
+            # (more reliable — computed post-profile, handles all wallets)
+            cs_sniper = safe_int(conviction.get("sniper_count"))
+            cs_early  = safe_int(conviction.get("early_buyer_count"))
+            if cs_sniper or cs_early:
+                features["sm_sniper_count"]         = cs_sniper
+                features["sm_early_buyer_count"]    = cs_early
+                features["sm_sniper_detected"]      = cs_sniper >= 1
+                features["sm_early_buyer_detected"] = cs_early >= 1
+
+            features["sm_alpha_score"]               = safe_int(conviction.get("alpha_score"))
+            features["sm_cluster_combined_profit_usd"] = conviction.get("cluster_combined_profit_usd")
+            features["sm_cluster_avg_win_rate_pct"]    = conviction.get("cluster_avg_win_rate_pct")
+            features["sm_cluster_qualified_wallets"]   = safe_int(
+                conviction.get("cluster_qualified_wallets")
+            )
+
+            # Prefer conviction_summary pnl_tier_breakdown if available
+            pnl_breakdown = conviction.get("pnl_tier_breakdown") or {}
+            if pnl_breakdown:
+                features["sm_elite_wallets"]    = safe_int(pnl_breakdown.get("ELITE"))
+                features["sm_strong_wallets"]   = safe_int(pnl_breakdown.get("STRONG"))
+                features["sm_active_wallets"]   = safe_int(pnl_breakdown.get("ACTIVE"))
+                features["sm_noise_wallets"]    = safe_int(pnl_breakdown.get("NOISE"))
+                features["sm_negative_wallets"] = safe_int(pnl_breakdown.get("NEGATIVE"))
+                features["sm_positive_wallets"] = (
+                    features["sm_elite_wallets"]
+                    + features["sm_strong_wallets"]
+                    + features["sm_active_wallets"]
+                )
+
+        return features
+
+    def compute_features(self, signal_type: str, history_entry: Dict,
+                         dex_data: Optional[Dict], rug_data: Optional[Dict],
                          is_holiday: bool) -> Tuple[Optional[Dict], Optional[datetime]]:
         """
         CORRECTED: Computes all derived features with complete extraction.
@@ -1058,6 +1217,12 @@ class FeatureComputer:
         # Extract security features from RugCheck
         security_features = self._extract_rug_features(rug_data)
         
+        # Extract Smart Money conviction features
+        # Reads from history_entry["result"]["smart_money"] and
+        # history_entry["result"]["conviction_summary"] — safe-defaults to
+        # all-zero if Smart Money was disabled or not yet scored.
+        smart_money_features = self._extract_smart_money_features(history_entry)
+
         # Use RugCheck price as fallback if Dexscreener price is 0
         if market_features["price_usd"] == 0.0 and security_features["rug_price_usd"] > 0.0:
             market_features["price_usd"] = security_features["rug_price_usd"]
@@ -1104,6 +1269,7 @@ class FeatureComputer:
             **market_features,
             **security_features,
             **derived_features,
+            "smart_money_features": smart_money_features,  # nested under own key
         }
         
         return all_features, checked_at_dt

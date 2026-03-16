@@ -44,50 +44,107 @@ async def _close_http_session():
 
 def format_ml_insight_for_alert(ml_data: Dict[str, Any]) -> str:
     """
-    Format ML prediction data as a single compact line for alerts.
-    As per bot_spec.md: "🤖 ML: 64% WIN CHANCE | Action: WATCH"
+    Format ML prediction data as a beautiful, compact section for alerts.
+    
+    Args:
+        ml_data: ML prediction data from API/monitoring
+    
+    Returns:
+        Formatted HTML string for inclusion in alerts
     """
     if not ml_data or not isinstance(ml_data, dict):
         return ""
     
+    # Extract values (handle both "probability" and "win_probability" keys)
     prob = ml_data.get("probability") or ml_data.get("win_probability")
-    action = ml_data.get("action", "WATCH")
+    confidence = ml_data.get("confidence")
+    risk_tier = ml_data.get("risk_tier")
+    action = ml_data.get("action")
     
-    if prob is None:
+    # If no data, return empty
+    if prob is None and not confidence and not risk_tier:
         return ""
     
-    try:
-        prob_pct = float(prob) * 100
-        return f"🤖 <b>ML:</b> {prob_pct:.0f}% WIN CHANCE  |  <b>Action:</b> {action}"
-    except Exception:
-        return ""
-
-
-def alpha_bar(score: int) -> str:
-    """ASCII progress bar: 10 blocks (score/10)"""
-    score = min(100, max(0, int(score)))
-    filled = score // 10
-    empty = 10 - filled
-    return "█" * filled + "░" * empty
+    # Action emoji mapping
+    action_styles = {
+        "BUY": ("🟢", "STRONG BUY"),
+        "CONSIDER": ("🟡", "CONSIDER"),
+        "SKIP": ("🟠", "SKIP"),
+        "AVOID": ("🔴", "AVOID")
+    }
+    
+    # Build ML insight section
+    lines = ["", "--- 🤖 <b>ML Insight</b> ---"]
+    
+    # Win probability with visual bar
+    if prob is not None:
+        try:
+            prob_pct = float(prob) * 100
+            
+            # Visual progress bar
+            filled = int(prob_pct / 20)  # 0-5 blocks
+            bar = "█" * filled + "░" * (5 - filled)
+            
+            # Color based on probability
+            if prob_pct >= 70:
+                color = "🟢"
+            elif prob_pct >= 60:
+                color = "🟡"
+            elif prob_pct >= 45:
+                color = "🟠"
+            else:
+                color = "🔴"
+            
+            lines.append(f"{color} <b>Win Chance:</b> {prob_pct:.1f}% {bar}")
+        except Exception:
+            pass
+    
+    # Action recommendation with styled text
+    if action:
+        action_emoji, action_text = action_styles.get(action, ("⚪", action))
+        lines.append(f"{action_emoji} <b>Signal:</b> {action_text}")
+    
+    # Confidence level
+    if confidence:
+        # Emoji based on confidence
+        if confidence == "HIGH":
+            conf_emoji = "🎯"
+        elif confidence == "MEDIUM":
+            conf_emoji = "📊"
+        else:
+            conf_emoji = "📉"
+        
+        lines.append(f"{conf_emoji} <b>Confidence:</b> {html.escape(str(confidence))}")
+    
+    # Risk tier with clear interpretation
+    if risk_tier:
+        risk_tier_str = str(risk_tier)
+        
+        # Emoji and styling based on risk
+        if "LOW" in risk_tier_str.upper():
+            risk_emoji = "🛡️"
+            risk_label = "Low Risk"
+        elif "MEDIUM" in risk_tier_str.upper():
+            risk_emoji = "⚠️"
+            risk_label = "Moderate Risk"
+        elif "HIGH" in risk_tier_str.upper() and "VERY" not in risk_tier_str.upper():
+            risk_emoji = "🚨"
+            risk_label = "High Risk"
+        else:
+            risk_emoji = "☠️"
+            risk_label = "Very High Risk"
+        
+        lines.append(f"{risk_emoji} <b>Risk:</b> {risk_label}")
+    
+    return "\n".join(lines)
 
 
 # ============================================================================
 # SMART MONEY INSIGHT FORMATTING
 # ============================================================================
 
-def format_smart_money_insight(sm_data: Dict[str, Any], conviction: Optional[Dict[str, Any]] = None) -> str:
-    """
-    Format Smart Money conviction data for alerts.
-    Prioritizes the new "Gold Standard" conviction summary if available.
-    """
-    # 1. Check for conviction summary first (new Gold Standard system)
-    if conviction and conviction.get("alpha_score") is not None:
-        return _format_gold_standard_conviction(conviction)
-    
-    # 2. Fallback to older raw sm_data / transitional conviction
-    if conviction and conviction.get("sm_weighted_score") is not None:
-        return _format_smart_money_from_conviction(conviction)
-    
+def format_smart_money_insight(sm_data: Dict[str, Any]) -> str:
+    """Format Smart Money conviction data for alerts."""
     if not sm_data or not sm_data.get("enabled"):
         return ""
     
@@ -100,90 +157,38 @@ def format_smart_money_insight(sm_data: Dict[str, Any], conviction: Optional[Dic
     # Conviction Score Bar
     score = sm_data.get("smart_money_weighted_score", 0.0)
     score_display = min(int(score), 100)
+    
+    # Progress bar mapping (1 block per 20 pts)
     filled = min(5, max(1, int(score_display / 20)))
     bar = "🟩" * filled + "⬜" * (5 - filled)
     lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
 
+    # Cluster detection
     if sm_data.get("has_cluster"):
         cluster_len = len(sm_data.get("cluster_wallets", []))
         lines.append(f"🔥 <b>Smart Cluster:</b> {cluster_len} Entities Active")
     
-    return "\n".join(lines)
-
-
-def _format_gold_standard_conviction(conv: Dict[str, Any]) -> str:
-    """Helper to format detailed Smart Money section (Phase 7 Redesign)."""
-    overlap_count = conv.get("overlap_count", 0)
-    if overlap_count == 0:
-        return ""
-
-    lines = ["", "🏆 <b>SMART MONEY</b>"]
-    
-    # 1. Winners & Conviction
-    conv_pct = conv.get("wallet_conviction_pct", 0)
-    lines.append(f"Winners holding: {overlap_count}  |  Conviction: {conv_pct}%")
-    
-    # 2. Tiers (Elite / Strong / Active)
-    tiers = conv.get("pnl_tier_breakdown", {})
-    tier_parts = []
-    if tiers.get("ELITE"): tier_parts.append(f"🏅 {tiers['ELITE']} Elite")
-    if tiers.get("STRONG"): tier_parts.append(f"💪 {tiers['STRONG']} Strong")
-    if tiers.get("ACTIVE"): tier_parts.append(f"✅ {tiers['ACTIVE']} Active")
-    
-    if tier_parts:
-        lines.append("  ".join(tier_parts))
+    # Institutional breakdown
+    pos_wallets = sm_data.get("positive_entity_wallets", [])
+    if pos_wallets:
+        profiles = sm_data.get("wallet_profiles", {})
+        institutions = []
+        for w in pos_wallets:
+            prof = profiles.get(w, {})
+            name = prof.get("entity_name") or prof.get("entity_category", "").title()
+            if name and name not in institutions:
+                institutions.append(name)
         
-    # 3. Aggregates (Combined PnL & Win Rate)
-    profit = conv.get("cluster_combined_profit_usd")
-    wr = conv.get("cluster_avg_win_rate_pct")
+        if institutions:
+            top_inst = ", ".join(institutions[:3])
+            if len(institutions) > 3:
+                top_inst += f" (+{len(institutions)-3} more)"
+            lines.append(f"🏛️ <b>Institutions:</b> {html.escape(top_inst)}")
     
-    agg_parts = []
-    if profit is not None:
-        agg_parts.append(f"Combined PnL: +${profit:,.0f}")
-    if wr is not None:
-        agg_parts.append(f"Avg Win Rate: {wr:.0f}%")
-        
-    if agg_parts:
-        lines.append("  |  ".join(agg_parts))
-        
-    # 4. Insiders / Snipers
-    s_count = conv.get("sniper_count", 0)
-    e_count = conv.get("early_buyer_count", 0)
-    
-    if s_count > 0:
-        lines.append(f"🎯 {s_count} Snipers bought in first 5 mins")
-    elif e_count > 0:
-        lines.append(f"🎯 {e_count} Early Buyers (first 30 mins)")
-
-    return "\n".join(lines)
-
-
-def _format_smart_money_from_conviction(conv: Dict[str, Any]) -> str:
-    """Fallback for transitional conviction summaries."""
-    lines = ["", "--- 🧠 <b>Smart Money (PnL)</b> ---"]
-    
-    score = conv.get("sm_weighted_score", 0.0)
-    score_display = min(int(score), 100)
-    filled = min(5, max(1, int(score_display / 20)))
-    bar = "🟩" * filled + "⬜" * (5 - filled)
-    lines.append(f"<b>Conviction:</b> {score_display}/100 {bar}")
-
-    top_wallet = conv.get("top_pnl_wallet")
-    if top_wallet:
-        profit = top_wallet.get("profit_usd")
-        win_rate = top_wallet.get("win_rate")
-        tier = top_wallet.get("pnl_tier", "ACTIVE")
-        profit_str = f"${profit:,.0f}" if profit and profit >= 1 else "Checking..."
-        wr_str = f"{win_rate:.0f}%" if win_rate is not None else "N/A"
-        lines.append(f"💰 <b>Best Wallet:</b> {profit_str} Realized")
-        lines.append(f"🏆 <b>Win Rate:</b> {wr_str} | <b>Tier:</b> {tier}")
-
-    tiers = conv.get("pnl_tier_breakdown", {})
-    if tiers:
-        elite = tiers.get("ELITE", 0)
-        strong = tiers.get("STRONG", 0)
-        if elite > 0 or strong > 0:
-            lines.append(f"🏅 <b>Support:</b> {elite} ELITE | {strong} STRONG")
+    # Insider activity
+    insiders = sm_data.get("insider_wallets", [])
+    if insiders:
+        lines.append(f"🎯 <b>Insider Buyers:</b> {len(insiders)} Active")
 
     return "\n".join(lines)
 
@@ -241,7 +246,7 @@ def _format_time_ago(dt: datetime) -> str:
         if seconds > 0 or not parts:  # Always show seconds if no hours/minutes
             parts.append(f"{seconds}s")
         
-        return " ".join(parts)
+        return " ".join(parts) + " ago"
     
     # If >= 24 hours, show days and hours format
     total_hours = total_seconds / 3600
@@ -249,9 +254,9 @@ def _format_time_ago(dt: datetime) -> str:
     remaining_hours = int(total_hours % 24)
     
     if remaining_hours > 0:
-        return f"{days}d {remaining_hours}h"
+        return f"{days}d {remaining_hours}h ago"
     else:
-        return f"{days}d"
+        return f"{days}d ago"
 
 
 def _format_usd(value: float) -> str:
@@ -395,13 +400,13 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
 
         # Risk score assessment
         if score_normalised <= 10:
-            risk_label = "EXCELLENT"
+            score_text = f"EXCELLENT ✅ ({score_normalised}/100)"
         elif score_normalised <= 30:
-            risk_label = "GOOD"
+            score_text = f"GOOD 🟢 ({score_normalised}/100)"
         elif score_normalised <= 50:
-            risk_label = "MODERATE"
+            score_text = f"MODERATE ⚠️ ({score_normalised}/100)"
         else:
-            risk_label = "HIGH RISK"
+            score_text = f"HIGH RISK ❌ ({score_normalised}/100)"
 
         # Escape HTML
         esc_name = html.escape(str(name))
@@ -427,57 +432,46 @@ async def _format_alpha_alert_async(mint: str, entry: Dict[str, Any]) -> Tuple[s
         ml_data = result.get("ml_prediction", {})
         ml_section = format_ml_insight_for_alert(ml_data)
 
-        # Get Smart Money & Conviction data
+        # Get Smart Money data
         sm_data = result.get("smart_money", {})
-        conviction = entry.get("conviction_summary", {})
-        sm_section = format_smart_money_insight(sm_data, conviction=conviction)
+        sm_section = format_smart_money_insight(sm_data)
         
-        # Headline Formatting
-        sentiment_raw = conviction.get("trader_sentiment", "NEUTRAL")
-        # Strip emoji from end if present (e.g. "BULLISH ✅") and move to front
-        sentiment_clean = sentiment_raw.replace("✅", "").replace("🔥", "").replace("⭐", "").replace("⚠️", "").replace("❌", "").strip()
-        
-        sentiment_emoji = "📊"
-        if "EXTREME" in sentiment_clean: sentiment_emoji = "🔥"
-        elif "STRONG" in sentiment_clean: sentiment_emoji = "⭐"
-        elif "BULLISH" in sentiment_clean: sentiment_emoji = "✅"
-        elif "CAUTIOUS" in sentiment_clean: sentiment_emoji = "⚠️"
-        elif "BEARISH" in sentiment_clean: sentiment_emoji = "❌"
-        
-        headline_sentiment = f"{sentiment_emoji} {sentiment_clean}"
-        if conviction.get("is_super_alpha"):
-            headline_sentiment = f"🔥 SUPER-ALPHA | {headline_sentiment}"
+        # Smart Alert Label
+        alert_label = sm_data.get("alert_label", "ALPHA 🚀") if sm_data.get("enabled") else "ALPHA 🚀"
 
-        alpha_score = conviction.get("alpha_score", 0)
-        confidence = conviction.get("sentiment_confidence", "LOW")
+        # Build the message
+        msg = f"""🔥 <b>{html.escape(alert_label)}: ${esc_symbol}</b> 🔥
 
-        # Shorten Mint
-        short_mint = f"{mint[:8]}...{mint[-4:]}" if len(mint) > 12 else mint
+<b>{esc_name}</b>
+<code>{esc_mint}</code>
 
-        # Prepare safety line
-        safety_line = risk_str.split('\n')[0] if risk_str.startswith('✅') else 'See Risks'
-        
-        # Build the message (Phase 7 Layout)
-        msg = f"""━━━━━━━━━━━━━━━━━━━━━━━━━
-<b>{headline_sentiment}  |  Grade: {overlap_grade.upper()}</b>
-<b>${symbol}</b>  •  {graduation_status}  •  {age_str}
-━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Status:</b> {html.escape(graduation_status)}
+<b>Overlap Grade:</b> <b>{html.escape(str(overlap_grade).upper())}</b>
 
-🧠 <b>Alpha Score:</b> {alpha_score}/100  <code>{alpha_bar(alpha_score)}</code>
-<b>Sentiment:</b> {headline_sentiment}  ({confidence} confidence)
-{sm_section}
+--- 📈 Market Data ---
+<b>💰 Price:</b> ${price_usd:.8f}
+<b>📊 Market Cap:</b> {_format_usd(market_cap)}
+<b>💧 Liquidity:</b> {_format_usd(liquidity_usd)}
+📉 LP/MC Ratio: {lp_mc_ratio:.2f}%
+<b>⏰ Age:</b> {age_str}
+
+--- 📊 Activity ---
+<b>Buy/Sell:</b> {buy_pct:.0f}% / {sell_pct:.0f}%
+<b>👥 Holders:</b> {int(holder_count):,}
+
+--- 🛡️ Safety ---
+<b>Score:</b> {score_text}
+<b>🔒 LP Locked:</b> {_format_pct(lp_locked_pct)}
+<b>Mint:</b> {'✅ Renounced' if not mint_authority else '❌ Active'}
+<b>Freeze:</b> {'✅ Renounced' if not freeze_authority else '❌ Active'}
+
+--- ⚠️ Top Risks ---
+{risk_str}
 {ml_section}
+{sm_section}
 
-💰 <b>MARKET</b>
-<b>Price:</b> ${price_usd:.8f}  |  <b>MCap:</b> {_format_usd(market_cap)}  |  <b>Liq:</b> {_format_usd(liquidity_usd)}
-<b>Vol 1h:</b> {_format_usd(pair.get('volume', {}).get('h1', 0))}  |  <b>Buy pressure:</b> {buy_pct:.0f}%  |  <b>Age:</b> {age_str}
-
-🔒 <b>SAFETY</b>
-<b>LP:</b> {lp_locked_pct:.0f}% locked  |  <b>Holders:</b> {int(holder_count):,}  |  <b>Risk score:</b> {score_normalised}/100
-<b>Mint:</b> {'✅' if not mint_authority else '❌'}  <b>Freeze:</b> {'✅' if not freeze_authority else '❌'}  {safety_line}
-
-🔗 <a href="https://solscan.io/token/{mint}">Solscan</a>  |  <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a>  |  <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>
-━━━━━━━━━━━━━━━━━━━━━━━━━"""
+--- 🔗 Links ---
+<a href="https://solscan.io/token/{mint}">Solscan</a> | <a href="https://gmgn.ai/sol/token/{mint}">GMGN</a> | <a href="https://dexscreener.com/solana/{mint}">DexScreener</a>"""
 
         # Create initial state
         initial_state = {
@@ -627,22 +621,29 @@ def format_alert_html(
 
     # Build alert
     sm_data = token_data.get("smart_money", {})
-    conviction = token_data.get("conviction_summary", {})
+    alert_label = sm_data.get("alert_label", "Grade Changed") if alert_type == "CHANGE" else sm_data.get("alert_label", "New Token Detected")
     
-    # Alert Label Priority
-    default_label = "Grade Changed" if alert_type == "CHANGE" else "New Token Detected"
-    sentiment = conviction.get("trader_sentiment")
-    alert_label = sentiment or conviction.get("sm_alert_label") or sm_data.get("alert_label") or default_label
-    
+    lp_mc_ratio_line = ""
+    # Use MC or FDV for ratio calculation
+    mcap_for_ratio = current_mc or current_fdv
+    if current_liquidity is not None and mcap_for_ratio is not None and mcap_for_ratio > 0:
+        lp_mc_ratio = (current_liquidity / mcap_for_ratio) * 100
+        lp_mc_ratio_line = f"📉 LP/MC Ratio: {lp_mc_ratio:.2f}%"
+
     lines = [
         f"🔔 <b>{html.escape(alert_label)}</b>",
         f"<b>{name}</b> ({symbol})" if symbol else f"<b>{name}</b>",
-
+        f"<code>{mint}</code>",
+        "",
         f"<b>Grade:</b> {grade}" + (f" (was {previous_grade})" if previous_grade and alert_type == "CHANGE" else ""),
         mc_line,
         f"💧 <b>Liquidity:</b> {format_marketcap_display(current_liquidity)}" if current_liquidity is not None else "💧 <b>Liquidity:</b> Unknown",
+        lp_mc_ratio_line,
         f"<b>Concentration:</b> {token_data.get('concentration')}%"
     ]
+    
+    # Clean up empty lines
+    lines = [l for l in lines if l is not None]
 
     if first_alert_at:
         lines.append(f"🕐 <b>First alert:</b> {first_alert_at[:10]}")
@@ -657,7 +658,7 @@ def format_alert_html(
         if ml_section:
             lines.append(ml_section)
         # Add Smart Money insight
-        sm_section = format_smart_money_insight(sm_data, conviction=conviction)
+        sm_section = format_smart_money_insight(sm_data)
         if sm_section:
             lines.append(sm_section)
         
